@@ -1,7 +1,7 @@
 .sorter-view {
   flex: 1;
   padding: var(--spacing-lg);
-  border: 1px solid var(--color-border);
+  border: var(--border-width-sm) solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
@@ -25,7 +25,7 @@
   border-radius: var(--radius-md);
   text-align: center;
   background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
+  border: var(--border-width-sm) solid var(--color-border);
 }
 
 .diagram__lanes {
@@ -35,7 +35,7 @@
 
 .lane-slot {
   display: grid;
-  grid-template-columns: 7rem 1fr;
+  grid-template-columns: var(--size-diagram-lane-width) 1fr;
   align-items: center;
   gap: var(--spacing-md);
 }
@@ -45,8 +45,8 @@
 }
 
 .lane-slot__target {
-  min-height: 4rem;
-  border: 1px solid var(--color-border);
+  min-height: var(--size-diagram-lane-height);
+  border: var(--border-width-sm) solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-alt);
   padding: var(--spacing-md);
@@ -62,7 +62,7 @@
 
 .lane-slot__line {
   width: 100%;
-  height: 2px;
+  height: var(--size-diagram-line-thickness);
   background: var(--color-text-muted);
 }
 
@@ -78,7 +78,7 @@
   gap: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--chip-color, var(--color-border));
+  border: var(--border-width-sm) solid var(--chip-color, var(--color-border));
   background: color-mix(in srgb, var(--chip-color, var(--color-surface-alt)) 25%, var(--color-surface));
 }
 
