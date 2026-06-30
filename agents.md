@@ -71,3 +71,20 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 4. **Skills are mandatory reading.** Every agent MUST read the `skills/` folder before starting work and follow any applicable skills during execution. If a skill exists for a task, the agent uses it — no reinventing.
 5. **Learnings are mandatory.** Every completed project must produce at least one learning entry.
 6. **No pushing during Coder ↔ Reviewer loop.** All work stays local until user approves (Gate 2.5).
+7. **Spec must be rock solid before handoff.** No open items, no unanswered questions in `planner-tasks.md` when the spec goes to the coder. If questions remain, they must be answered first.
+8. **Spec-gap escalation.** If the coder or reviewer discovers an ambiguity, the loop pauses, the planner asks the user, updates the spec, and the loop resumes.
+
+## Parallel Execution Model
+
+Sub-agents run in parallel wherever possible:
+- **Planner** can work on the next feature's spec while a previous feature is in the Coder ↔ Reviewer loop.
+- **Coder** and **Reviewer** iterate in a tight loop on the current feature branch.
+- **Learner** can process completed features while new ones are being developed.
+- Multiple feature branches can be active simultaneously (each with its own Coder ↔ Reviewer loop).
+
+**Synchronization Rules:**
+- Agents operating on the SAME feature branch must be sequential (coder finishes → reviewer starts → coder again if needed).
+- Agents operating on DIFFERENT feature branches can run fully in parallel.
+- The Planner can always run in parallel with everything else (it doesn't touch code).
+- The Learner runs after a feature is merged but can overlap with other in-progress features.
+- If a spec-gap escalation occurs, only the affected feature's loop pauses — other parallel work continues.

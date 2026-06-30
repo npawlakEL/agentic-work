@@ -52,7 +52,15 @@ Format:
 - Bookmarked items are never forgotten — they persist until explicitly removed or addressed.
 - The planner reviews this list at the START of every session to pick up where it left off.
 
-**Completion Criteria:** User **explicitly approves** the specification. The planner must ask for approval — never self-approve or assume the spec is done.
+**Completion Criteria:** User **explicitly approves** the specification. The planner must ask for approval — never self-approve or assume the spec is done. **All questions and open items must be resolved before handoff to coder.** No open items, no unanswered questions — the spec must be rock solid.
+
+**Mid-Cycle Questions:**
+If during the Coder ↔ Reviewer loop an ambiguity or spec gap is discovered:
+1. The Coder/Reviewer loop **pauses**.
+2. The question is escalated back to the Planner.
+3. The Planner presents the question to the user and waits for an answer.
+4. The Planner updates the spec with the new information.
+5. The Coder/Reviewer loop **resumes** with the updated spec.
 
 **Rules:**
 - The Planner NEVER writes production code. No implementation, no scaffolding, no prototyping.
