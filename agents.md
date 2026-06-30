@@ -20,11 +20,12 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 - **Output:** `spec.md` — full requirements specification with data model, UI behavior, tech stack, constraints
 - **Gate Condition:** User approves the spec before coder begins
 
-### Gate 2: Coder ↔ Reviewer (Iterative Loop)
-- **Input:** Coder produces working code
-- **Output:** Reviewer validates functionality, finds bugs, suggests fixes
-- **Gate Condition:** Reviewer signs off — no blocking issues remain
-- **Loop:** Coder and Reviewer iterate until the reviewer passes the build
+### Gate 2: Coder ↔ Reviewer (TDD Iteration Loop)
+- **Input:** Coder produces working code using strict TDD (Red → Green → Refactor)
+- **Output:** Reviewer validates functionality, runs tests, checks coverage, finds bugs
+- **Gate Condition:** Reviewer signs off — all tests pass, no blocking issues, TDD compliance verified
+- **Loop:** Reviewer sends issues → Coder writes failing tests for each issue → Coder fixes → Reviewer re-validates. Repeat until clean.
+- **TDD Requirement:** No production code exists without a corresponding test. Tests are written FIRST.
 
 ### Gate 3: Reviewer → Learner
 - **Input:** Completed, reviewed code
