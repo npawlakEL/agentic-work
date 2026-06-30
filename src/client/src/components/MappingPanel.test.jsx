@@ -24,6 +24,7 @@ describe('MappingPanel', () => {
         objectType={objectType}
         onBrushSelect={onBrushSelect}
         onPaintModeToggle={vi.fn()}
+        valueColorMap={{ S1: 'var(--color-accent-1)', S2: 'var(--color-accent-2)' }}
         valueFilter="S2"
       />,
     );
@@ -49,6 +50,7 @@ describe('MappingPanel', () => {
         objectType={objectType}
         onBrushSelect={vi.fn()}
         onPaintModeToggle={onPaintModeToggle}
+        valueColorMap={{ S1: 'var(--color-accent-1)', S2: 'var(--color-accent-2)' }}
         valueFilter="all"
       />,
     );
@@ -56,5 +58,26 @@ describe('MappingPanel', () => {
     await user.click(screen.getByRole('button', { name: /paint mode/i }));
 
     expect(onPaintModeToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('renders distinct chip colors for each object value', () => {
+    render(
+      <MappingPanel
+        activeBrush={null}
+        isPaintMode={false}
+        objectType={objectType}
+        onBrushSelect={vi.fn()}
+        onPaintModeToggle={vi.fn()}
+        valueColorMap={{ S1: 'var(--color-accent-1)', S2: 'var(--color-accent-2)' }}
+        valueFilter="all"
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Ship To S1' })).toHaveStyle(
+      '--chip-color: var(--color-accent-1)',
+    );
+    expect(screen.getByRole('button', { name: 'Ship To S2' })).toHaveStyle(
+      '--chip-color: var(--color-accent-2)',
+    );
   });
 });

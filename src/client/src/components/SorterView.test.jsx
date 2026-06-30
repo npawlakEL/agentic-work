@@ -38,4 +38,29 @@ describe('SorterView', () => {
       objectValue: 'S3',
     });
   });
+
+  it('renders mapping chips with their configured colors', () => {
+    render(
+      <SorterView
+        activeBrush={null}
+        currentObjectType="ship-to"
+        isPaintMode={false}
+        mappings={[
+          { laneId: 1, objectType: 'ship-to', objectValue: 'S1' },
+          { laneId: 2, objectType: 'ship-to', objectValue: 'S3' },
+        ]}
+        onAssignMapping={vi.fn()}
+        onRemoveMapping={vi.fn()}
+        sorter={sorter}
+        valueColorMap={{ S1: 'var(--color-accent-1)', S3: 'var(--color-accent-3)' }}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Remove S1 from Lane 1' }).closest('.mapping-chip')).toHaveStyle(
+      '--chip-color: var(--color-accent-1)',
+    );
+    expect(screen.getByRole('button', { name: 'Remove S3 from Lane 2' }).closest('.mapping-chip')).toHaveStyle(
+      '--chip-color: var(--color-accent-3)',
+    );
+  });
 });

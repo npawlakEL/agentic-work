@@ -1,5 +1,5 @@
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import MappingPanel from './components/MappingPanel.jsx';
 import SorterView from './components/SorterView.jsx';
 import ConflictDialog from './components/ConflictDialog.jsx';
@@ -41,6 +41,9 @@ const App = () => {
   const [activeBrush, setActiveBrush] = useState(null);
   const [isPaintMode, setIsPaintMode] = useState(false);
   const [conflictOpen, setConflictOpen] = useState(false);
+  const [isMappingsLoading, setIsMappingsLoading] = useState(false);
+  const latestMappingsRequestId = useRef(0);
+  const selectedSorterIdRef = useRef(selectedSorterId);
 
   const selectedSorter = useMemo(
     () => sorters.find((sorter) => sorter.id === selectedSorterId) ?? null,
@@ -58,15 +61,47 @@ const App = () => {
     [selectedObjectType],
   );
 
+  useEffect(() => {
+    selectedSorterIdRef.current = selectedSorterId;
+  }, [selectedSorterId]);
+
   const loadMappings = async (sorterId) => {
     if (!sorterId) {
+      setMappings([]);
+      setVersion(0);
+      setConflictOpen(false);
+      setIsMappingsLoading(false);
       return;
     }
 
-    const mappingResponse = await laneConfigApi.getMappings(sorterId);
-    setMappings(mappingResponse.mappings);
-    setVersion(mappingResponse.version);
+    const requestId = latestMappingsRequestId.current + 1;
+    latestMappingsRequestId.current = requestId;
+    setMappings([]);
+    setVersion(0);
     setConflictOpen(false);
+    setIsMappingsLoading(true);
+
+    try {
+      const mappingResponse = await laneConfigApi.getMappings(sorterId);
+
+      if (
+        requestId !== latestMappingsRequestId.current ||
+        sorterId !== selectedSorterIdRef.current
+      ) {
+        return;
+      }
+
+      setMappings(mappingResponse.mappings);
+      setVersion(mappingResponse.version);
+      setConflictOpen(false);
+    } finally {
+      if (
+        requestId === latestMappingsRequestId.current &&
+        sorterId === selectedSorterIdRef.current
+      ) {
+        setIsMappingsLoading(false);
+      }
+    }
   };
 
   useEffect(() => {
@@ -143,6 +178,11 @@ const App = () => {
       return;
     }
 
+    if (!response.ok) {
+      alert(response.data.message ?? 'Unable to save mappings.');
+      return;
+    }
+
     setVersion(response.data.version);
     setConflictOpen(false);
   };
@@ -162,7 +202,12 @@ const App = () => {
             <button className="button button-secondary" onClick={handleRefresh} type="button">
               Load
             </button>
-            <button className="button button-primary" onClick={handleSave} type="button">
+            <button
+              className="button button-primary"
+              disabled={isMappingsLoading || !selectedSorterId}
+              onClick={handleSave}
+              type="button"
+            >
               Save
             </button>
           </div>
