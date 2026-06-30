@@ -100,10 +100,81 @@ A web application that allows warehouse operators to map objects (Ship To destin
 ### 4.1 Tech Stack
 - **Frontend:** React + Vite
 - **Drag-and-Drop:** @dnd-kit/core
-- **Styling:** CSS (clean, dark theme — polished look)
+- **Styling:** CSS variables-based theming layer (see 4.6 below)
 - **Backend:** Node.js + Express
 - **Database:** SQLite (via adapter pattern — pluggable)
 - **Concurrency:** Basic support (last-write-wins for v1, can upgrade to conflict resolution later)
+
+### 4.6 UI Styling Architecture (Adaptive Theme Layer)
+
+The UI must be **modern and sleek** but also **easily re-themeable** without touching component code.
+
+**Approach: CSS Custom Properties (Design Tokens) + Theme Files**
+
+```
+src/client/src/styles/
+├── tokens/
+│   ├── theme-default.css    # Default dark modern theme
+│   ├── theme-light.css      # Light variant
+│   └── theme-corporate.css  # Example: branded/corporate template
+├── base.css                 # Reset, typography, layout primitives
+├── components/              # Component-specific styles (reference tokens only)
+│   ├── sorter-view.css
+│   ├── lane-slot.css
+│   └── mapping-panel.css
+└── index.css                # Imports base + active theme + components
+```
+
+**Rules:**
+1. **No hardcoded colors, spacing, or font sizes in component CSS.** All visual values reference CSS custom properties (e.g., `var(--color-primary)`, `var(--spacing-md)`, `var(--radius-lg)`).
+2. **Theme swap = swap one CSS file.** Changing the import in `index.css` from `theme-default.css` to `theme-corporate.css` reskins the entire app.
+3. **Component styles are structural only.** They define layout (flex, grid, positioning) and reference tokens for all visual styling.
+4. **Design tokens include:** colors (primary, secondary, surface, text, accent, success, warning, error), spacing scale, border radii, shadows, font family/sizes, transition durations.
+
+**Example token file:**
+```css
+:root {
+  /* Colors */
+  --color-bg: #1a1a2e;
+  --color-surface: #16213e;
+  --color-primary: #4361ee;
+  --color-text: #eeeeee;
+  --color-text-muted: #aaaaaa;
+  --color-border: #333333;
+  --color-accent-1: #4361ee;
+  --color-accent-2: #7209b7;
+  --color-accent-3: #f72585;
+  --color-accent-4: #4cc9f0;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-sm: 0.8rem;
+  --font-size-base: 0.95rem;
+  --font-size-lg: 1.2rem;
+  --font-size-xl: 1.8rem;
+
+  /* Borders & Shadows */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
+
+  /* Transitions */
+  --transition-fast: 0.1s ease;
+  --transition-normal: 0.2s ease;
+}
+```
+
+This ensures the entire visual identity can be swapped by replacing the theme token file — no component rewrites needed.
 
 ### 4.2 File Structure
 ```
