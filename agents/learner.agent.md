@@ -14,3 +14,5 @@
 **Outputs:** Entries in `learnings/` folder, new skills in `skills/` if applicable
 
 **Completion Criteria:** At least one learning entry written. Reusable patterns extracted to skills.
+
+**Important:** The Learner's output (learnings files) MUST be committed and included in the final push. The orchestrating agent is responsible for ensuring learnings and qa-log files are pushed to remote — they are project artifacts, not throwaway notes.
