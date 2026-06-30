@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { SorterNotFoundError, VersionConflictError } from '../adapters/sqlite.js';
+import {
+  InvalidMappingPayloadError,
+  SorterNotFoundError,
+  VersionConflictError,
+} from '../adapters/errors.js';
 
 export const createMappingsRouter = (model) => {
   const router = Router();
@@ -42,6 +46,14 @@ export const createMappingsRouter = (model) => {
 
     if (error instanceof SorterNotFoundError) {
       response.status(404).json({
+        error: error.code,
+        message: error.message,
+      });
+      return;
+    }
+
+    if (error instanceof InvalidMappingPayloadError) {
+      response.status(400).json({
         error: error.code,
         message: error.message,
       });

@@ -1,27 +1,24 @@
 import Database from 'better-sqlite3';
 import { DatabaseAdapter } from './base.js';
-
-export class SorterNotFoundError extends Error {
-  constructor(sorterId) {
-    super(`Sorter not found: ${sorterId}`);
-    this.code = 'SORTER_NOT_FOUND';
-  }
-}
-
-export class VersionConflictError extends Error {
-  constructor(currentVersion) {
-    super("Another user has updated this sorter's configuration");
-    this.code = 'VERSION_CONFLICT';
-    this.currentVersion = currentVersion;
-  }
-}
+import {
+  InvalidMappingPayloadError,
+  SorterNotFoundError,
+  VersionConflictError,
+} from './errors.js';
 
 export class SqliteDatabaseAdapter extends DatabaseAdapter {
-  constructor({ filename = ':memory:', sorters = [] } = {}) {
+  constructor({ filename = ':memory:', sorters = [], objectTypes = [] } = {}) {
     super();
     this.db = new Database(filename);
     this.sorters = [...sorters];
     this.sorterIds = new Set(sorters.map((sorter) => sorter.id));
+    this.sorterConfigById = new Map(sorters.map((sorter) => [sorter.id, sorter]));
+    this.objectTypeValuesById = new Map(
+      objectTypes.map((objectType) => [
+        objectType.id,
+        new Set((objectType.values ?? []).map((value) => value.id)),
+      ]),
+    );
     this.initialize();
   }
 
@@ -46,6 +43,32 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
     if (!this.sorterIds.has(sorterId)) {
       throw new SorterNotFoundError(sorterId);
     }
+  }
+
+  validateMappings(sorterId, mappings) {
+    if (!Array.isArray(mappings)) {
+      throw new InvalidMappingPayloadError('Mappings payload must be an array');
+    }
+
+    const sorter = this.sorterConfigById.get(sorterId);
+
+    mappings.forEach((mapping) => {
+      if (!Number.isInteger(mapping.laneId) || mapping.laneId < 1 || mapping.laneId > sorter.laneCount) {
+        throw new InvalidMappingPayloadError(`Invalid laneId for sorter ${sorterId}: ${mapping.laneId}`);
+      }
+
+      const validObjectValues = this.objectTypeValuesById.get(mapping.objectType);
+
+      if (!validObjectValues) {
+        throw new InvalidMappingPayloadError(`Invalid objectType: ${mapping.objectType}`);
+      }
+
+      if (!validObjectValues.has(mapping.objectValue)) {
+        throw new InvalidMappingPayloadError(
+          `Invalid objectValue for ${mapping.objectType}: ${mapping.objectValue}`,
+        );
+      }
+    });
   }
 
   getCurrentVersion(sorterId) {
@@ -86,6 +109,7 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
 
   async saveMappings(sorterId, { version, mappings }) {
     this.assertSorterExists(sorterId);
+    this.validateMappings(sorterId, mappings);
 
     const transaction = this.db.transaction(() => {
       const currentVersion = this.getCurrentVersion(sorterId);

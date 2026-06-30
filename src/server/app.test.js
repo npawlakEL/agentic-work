@@ -28,6 +28,7 @@ describe('lane configuration API', () => {
     const adapter = new SqliteDatabaseAdapter({
       filename: ':memory:',
       sorters,
+      objectTypes,
     });
 
     app = createApp({
@@ -105,6 +106,35 @@ describe('lane configuration API', () => {
       error: 'VERSION_CONFLICT',
       message: "Another user has updated this sorter's configuration",
       currentVersion: 1,
+    });
+  });
+
+  it.each([
+    {
+      name: 'an invalid lane id',
+      mapping: { laneId: 99, objectType: 'ship-to', objectValue: 'S1' },
+      message: 'Invalid laneId for sorter sorter-a: 99',
+    },
+    {
+      name: 'an invalid object type',
+      mapping: { laneId: 1, objectType: 'invalid-type', objectValue: 'S1' },
+      message: 'Invalid objectType: invalid-type',
+    },
+    {
+      name: 'an invalid object value',
+      mapping: { laneId: 1, objectType: 'ship-to', objectValue: 'BAD' },
+      message: 'Invalid objectValue for ship-to: BAD',
+    },
+  ])('returns 400 when saving mappings with $name', async ({ mapping, message }) => {
+    const response = await request(app).post('/api/mappings/sorter-a').send({
+      version: 0,
+      mappings: [mapping],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'INVALID_MAPPING_PAYLOAD',
+      message,
     });
   });
 
