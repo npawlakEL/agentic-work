@@ -56,31 +56,83 @@ A web application that allows warehouse operators to map objects (Ship To destin
 
 ### 3.1 Layout
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Lane Configuration                        [Load] [Save]│
-├─────────────────────────────────────────────────────────┤
-│  Sorter: [▼ Sorter A (12 lanes)]                        │
-│  Object Type: [▼ Ship To]   Value: [▼ All / S1..S4]    │
-├──────────┬──────────────────────────────────────────────┤
-│ Drag to  │                                              │
-│ assign:  │   ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ...       │
-│          │   │ 1 │ │ 2 │ │ 3 │ │ 4 │ │ 5 │            │
-│  [S1]    │   │S1 │ │   │ │S2 │ │S1 │ │   │            │
-│  [S2]    │   │S3 │ │   │ │   │ │   │ │   │            │
-│  [S3]    │   └───┘ └───┘ └───┘ └───┘ └───┘            │
-│  [S4]    │                                              │
-│          │   Sorter Schematic Diagram                   │
-└──────────┴──────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  Lane Configuration                          [Load] [Save]  │
+├─────────────────────────────────────────────────────────────┤
+│  Sorter: [▼ Sorter A (12 lanes)]                            │
+│  Object Type: [▼ Ship To]   Value: [▼ All / S1..S4]        │
+├──────────┬──────────────────────────────────────────────────┤
+│ Drag to  │                                                  │
+│ assign:  │         Lane 1 ──── [S1][S3]                     │
+│          │              │                                    │
+│  [S1]    │         Lane 2 ──── [  ]                         │
+│  [S2]    │              │                                    │
+│  [S3]    │  ════════════════════════════ ← Main Conveyor    │
+│  [S4]    │              │                                    │
+│          │         Lane 3 ──── [S2]                          │
+│          │              │                                    │
+│          │         Lane 4 ──── [S1][S4]                      │
+│          │                                                   │
+│          │   (CAD Wireframe Diagram - swappable per sorter)  │
+└──────────┴──────────────────────────────────────────────────┘
 ```
 
-### 3.2 Behavior
+### 3.2 Sorter Diagram (CAD Wireframe Layer)
+
+The centerpiece of the UI is a **CAD-style wireframe diagram** of the selected sorter. This is NOT a simple row of boxes — it's a schematic representation of the physical sorter hardware.
+
+**Architecture: Pluggable Diagram Renderer**
+
+Each sorter has an associated diagram component that renders its physical layout. This is designed as an **adaptive/swappable layer** so that:
+1. Different sorters can have completely different visual layouts (shoe sorter, tilt-tray, crossbelt, etc.)
+2. In the future, actual CAD drawings (SVGs exported from engineering tools) can be imported and used directly.
+3. Swapping a sorter's diagram requires only changing the diagram component/SVG registered for that sorter — no core logic changes.
+
+**Diagram Registry Pattern:**
+```
+src/client/src/diagrams/
+├── index.js                  # Registry: maps sorter ID → diagram component
+├── ShoeSorterDiagram.jsx     # Default: straight conveyor with branching lanes
+├── TiltTrayDiagram.jsx       # Future: circular tilt-tray layout
+└── imported/                 # Future: imported SVG/CAD files converted to components
+```
+
+Each diagram component:
+- Receives `lanes` (array of lane numbers) and `mappings` (current mapping data) as props
+- Renders an SVG or canvas schematic of the physical sorter
+- Each lane in the diagram is an interactive drop target
+- Mappings are displayed directly on/near each lane in the diagram (colored labels/chips)
+- The diagram is responsible for its own layout (conveyor path, lane positions, angles)
+
+**Default Diagram (v1):** A shoe sorter / roller divert schematic:
+- A horizontal main conveyor belt (the "spine")
+- Lanes branch off at angles (alternating left/right or all to one side)
+- Each lane is labeled with its number
+- Lane drop zones are visually distinct and highlight on drag-over
+- Mapped objects appear as colored chips at each lane's branch point
+
+```
+         Lane 1 ─────┐
+                      │
+         Lane 2 ─────┤
+                      │
+═══════════════════════════════════  ← Main Conveyor
+                      │
+         Lane 3 ─────┤
+                      │
+         Lane 4 ─────┘
+```
+
+**Future Vision:** Developers will import actual CAD SVGs from engineering software, register them in the diagram registry, and the system will overlay the interactive lane drop targets onto the imported drawing.
+
+### 3.3 Behavior
 1. **Page Load:** Auto-select the first sorter (or cached selection from last session via localStorage).
-2. **Sorter Dropdown:** Switching sorter reloads the lane graphic and mappings for that sorter.
+2. **Sorter Dropdown:** Switching sorter reloads the diagram and mappings for that sorter (loads the registered diagram component).
 3. **Object Type Dropdown:** Selects the category (e.g., "Ship To"). Determines what values appear in the value dropdown and the drag panel.
 4. **Value Dropdown:** Optionally filter to a single value or show "All values" in the drag panel.
-5. **Sorter Graphic:** Schematic/CAD-style diagram showing all lanes as numbered slots in a horizontal row. Mappings displayed directly on each lane (colored chips/labels). No hover or click required to see mappings.
+5. **Sorter Diagram:** CAD wireframe renders the physical sorter layout. Mappings displayed directly on each lane branch. No hover or click required to see mappings.
 6. **Mapping:**
-   - Drag-and-drop from sidebar onto lane slots
+   - Drag-and-drop from sidebar onto lane targets in the diagram
    - Also provide a bulk assignment UI (e.g., select multiple lanes, then assign an object to all of them)
 7. **Unmapping:** Click a remove button (×) on a mapping chip to remove it.
 8. **Save:** Saves the current sorter's mappings to the backend. Each sorter saved individually.
@@ -182,10 +234,14 @@ src/
 ├── client/                  # React frontend
 │   ├── src/
 │   │   ├── components/      # SorterView, LaneSlot, MappingPanel, BulkAssign, etc.
+│   │   ├── diagrams/        # Pluggable sorter diagram components
+│   │   │   ├── index.js     # Registry: sorter ID → diagram component
+│   │   │   ├── ShoeSorterDiagram.jsx  # Default conveyor + branching lanes
+│   │   │   └── imported/    # Future: CAD SVG imports
 │   │   ├── hooks/           # useMappings, useSorterConfig, useDragAndDrop
 │   │   ├── services/        # API client (fetch wrapper)
 │   │   ├── config/          # Object type definitions loaded from server
-│   │   └── styles/          # CSS files
+│   │   └── styles/          # CSS files (token-based theming)
 │   ├── index.html
 │   ├── vite.config.js
 │   └── package.json
