@@ -1,5 +1,23 @@
 # Agents Flow & Control
 
+## Git Flow
+
+All development follows git flow branching:
+
+1. **Branch from `master`** for every new feature/functionality.
+2. All development for that feature happens on the feature branch.
+3. Coder ↔ Reviewer loop happens entirely on the feature branch (local commits only until Gate 2.5).
+4. After Gate 2.5 (user approves push), the feature branch is pushed to remote.
+5. **A Pull Request is created** from the feature branch → `master`.
+6. **The user reviews the PR.** This is the final gate — no merge without user approval.
+7. After user approves the PR, the agent merges it into `master`.
+
+**Rules:**
+- Never commit directly to `master`.
+- One feature branch per functionality/task.
+- Branch naming: `feature/<short-description>` (e.g., `feature/lane-config-backend`).
+- The PR is the final checkpoint — the user has full control over what lands in `master`.
+
 ## Agent Lifecycle
 
 The agentic workflow follows a gated flow. Each agent must complete its phase before the next begins.
@@ -31,8 +49,14 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 ### Gate 2.5: User Approval (Push Gate)
 - **Input:** Reviewer has signed off. All tests pass. Code is complete.
 - **Gate Condition:** **The user must explicitly approve the push.** The system checks in with the user, presents a summary of what was done, and waits for confirmation before pushing to remote.
-- **Output:** Single push of all commits to the branch.
+- **Output:** Single push of all commits to the feature branch. PR created from feature branch → `master`.
 - **Rule:** There is exactly ONE push per coder/reviewer cycle. No incremental pushes of fixes. No auto-push. The agent must ask the user and receive explicit approval.
+
+### Gate 2.75: PR Review (User Merge Gate)
+- **Input:** PR is open from feature branch → `master`.
+- **Gate Condition:** **The user reviews and approves the PR.** No merge without user sign-off.
+- **Output:** Agent merges the PR into `master` only after user approval.
+- **Rule:** The agent cannot merge on its own. The user has final say over what lands in `master`.
 
 ### Gate 3: Reviewer → Learner
 - **Input:** Completed, reviewed code
