@@ -26,6 +26,13 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 - **Gate Condition:** Reviewer signs off — all tests pass, no blocking issues, TDD compliance verified
 - **Loop:** Reviewer sends issues → Coder writes failing tests for each issue → Coder fixes → Reviewer re-validates. Repeat until clean.
 - **TDD Requirement:** No production code exists without a corresponding test. Tests are written FIRST.
+- **NO PUSHING DURING THIS LOOP.** All work is local commits only. No git push until Gate 2 is fully passed.
+
+### Gate 2.5: User Approval (Push Gate)
+- **Input:** Reviewer has signed off. All tests pass. Code is complete.
+- **Gate Condition:** **The user must explicitly approve the push.** The system checks in with the user, presents a summary of what was done, and waits for confirmation before pushing to remote.
+- **Output:** Single push of all commits to the branch.
+- **Rule:** There is exactly ONE push per coder/reviewer cycle. No incremental pushes of fixes. No auto-push. The agent must ask the user and receive explicit approval.
 
 ### Gate 3: Reviewer → Learner
 - **Input:** Completed, reviewed code
