@@ -44,5 +44,6 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 1. **No agent skips a gate.** Coder cannot begin without an approved spec. Learner cannot run until reviewer passes.
 2. **Agents are stateless between invocations.** All context must be passed explicitly (via files or prompts).
 3. **Each agent operates within its defined scope.** The coder does not gather requirements. The reviewer does not write features.
-4. **Skills are reusable.** If an agent discovers a recurring task, it should be captured in `skills/`.
+4. **Skills are mandatory reading.** Every agent MUST read the `skills/` folder before starting work and follow any applicable skills during execution. If a skill exists for a task, the agent uses it — no reinventing.
 5. **Learnings are mandatory.** Every completed project must produce at least one learning entry.
+6. **No pushing during Coder ↔ Reviewer loop.** All work stays local until user approves (Gate 2.5).
