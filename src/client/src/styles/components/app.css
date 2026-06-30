@@ -3,6 +3,7 @@
   padding: var(--spacing-xl);
   display: grid;
   gap: var(--spacing-lg);
+  background: var(--color-primary-pale);
 }
 
 .page-header,
@@ -18,10 +19,16 @@
   align-items: center;
 }
 
+.page-header h1 {
+  font-size: var(--font-size-xl);
+  font-weight: 500;
+  color: var(--color-primary-dark);
+}
+
 .toolbar {
-  padding: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
   border: var(--border-width-sm) solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
 }
@@ -50,18 +57,40 @@
 .button {
   border: var(--border-width-sm) solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-weight: 500;
+  font-size: var(--font-size-sm);
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.button:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .button-primary {
   background: var(--color-primary);
-  color: var(--color-bg);
+  border-color: var(--color-primary);
+  color: #FFFFFF;
+}
+
+.button-primary:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
 }
 
 .button-secondary {
-  background: var(--color-surface-alt);
-  color: var(--color-text);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border-color: var(--color-primary-light);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: var(--color-primary-soft);
 }
 
 .dialog-backdrop {
@@ -70,15 +99,16 @@
   display: grid;
   place-items: center;
   background: var(--color-backdrop);
+  z-index: 100;
 }
 
 .dialog {
   width: min(var(--size-dialog-width), 100%);
   padding: var(--spacing-lg);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   border: var(--border-width-sm) solid var(--color-border);
   background: var(--color-surface);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
   display: grid;
   gap: var(--spacing-md);
 }
