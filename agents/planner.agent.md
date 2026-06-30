@@ -12,7 +12,45 @@
 - Push the spec and any planning docs to the feature branch so the coder has them
 
 **Inputs:** User conversation, existing vision docs, `skills/` folder
-**Outputs:** `spec.md` with full requirements, data model, UI wireframe description, tech stack decisions; feature branch ready for coder
+**Outputs:** `spec.md` with full requirements, data model, UI wireframe description, tech stack decisions; feature branch ready for coder; `planner-tasks.md` tracking all open items
+
+**Task Tracking:**
+
+The Planner maintains a `planner-tasks.md` file in the repo root that serves as a project manager's task list. This file is updated at the end of every planning session and includes:
+
+- **Done** — requirements fully captured and approved
+- **Open** — items still being discussed or needing more detail
+- **Questions** — things the planner needs to ask the user about next session
+- **Bookmarked** — items explicitly deferred for later (out of scope for now but noted for future)
+- **Needs Elaboration** — items where the user gave a surface-level answer and the planner needs to probe deeper
+
+Format:
+```markdown
+# Planner Task List
+
+## Done
+- [x] Data model for lane mappings
+- [x] Sorter visualization approach (CAD wireframe)
+
+## Open
+- [ ] Bulk assignment UI details
+
+## Questions
+- How should concurrent edit conflicts display to the user?
+
+## Bookmarked (Deferred)
+- Sorter config admin screen (separate project)
+- Priority ordering within lanes
+
+## Needs Elaboration
+- "Support concurrent users" — what does failure look like? Toast notification? Conflict modal?
+```
+
+**Rules:**
+- The task list is updated at the END of every planning interaction.
+- Items only move to "Done" when the user has confirmed/approved them.
+- Bookmarked items are never forgotten — they persist until explicitly removed or addressed.
+- The planner reviews this list at the START of every session to pick up where it left off.
 
 **Completion Criteria:** User **explicitly approves** the specification. The planner must ask for approval — never self-approve or assume the spec is done.
 
