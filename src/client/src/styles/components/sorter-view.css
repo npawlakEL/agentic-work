@@ -1,0 +1,133 @@
+.sorter-view {
+  flex: 1;
+  padding: var(--spacing-lg);
+  border: var(--border-width-sm) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: var(--spacing-lg);
+  overflow: auto;
+}
+
+.sorter-view__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+/* CAD Wireframe Diagram */
+.cad-diagram-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.cad-diagram {
+  display: block;
+  min-width: 600px;
+}
+
+.cad-conveyor-line {
+  stroke: var(--color-primary);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.cad-conveyor-label {
+  fill: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.cad-rail {
+  stroke: var(--color-border);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.cad-arrow {
+  fill: var(--color-primary);
+}
+
+.cad-branch-line {
+  stroke: var(--color-text-muted);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.cad-lane-endpoint {
+  fill: var(--color-surface-alt);
+  stroke: var(--color-text-muted);
+  stroke-width: 2;
+}
+
+.cad-lane-label {
+  fill: var(--color-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cad-divert-shoe {
+  fill: var(--color-accent-1);
+  opacity: 0.8;
+}
+
+.cad-lane-group:hover .cad-branch-line {
+  stroke: var(--color-primary);
+}
+
+.cad-lane-group:hover .cad-lane-endpoint {
+  fill: var(--color-primary);
+  stroke: var(--color-primary);
+}
+
+.cad-lane-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  align-items: center;
+  min-height: 28px;
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  border: var(--border-width-sm) dashed var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.cad-lane-chips.is-over {
+  border-color: var(--color-primary);
+  background: var(--color-surface-hover);
+}
+
+.cad-lane-empty {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-style: italic;
+}
+
+/* Keep mapping-chip styles for both old and new diagram */
+.mapping-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 2px var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  border: var(--border-width-sm) solid var(--chip-color, var(--color-border));
+  background: color-mix(in srgb, var(--chip-color, var(--color-surface-alt)) 25%, var(--color-surface));
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.chip-remove {
+  border: 0;
+  background: transparent;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}

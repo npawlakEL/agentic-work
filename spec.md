@@ -41,6 +41,15 @@ A web application that allows warehouse operators to map objects (Ship To destin
 - Many-to-many: multiple objects per lane, same object on multiple lanes.
 - No priority ordering required for v1.
 
+### 2.4 Mapping Version (concurrency control)
+| Field | Type | Description |
+|-------|------|-------------|
+| sorter_id | string | FK to sorter |
+| version | number | Auto-incrementing version, bumped on each save |
+
+- Returned with GET /api/mappings/:sorterId.
+- Client sends version on POST. Server rejects if version doesn't match (409 Conflict). Client shows "Refresh" popup.
+
 ### 2.4 Initial Config Data
 **Sorters:**
 - Sorter A: 12 lanes
@@ -133,17 +142,19 @@ Each diagram component:
 5. **Sorter Diagram:** CAD wireframe renders the physical sorter layout. Mappings displayed directly on each lane branch. No hover or click required to see mappings.
 6. **Mapping:**
    - Drag-and-drop from sidebar onto lane targets in the diagram
-   - Also provide a bulk assignment UI (e.g., select multiple lanes, then assign an object to all of them)
+   - **Bulk Assignment ("Paint Mode"):** User selects an object value from the sidebar (it becomes the active "brush," visually highlighted). While in paint mode, clicking any lane in the diagram assigns that object to the lane. User exits paint mode via a toggle button, pressing Escape, or selecting a different object. This enables rapid multi-lane assignment without repeated drag operations.
 7. **Unmapping:** Click a remove button (×) on a mapping chip to remove it.
 8. **Save:** Saves the current sorter's mappings to the backend. Each sorter saved individually.
 9. **Load:** Fetches current mappings from the backend on sorter selection.
 10. **Color Coding:** Each object value gets a distinct color for visual differentiation.
+11. **Concurrent Edit Notification:** If another user has saved changes to the same sorter since the current user loaded, a popup dialog appears with the message "Another user has updated this sorter's configuration" and a "Refresh" button. The user must refresh to see the latest state before saving. Detection via a version/timestamp field returned by the API.
 
 ### 3.3 Constraints
 - Lanes can be left empty (no validation requiring all lanes mapped).
 - No max objects per lane.
 - Ship To's do not have to be assigned to any lane.
 - Support concurrent users (optimistic updates or last-write-wins for v1).
+- On save, if the server detects a version mismatch (another user saved since this user loaded), the save is rejected and a popup dialog tells the user to refresh.
 
 ---
 

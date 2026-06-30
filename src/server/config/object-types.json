@@ -1,0 +1,12 @@
+[
+  {
+    "id": "ship-to",
+    "name": "Ship To",
+    "values": [
+      { "id": "S1", "label": "S1" },
+      { "id": "S2", "label": "S2" },
+      { "id": "S3", "label": "S3" },
+      { "id": "S4", "label": "S4" }
+    ]
+  }
+]

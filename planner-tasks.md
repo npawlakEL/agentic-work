@@ -15,11 +15,10 @@
 - [x] Single-push rule and PR merge gate
 
 ## Open
-- [ ] Bulk assignment UI — exact interaction pattern (multi-select lanes? modal? panel?)
+(none)
 
 ## Questions
-- What does the bulk assignment flow look like specifically? Select lanes first then assign, or select object then pick lanes?
-- How should concurrent edit conflicts display to the user? (Toast? Modal? Silent overwrite?)
+(all resolved)
 
 ## Bookmarked (Deferred)
 - Sorter/lane configuration editing UI (separate project)
@@ -30,5 +29,8 @@
 - Additional object types beyond Ship To (architecture supports it, values TBD)
 
 ## Needs Elaboration
-- "Support concurrent users" — what does failure look like? Last-write-wins confirmed for v1 but UX around it is undefined
 - CAD import workflow for future — how will developers register new sorter SVGs? (documented in spec but not detailed)
+
+## Resolved
+- Bulk assignment UI: "Paint mode" — user selects an object value (becomes the active brush), then clicks/taps multiple lanes to assign. A toggle button or Escape exits paint mode. Most fluid for repetitive operator workflows.
+- Concurrent edit conflict UX: Popup notification window with a "Refresh" button when another user has edited the same sorter's mappings. No silent overwrite — user is always informed.
