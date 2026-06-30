@@ -64,7 +64,7 @@ This file defines all sub-agents in the system and their responsibilities.
 - Ensure TDD was followed (tests exist for every feature, tests were written first)
 
 **Inputs:** `spec.md`, coder's implementation, running application, test results, `skills/` folder (MUST read and follow applicable skills)
-**Outputs:** Review feedback (pass/fail with specific issues and missing test cases)
+**Outputs:** Review feedback (pass/fail with specific issues and missing test cases), entries in `qa-log/` for each issue found
 
 **Completion Criteria:** All tests pass, no blocking issues remain, TDD compliance verified. Signs off on the implementation.
 
@@ -88,7 +88,7 @@ This file defines all sub-agents in the system and their responsibilities.
 - Extract reusable skills for the `skills/` folder
 - Capture guardrails and constraints discovered during development
 
-**Inputs:** Full project history, review feedback, final implementation, `skills/` folder
+**Inputs:** Full project history, review feedback, final implementation, `skills/` folder, `qa-log/` folder
 **Outputs:** Entries in `learnings/` folder, new skills in `skills/` if applicable
 
 **Completion Criteria:** At least one learning entry written. Reusable patterns extracted to skills.
