@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { DatabaseAdapter } from './index.js';
+import { DatabaseAdapter } from './base.js';
 
 export class SorterNotFoundError extends Error {
   constructor(sorterId) {

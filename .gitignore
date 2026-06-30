@@ -4,4 +4,6 @@ coverage/
 *.db
 *.db-shm
 *.db-wal
-src\server\data\
+src/server/data/*.db
+src/server/data/*.db-shm
+src/server/data/*.db-wal
