@@ -96,6 +96,7 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 8. **Spec-gap escalation.** If the coder, Senior Coder, or reviewer discovers an ambiguity, the loop pauses, the planner asks the user, updates the spec, and the loop resumes.
 9. **Senior Coder reads the codebase.** Before every feasibility assessment or review, the Senior Coder MUST read the current architecture and relevant code. No assumptions.
 10. **Architecture logging is mandatory.** The Senior Coder logs all issues, decisions, and architectural observations in `architecture-log/`. This is not optional.
+11. **Technical questions go to Senior Coder first.** When the Planner encounters a technical/code question, it MUST consult the Senior Coder before escalating to the user. The Senior Coder answers technical questions using codebase knowledge and architecture expertise. Only if the Senior Coder cannot resolve the question (e.g., it's a business/product decision) does it escalate to the user.
 
 ## Parallel Execution Model
 

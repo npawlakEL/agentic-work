@@ -11,6 +11,7 @@
 - Recommend implementation approaches and patterns
 - Sign off on the spec's technical feasibility before Coder begins
 - Read and maintain knowledge of the full codebase and contributing repos
+- **Answer ALL technical/code questions from the Planner** — the Planner must consult the Senior Coder before escalating technical questions to the user. Only product/business decisions go to the user directly.
 
 ### Implementation Phase (with Coder)
 - Hand the approved spec to the Coder with implementation guidance
