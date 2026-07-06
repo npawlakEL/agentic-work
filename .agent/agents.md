@@ -23,18 +23,24 @@ All development follows git flow branching:
 The agentic workflow follows a gated flow. Each agent must complete its phase before the next begins.
 
 ```
-┌──────────┐     ┌──────────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
-│  Planner │◀───▶│ Senior Coder │────▶│  Coder   │◀───▶│ Reviewer │────▶│ Learner  │
-└──────────┘     └──────────────┘     └──────────┘     └──────────┘     └──────────┘
-                       │                    ▲                │
-                       │   spot checks +    │   issues       │
-                       │   final review     │   (arch)       │
-                       └────────────────────┘◀───────────────┘
+                              ┌──────────────┐
+                              │ Orchestrator │  ← User talks here
+                              └──────┬───────┘
+                                     │ coordinates all agents
+          ┌──────────┬───────────────┼───────────────┬──────────┐
+          ▼          ▼               ▼               ▼          ▼
+    ┌──────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+    │  Planner │◀▶│ Senior Coder │─▶│  Coder   │◀▶│ Reviewer │─▶│ Learner  │
+    └──────────┘  └──────────────┘  └──────────┘  └──────────┘  └──────────┘
+                        │                ▲               │
+                        │  spot checks + │   issues      │
+                        │  final review  │   (arch)      │
+                        └────────────────┘◀──────────────┘
                               ▼
-                       architecture-log/
+                       .project/architecture-log/
 ```
 
-**Key change:** The Senior Coder sits between Planner and Coder as the architectural authority. It consults during planning, oversees implementation, and triages review findings.
+**The Orchestrator** is the user-facing coordinator. It translates human needs into agent tasks, manages gate transitions, and ensures all artifacts are produced and pushed. No agent speaks directly to the user — everything flows through the Orchestrator.
 
 ## Flow Gates
 
