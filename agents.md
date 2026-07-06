@@ -81,8 +81,8 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 
 ### Gate 3: Reviewer → Learner
 - **Input:** Completed, reviewed code
-- **Output:** Learner documents what was learned — patterns, pitfalls, guardrails, reusable skills
-- **Gate Condition:** Learnings captured in `learnings/` folder
+- **Output:** Learner documents what was learned — patterns, pitfalls, guardrails, reusable skills. Produces TWO docs: technical (for coders) and operator (for humans). Updates `architecture-log/current-architecture.md` if architecture changed.
+- **Gate Condition:** Learnings captured in `learnings/` folder. Technical doc in `docs/technical/`. Operator doc in `docs/operator/`. Architecture updated if applicable.
 
 ## Constraints & Guardrails
 
@@ -102,13 +102,31 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 
 Sub-agents run in parallel wherever possible:
 - **Planner** can work on the next feature's spec while a previous feature is in the Coder ↔ Reviewer loop.
-- **Coder** and **Reviewer** iterate in a tight loop on the current feature branch.
+- **Senior Coder** serves ALL active Coder ↔ Reviewer loops simultaneously. It is the shared architectural authority across all parallel feature branches.
+- **Coder** and **Reviewer** iterate in a tight loop on the current feature branch, with Senior Coder overseeing.
 - **Learner** can process completed features while new ones are being developed.
-- Multiple feature branches can be active simultaneously (each with its own Coder ↔ Reviewer loop).
+- Multiple feature branches can be active simultaneously (each with its own Coder ↔ Senior Coder ↔ Reviewer loop).
 
 **Synchronization Rules:**
-- Agents operating on the SAME feature branch must be sequential (coder finishes → reviewer starts → coder again if needed).
+- Agents operating on the SAME feature branch must be sequential (coder finishes → senior coder reviews → reviewer starts → coder again if needed).
 - Agents operating on DIFFERENT feature branches can run fully in parallel.
+- The Senior Coder can operate across multiple feature branches simultaneously (shared resource).
 - The Planner can always run in parallel with everything else (it doesn't touch code).
 - The Learner runs after a feature is merged but can overlap with other in-progress features.
 - If a spec-gap escalation occurs, only the affected feature's loop pauses — other parallel work continues.
+
+## Failure Escalation Protocol
+
+When a problem persists across iterations:
+
+1. **Iterations 1-2:** Normal Coder ↔ Reviewer loop. Coder attempts fixes.
+2. **Iteration 3:** Senior Coder is alerted. Reviews the problem directly. Provides specific architectural guidance to unblock.
+3. **Iterations 4-5:** If still unresolved, Senior Coder **interjects directly** — writes pseudo-code, restructures the approach, or redesigns the solution. Hands corrected approach back to Coder.
+4. **After iteration 5:** If the problem STILL isn't fixed, Senior Coder **stops the cycle and escalates to the user.** Provides:
+   - What the problem is
+   - What was tried (all iterations)
+   - Why it's not working
+   - Recommended options (redesign, descope, external help)
+   - The cycle does NOT continue until the user decides next steps.
+
+**Rule:** The Senior Coder counts iterations per-problem, not per-cycle. If the same root cause keeps resurfacing in different forms, that counts toward the 3-5 threshold.
