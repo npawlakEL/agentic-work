@@ -32,8 +32,9 @@ This ensures full transparency and gives the Learner agent concrete data to extr
 
 **Iteration Loop:**
 1. Reviewer runs tests and inspects code
-2. If issues found → writes them to `.project/qa-log/`, sends list back to Coder with reproduction steps
-3. Coder writes failing tests for each issue (TDD), then fixes
-4. Coder hands back to Reviewer
-5. Reviewer updates qa-log with verification status
-6. Repeat until Reviewer signs off
+2. **If the project has a UI:** Reviewer MUST open the URL in a browser, verify the page loads, and confirm data is displayed. A passing test suite is not sufficient — visual confirmation is required.
+3. If issues found → writes them to `.project/qa-log/`, sends list back to Coder with reproduction steps
+4. Coder writes failing tests for each issue (TDD), then fixes
+5. Coder hands back to Reviewer
+6. Reviewer updates qa-log with verification status
+7. Repeat until Reviewer signs off
