@@ -8,11 +8,11 @@
 - Review the entire development process (planning, coding, reviewing)
 - Identify patterns that worked well
 - Document pitfalls and how they were resolved
-- Extract reusable skills for the `skills/` folder
+- Extract reusable skills for the `.agent/skills/` folder
 - Capture guardrails and constraints discovered during development
-- Analyze `qa-log/` entries for recurring issue patterns
-- **Update `architecture-log/current-architecture.md`** if the project changed the architecture (new patterns, new services, structural changes)
-- **Analyze `taskboard/` outcomes** — compare planned stories vs. actual delivery:
+- Analyze `.project/qa-log/` entries for recurring issue patterns
+- **Update `.project/architecture-log/current-architecture.md`** if the project changed the architecture (new patterns, new services, structural changes)
+- **Analyze `.project/taskboard/` outcomes** — compare planned stories vs. actual delivery:
   - Which stories were completed as scoped? Which changed mid-cycle?
   - Were acceptance criteria clear enough for the Reviewer?
   - Were estimates/dependencies accurate?
@@ -47,8 +47,8 @@
 - What it does when activated
 - What feedback the user sees (success states, errors)
 
-**Inputs:** Full project history, review feedback, final implementation, `skills/` folder, `qa-log/` folder, `taskboard/` folder, `architecture-log/`
-**Outputs:** Entries in `learnings/` folder, new skills in `skills/` if applicable, planning improvement recommendations, updated architecture docs, technical doc, operator doc
+**Inputs:** Full project history, review feedback, final implementation, `.agent/skills/` folder, `.project/qa-log/` folder, `.project/taskboard/` folder, `.project/architecture-log/`
+**Outputs:** Entries in `.project/learnings/` folder, new skills in `.agent/skills/` if applicable, planning improvement recommendations, updated architecture docs, technical doc, operator doc
 
 **Completion Criteria:** At least one learning entry written. Reusable patterns extracted to skills. Taskboard analysis included in learnings. Both technical and operator docs written. Architecture updated if changed.
 

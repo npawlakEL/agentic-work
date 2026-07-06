@@ -15,7 +15,7 @@
 - Write clean, extensible code with proper separation of concerns
 - Ensure the application builds, runs, and all tests pass without errors
 
-**Inputs:** `spec.md`, project file structure, `skills/` folder (MUST read and follow applicable skills)
+**Inputs:** `.project/spec.md`, project file structure, `.agent/skills/` folder (MUST read and follow applicable skills)
 **Outputs:** Working application code with full test coverage, committed to repository
 
 **Completion Criteria:** Application builds, all tests pass, and coverage meets spec requirements. Hands off to Reviewer.

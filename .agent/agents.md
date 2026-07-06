@@ -41,12 +41,12 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 ### Gate 1: Planner ↔ Senior Coder → Spec Approval
 - **Input:** User requirements (gathered interactively by Planner)
 - **Process:** Planner consults with Senior Coder on technical feasibility. Senior Coder reads codebase, assesses architecture, recommends approaches.
-- **Output:** `spec.md` — full requirements specification with data model, UI behavior, tech stack, constraints. Senior Coder confirms feasibility.
+- **Output:** `.project/spec.md` — full requirements specification with data model, UI behavior, tech stack, constraints. Senior Coder confirms feasibility.
 - **Gate Condition:** User approves the spec AND Senior Coder confirms it's technically achievable within current architecture.
 
 ### Gate 1.5: Senior Coder → Coder (Implementation Handoff)
 - **Input:** Approved spec with Senior Coder's feasibility sign-off
-- **Process:** Senior Coder hands the spec to the Coder with implementation guidance (architecture notes, patterns to follow, areas of concern). **Senior Coder produces a task breakdown in `taskboard/`** — stories with acceptance criteria, dependencies, and complexity estimates.
+- **Process:** Senior Coder hands the spec to the Coder with implementation guidance (architecture notes, patterns to follow, areas of concern). **Senior Coder produces a task breakdown in `.project/taskboard/`** — stories with acceptance criteria, dependencies, and complexity estimates.
 - **Output:** Coder begins implementation against the taskboard stories
 - **Gate Condition:** Senior Coder explicitly hands off AND taskboard is written. Coder cannot start without both.
 
@@ -65,7 +65,7 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 - **Gate Condition:** BOTH Senior Coder AND Reviewer have signed off. No blocking issues remain.
 - **TDD Requirement:** No production code exists without a corresponding test. Tests are written FIRST.
 - **NO PUSHING DURING THIS LOOP.** All work is local commits only.
-- **Logging:** Senior Coder documents all issues in `architecture-log/` throughout this phase.
+- **Logging:** Senior Coder documents all issues in `.project/architecture-log/` throughout this phase.
 
 ### Gate 2.5: User Approval (Push Gate)
 - **Input:** Reviewer has signed off. All tests pass. Code is complete.
@@ -82,20 +82,20 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 ### Gate 3: Reviewer → Learner
 - **Input:** Completed, reviewed code
 - **Output:** Learner documents what was learned — patterns, pitfalls, guardrails, reusable skills. Produces TWO docs: technical (for coders) and operator (for humans). Updates `architecture-log/current-architecture.md` if architecture changed.
-- **Gate Condition:** Learnings captured in `learnings/` folder. Technical doc in `docs/technical/`. Operator doc in `docs/operator/`. Architecture updated if applicable.
+- **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `docs/technical/`. Operator doc in `docs/operator/`. Architecture updated if applicable.
 
 ## Constraints & Guardrails
 
 1. **No agent skips a gate.** Coder cannot begin without Senior Coder's handoff. Reviewer cannot start without Senior Coder's sign-off. Learner cannot run until both Senior Coder and Reviewer pass.
 2. **Agents are stateless between invocations.** All context must be passed explicitly (via files or prompts).
 3. **Each agent operates within its defined scope.** The coder does not gather requirements. The reviewer does not write features. The Senior Coder does not write production code.
-4. **Skills are mandatory reading.** Every agent MUST read the `skills/` folder before starting work and follow any applicable skills during execution. If a skill exists for a task, the agent uses it — no reinventing.
+4. **Skills are mandatory reading.** Every agent MUST read the `.agent/skills/` folder before starting work and follow any applicable skills during execution. If a skill exists for a task, the agent uses it — no reinventing.
 5. **Learnings are mandatory.** Every completed project must produce at least one learning entry.
 6. **No pushing during Coder ↔ Senior Coder ↔ Reviewer loop.** All work stays local until user approves (Gate 2.5).
-7. **Spec must be rock solid before handoff.** No open items, no unanswered questions in `planner-tasks.md` when the spec goes to the Senior Coder/Coder. If questions remain, they must be answered first.
+7. **Spec must be rock solid before handoff.** No open items, no unanswered questions in `.project/planner-tasks.md` when the spec goes to the Senior Coder/Coder. If questions remain, they must be answered first.
 8. **Spec-gap escalation.** If the coder, Senior Coder, or reviewer discovers an ambiguity, the loop pauses, the planner asks the user, updates the spec, and the loop resumes.
 9. **Senior Coder reads the codebase.** Before every feasibility assessment or review, the Senior Coder MUST read the current architecture and relevant code. No assumptions.
-10. **Architecture logging is mandatory.** The Senior Coder logs all issues, decisions, and architectural observations in `architecture-log/`. This is not optional.
+10. **Architecture logging is mandatory.** The Senior Coder logs all issues, decisions, and architectural observations in `.project/architecture-log/`. This is not optional.
 11. **Technical questions go to Senior Coder first.** When the Planner encounters a technical/code question, it MUST consult the Senior Coder before escalating to the user. The Senior Coder answers technical questions using codebase knowledge and architecture expertise. Only if the Senior Coder cannot resolve the question (e.g., it's a business/product decision) does it escalate to the user.
 
 ## Parallel Execution Model

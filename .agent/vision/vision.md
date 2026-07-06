@@ -18,7 +18,7 @@ Rebuild the legacy SQL-based Lane Configuration screen as a modern web applicati
 1. **Planner** — Gathers requirements, produces specification documents for downstream agents.
 2. **Coder** — Implements the project based on planner's spec.
 3. **Reviewer** — QA stand-in that debugs, tests, and validates the coder's output. Iterates with coder until quality bar is met.
-4. **Learner** — Captures lessons learned, guardrails, and patterns discovered during the process. Dumps findings into the `learnings/` folder.
+4. **Learner** — Captures lessons learned, guardrails, and patterns discovered during the process. Dumps findings into the `.project/learnings/` folder.
 
 ## Success Criteria
 - User can select a sorter from a dropdown, see its lanes graphically, and map/unmap objects.
