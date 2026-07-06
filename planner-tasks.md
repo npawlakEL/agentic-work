@@ -13,15 +13,6 @@
 - [x] Git flow branching strategy
 - [x] TDD requirement for coder agent
 - [x] Single-push rule and PR merge gate
-- [x] Import sorter graphic feature spec (formats, workflow, placement, persistence)
-- [x] Lane number visibility fix (always above/beside drop zones)
-- [x] Config file architecture (single JSON → DB on startup → dual-write on save)
-- [x] Terminology: "object type/value" → "criteria type/value"
-- [x] Frontend isolation — plug-and-play component with props API, library build, no global side effects
-- [x] UI documentation requirement — separated docs (ui-guide, backend-guide, controls-reference, integration, api-contract, theming, architecture)
-- [x] Minimal backend API — thin CRUD layer, no business logic, replaceable
-- [x] Static web assets — frontend builds to static files, backend serves them by default, also independently deployable
-- [x] Frontend contract definitions — formal adapter interface in src/client/src/contracts/, single source of truth for backend integration
 
 ## Open
 (none)
@@ -36,10 +27,9 @@
 - Real-time sync via WebSockets (using polling/manual refresh for now)
 - Lane names/descriptions (just numbers for now)
 - Additional object types beyond Ship To (architecture supports it, values TBD)
-- Admin UI for creating new criteria types/values (user-defined criteria)
 
 ## Needs Elaboration
-(none — all items elaborated)
+- CAD import workflow for future — how will developers register new sorter SVGs? (documented in spec but not detailed)
 
 ## Resolved
 - Bulk assignment UI: "Paint mode" — user selects an object value (becomes the active brush), then clicks/taps multiple lanes to assign. A toggle button or Escape exits paint mode. Most fluid for repetitive operator workflows.
