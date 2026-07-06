@@ -48,8 +48,16 @@
 - What feedback the user sees (success states, errors)
 
 **Inputs:** Full project history, review feedback, final implementation, `.agent/skills/` folder, `.project/qa-log/` folder, `.project/taskboard/` folder, `.project/architecture-log/`
-**Outputs:** Entries in `.project/learnings/` folder, new skills in `.agent/skills/` if applicable, planning improvement recommendations, updated architecture docs, technical doc, operator doc
+**Outputs:** Entries in `.project/learnings/` folder, new skills in `.agent/skills/` if applicable, planning improvement recommendations, updated architecture docs, technical doc, operator doc, `CHANGELOG.md` update
 
-**Completion Criteria:** At least one learning entry written. Reusable patterns extracted to skills. Taskboard analysis included in learnings. Both technical and operator docs written. Architecture updated if changed.
+**Completion Criteria:** At least one learning entry written. Reusable patterns extracted to skills. Taskboard analysis included in learnings. Both technical and operator docs written. Architecture updated if changed. **CHANGELOG.md updated with version bump and summary of changes.**
 
-**Important:** The Learner's output (learnings files, docs) MUST be committed and included in the final push. The orchestrating agent is responsible for ensuring learnings, qa-log, and docs files are pushed to remote — they are project artifacts, not throwaway notes.
+### Version Control
+- The Learner updates `CHANGELOG.md` after every cycle
+- Version format: `MAJOR.MINOR.PATCH`
+  - PATCH (0.0.X): bug fix, hot-patch, small change
+  - MINOR (0.X.0): new feature, significant functionality
+  - MAJOR (X.0.0): full version release, milestone delivery
+- The Orchestrator confirms the version increment is appropriate
+
+**Important:** The Learner's output (learnings files, docs, CHANGELOG) MUST be committed and included in the final push. The orchestrating agent is responsible for ensuring learnings, qa-log, and docs files are pushed to remote — they are project artifacts, not throwaway notes.

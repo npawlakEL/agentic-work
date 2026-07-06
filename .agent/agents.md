@@ -87,8 +87,28 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 
 ### Gate 3: Reviewer → Learner
 - **Input:** Completed, reviewed code
-- **Output:** Learner documents what was learned — patterns, pitfalls, guardrails, reusable skills. Produces TWO docs: technical (for coders) and operator (for humans). Updates `architecture-log/current-architecture.md` if architecture changed.
-- **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `docs/technical/`. Operator doc in `docs/operator/`. Architecture updated if applicable.
+- **Output:** Learner documents what was learned — patterns, pitfalls, guardrails, reusable skills. Produces TWO docs: technical (for coders) and operator (for humans). Updates `.project/architecture-log/current-architecture.md` if architecture changed. **Updates `CHANGELOG.md` with version bump.**
+- **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `docs/technical/`. Operator doc in `docs/operator/`. Architecture updated if applicable. CHANGELOG updated.
+
+## Hot-Path (Small Fixes / Bug Patches)
+
+For trivial changes that don't warrant the full 6-gate flow (one-line fixes, typos, small bug patches):
+
+```
+Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) → Coder (fix + existing tests pass) → Reviewer (QA) → Learner (CHANGELOG patch bump + notes)
+```
+
+**How it differs from full flow:**
+- Planner scopes the fix in a sentence, not a full spec update
+- Senior Coder designs a **least-resistance edit** — no rewrites, minimal code touch
+- TDD tests already exist (this is a fix, not a new feature) — Coder ensures they still pass
+- Reviewer confirms the fix works and nothing regressed
+- Learner bumps PATCH version (0.0.X) and logs the fix
+- Gate 2.5 still applies — no push without user approval
+
+**When to use hot-path vs. full flow:**
+- Hot-path: bug fix, typo, config change, style tweak, < 20 lines changed
+- Full flow: new feature, architectural change, new UI component, anything that needs a taskboard
 
 ## Constraints & Guardrails
 
@@ -136,3 +156,21 @@ When a problem persists across iterations:
    - The cycle does NOT continue until the user decides next steps.
 
 **Rule:** The Senior Coder counts iterations per-problem, not per-cycle. If the same root cause keeps resurfacing in different forms, that counts toward the 3-5 threshold.
+
+## Rollback Protocol
+
+When something lands on `master` and is discovered to be broken:
+
+1. **Orchestrator detects the issue** (via user report, failed tests, or post-merge validation)
+2. **Orchestrator immediately reverts the PR** on `master` (`git revert` of the merge commit)
+3. **Orchestrator notifies the user** — explains what broke and that it's been reverted
+4. **Senior Coder diagnoses** — reads the reverted code, identifies root cause, logs in `architecture-log/`
+5. **A new cycle begins** (hot-path or full flow depending on severity) to fix the issue properly
+6. **The fix goes through the normal gate process** — no shortcuts just because it was previously "done"
+
+**Rules:**
+- Revert first, diagnose second. Master must always be stable.
+- The original PR's issues are logged in `architecture-log/` as a post-mortem
+- The Learner adds a "Lessons from Rollback" section to that cycle's learning entry
+- If the same feature causes 2 rollbacks, the Senior Coder escalates to the user for a redesign decision
+
