@@ -46,9 +46,9 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 
 ### Gate 1.5: Senior Coder → Coder (Implementation Handoff)
 - **Input:** Approved spec with Senior Coder's feasibility sign-off
-- **Process:** Senior Coder hands the spec to the Coder with implementation guidance (architecture notes, patterns to follow, areas of concern)
-- **Output:** Coder begins implementation
-- **Gate Condition:** Senior Coder explicitly hands off. Coder cannot start without Senior Coder's go-ahead.
+- **Process:** Senior Coder hands the spec to the Coder with implementation guidance (architecture notes, patterns to follow, areas of concern). **Senior Coder produces a task breakdown in `taskboard/`** — stories with acceptance criteria, dependencies, and complexity estimates.
+- **Output:** Coder begins implementation against the taskboard stories
+- **Gate Condition:** Senior Coder explicitly hands off AND taskboard is written. Coder cannot start without both.
 
 ### Gate 2: Coder ↔ Senior Coder ↔ Reviewer (TDD Iteration Loop)
 - **Input:** Coder produces working code using strict TDD (Red → Green → Refactor)
