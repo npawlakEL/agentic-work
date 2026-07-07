@@ -4,6 +4,5 @@ coverage/
 *.db
 *.db-shm
 *.db-wal
-src/server/data/*.db
-src/server/data/*.db-shm
-src/server/data/*.db-wal
+.env
+.env.local

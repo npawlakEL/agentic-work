@@ -1,5 +1,0 @@
-[
-  { "id": "sorter-a", "name": "Sorter A", "laneCount": 12 },
-  { "id": "sorter-b", "name": "Sorter B", "laneCount": 16 },
-  { "id": "sorter-c", "name": "Sorter C", "laneCount": 10 }
-]

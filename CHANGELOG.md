@@ -1,7 +1,5 @@
 # Changelog
 
-All notable changes to this project are documented here.
-
 ## Versioning Scheme
 
 **Format:** `MAJOR.MINOR.PATCH` (e.g., `1.2.3`)
@@ -20,35 +18,6 @@ All notable changes to this project are documented here.
 
 ---
 
-## [0.1.0] — 2026-06-30
+## [Unreleased]
 
-### Added
-- Lane Configuration Screen — full drag-and-drop UI for mapping criteria to sorter lanes
-- CAD wireframe SVG diagram (shoe sorter with branching lanes)
-- Axon/Element Logic theme integration (light theme, Indigo primary, Roboto)
-- Mock data layer (frontend works standalone without backend)
-- TDD test suite (34 tests passing)
-
-### Technical
-- React + Vite frontend, Node/Express backend, SQLite adapter pattern
-- @dnd-kit/core for drag-and-drop
-- CSS custom properties theming system
-- Pluggable diagram registry pattern
-
----
-
-## [0.0.1] — 2026-07-06
-
-### Added
-- Agent framework: Orchestrator, Planner, Senior Coder, Coder, Reviewer, Learner
-- Repo structure: `.agent/`, `.project/`, `docs/`, `src/`
-- Taskboard system for story breakdowns
-- Architecture log for Senior Coder decisions
-- Failure Escalation Protocol (3-5 iterations → escalate)
-- Dual documentation system (technical + operator)
-- Agent personalities defined
-- Versioning and changelog system (this file)
-
-### Changed
-- Reorganized flat file structure into grouped `.agent/` and `.project/` directories
-- All internal path references updated
+_(Next cycle's changes will be logged here by the Learner.)_
