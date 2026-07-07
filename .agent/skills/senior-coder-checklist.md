@@ -32,7 +32,4 @@
 
 ## Lessons Learned (grows over time)
 <!-- Add entries here as projects reveal recurring issues -->
-- Race conditions in concurrent edit scenarios — always check for optimistic locking
-- CSS values that look hardcoded but are valid (100%, 1fr, color-mix percentages) — don't flag these
-- Windows detached processes exit immediately for Node servers — use Start-Process workaround
-- Squash-merge creates conflicts when additional commits exist on the same branch — use fresh temp branch
+- _(This section grows automatically as the Senior Coder encounters and resolves issues across projects.)_
