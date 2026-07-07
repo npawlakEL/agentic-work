@@ -35,7 +35,7 @@ A reusable agentic development framework for software projects. Clone this into 
 │   ├── architecture-log/← Architectural decisions & issues
 │   ├── reviewer-log/    ← Review findings & accountability
 │   └── learnings/       ← Post-project learnings
-├── docs/                ← Public documentation
+├── .client-docs/                ← Public documentation
 │   ├── technical/       ← For developers
 │   └── operator/        ← For end users
 └── CHANGELOG.md         ← Semantic versioning log

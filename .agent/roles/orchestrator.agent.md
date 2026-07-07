@@ -38,7 +38,7 @@
     - Orchestrator → `.project/planning-sessions/` (Q&A logs from planning conversations)
     - Senior Coder → `.project/taskboard/`, `.project/architecture-log/`
     - Reviewer → `.project/reviewer-log/`
-    - Learner → `.project/learnings/`, `docs/technical/`, `docs/operator/`, `CHANGELOG.md`
+    - Learner → `.project/learnings/`, `.client-.client-docs/technical/`, `.client-.client-docs/operator/`, `CHANGELOG.md`
     - Senior Coder + Coder → `.agent/skills/` (new skills from repetitive patterns)
 - Ensures all artifacts are committed and pushed (nothing left local-only)
 - Verifies completeness before closing a cycle
@@ -67,8 +67,8 @@ The Orchestrator MUST verify the following after EVERY agent invocation. If an a
 
 **After Learner runs:**
 - [ ] Did it write to `.project/learnings/`?
-- [ ] Did it produce `docs/technical/` doc?
-- [ ] Did it produce `docs/operator/` doc?
+- [ ] Did it produce `.client-.client-docs/technical/` doc?
+- [ ] Did it produce `.client-.client-docs/operator/` doc?
 - [ ] Did it update `CHANGELOG.md` with version bump?
 - [ ] Did it update `.project/architecture-log/current-architecture.md` (if architecture changed)?
 - [ ] Did it add new skills to `.agent/skills/` for process patterns learned?
@@ -100,7 +100,7 @@ The Orchestrator MUST verify that all files and folders created by agents are in
 │   ├── architecture-log/      ← Architecture logs ONLY here
 │   ├── reviewer-log/                ← QA logs ONLY here
 │   └── learnings/             ← Learnings ONLY here
-├── docs/                      ← Public documentation
+├── .client-docs/                      ← Public documentation
 │   ├── technical/             ← Technical docs ONLY here
 │   └── operator/              ← Operator docs ONLY here
 ├── src/                       ← Application code
