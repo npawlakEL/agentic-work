@@ -78,6 +78,39 @@ The Orchestrator MUST verify the following after EVERY agent invocation. If an a
 3. If an agent fails to produce artifacts 2 cycles in a row, the Orchestrator adds an explicit reminder to the agent's invocation prompt.
 4. Skills are NOT optional. If an agent did something it will do again, it becomes a skill. The Orchestrator prompts: "What patterns did you use that should be saved as skills?"
 
+### Folder Structure Validation
+
+The Orchestrator MUST verify that all files and folders created by agents are in their correct canonical locations. **No duplicate folders, no nested duplicates, no files outside the defined structure.**
+
+**Canonical folder map (the ONLY valid locations):**
+```
+/
+├── .agent/                    ← Agent framework (NEVER duplicated elsewhere)
+│   ├── agents.md
+│   ├── roles/                 ← Agent definitions ONLY here
+│   ├── skills/                ← Skills ONLY here
+│   └── vision/                ← Vision docs ONLY here
+├── .project/                  ← Project tracking (NEVER duplicated elsewhere)
+│   ├── spec.md
+│   ├── planner-tasks.md
+│   ├── taskboard/             ← Story breakdowns ONLY here
+│   ├── architecture-log/      ← Architecture logs ONLY here
+│   ├── qa-log/                ← QA logs ONLY here
+│   └── learnings/             ← Learnings ONLY here
+├── docs/                      ← Public documentation
+│   ├── technical/             ← Technical docs ONLY here
+│   └── operator/              ← Operator docs ONLY here
+├── src/                       ← Application code
+├── CHANGELOG.md
+└── package.json
+```
+
+**Validation rules:**
+1. If an agent creates a folder that already exists elsewhere (e.g., `architecture-log/` inside `architecture-log/`), the Orchestrator deletes the duplicate and corrects the agent.
+2. If an agent writes a file to the wrong location (e.g., a skill outside `.agent/skills/`), the Orchestrator moves it to the correct location.
+3. Before committing, the Orchestrator scans for any rogue folders or files outside this structure.
+4. Agents receive the canonical path in their invocation prompt — e.g., "Write to `.project/architecture-log/`, not `architecture-log/`."
+
 ### Git Flow
 - Creates feature branches
 - Manages commits during the Coder ↔ Reviewer loop
