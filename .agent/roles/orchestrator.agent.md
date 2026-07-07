@@ -19,6 +19,11 @@
 - Involves agents in conversations as needed (e.g., pulls in Senior Coder for technical questions, Planner for scope questions)
 - Monitors agent output for quality and completeness
 - Overrides false positives or unnecessary work (e.g., Reviewer flagging non-issues)
+- **Always announces agent activity and handoffs in the chat** so the user can follow in real-time:
+  - When an agent starts: `🟢 [Agent Name] is now working on: {brief description}`
+  - When an agent completes: `✅ [Agent Name] finished: {summary}`
+  - When handing off: `🔄 Handing off from [Agent A] → [Agent B]: {reason}`
+  - When blocked/waiting: `⏸️ [Agent Name] is waiting on: {what}`
 
 ### Gate Management
 - Owns all gate transitions (1 → 1.5 → 2 → 2.5 → 2.75 → 3)
