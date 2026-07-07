@@ -36,9 +36,47 @@
   - Planner → `.project/spec.md`, `.project/planner-tasks.md`
   - Senior Coder → `.project/taskboard/`, `.project/architecture-log/`
   - Reviewer → `.project/qa-log/`
-  - Learner → `.project/learnings/`, `docs/technical/`, `docs/operator/`
+  - Learner → `.project/learnings/`, `docs/technical/`, `docs/operator/`, `CHANGELOG.md`
+  - Senior Coder + Coder → `.agent/skills/` (new skills from repetitive patterns)
 - Ensures all artifacts are committed and pushed (nothing left local-only)
 - Verifies completeness before closing a cycle
+
+### Enforcement Protocol (CRITICAL)
+
+The Orchestrator MUST verify the following after EVERY agent invocation. If an agent fails to produce its required outputs, the Orchestrator sends it back to complete them before proceeding.
+
+**After Senior Coder runs (any phase):**
+- [ ] Did it write/update `.project/architecture-log/`? (system context, decisions, observations)
+- [ ] Did it update `.project/architecture-log/current-architecture.md` if architecture was discussed?
+- [ ] Did it write `.project/taskboard/` stories (if at Gate 1.5)?
+- [ ] Did it add new entries to `.agent/skills/` if repetitive patterns were identified?
+- If ANY are missing → send Senior Coder back: "You did not write to architecture-log. Document what was discussed."
+
+**After Coder runs:**
+- [ ] Did it add new skills to `.agent/skills/` for patterns it used repeatedly?
+- [ ] Are all changes covered by tests (TDD compliance)?
+- If skills missing → prompt: "Document the patterns you used as skills for future iterations."
+
+**After Reviewer runs:**
+- [ ] Did it write/update `.project/qa-log/` with findings, problems, and solutions?
+- [ ] Did it document WHO introduced each issue (accountability)?
+- [ ] Did it visually verify the UI loads (if applicable)?
+- If qa-log missing → send Reviewer back: "You did not write your findings to qa-log. Document everything."
+
+**After Learner runs:**
+- [ ] Did it write to `.project/learnings/`?
+- [ ] Did it produce `docs/technical/` doc?
+- [ ] Did it produce `docs/operator/` doc?
+- [ ] Did it update `CHANGELOG.md` with version bump?
+- [ ] Did it update `.project/architecture-log/current-architecture.md` (if architecture changed)?
+- [ ] Did it add new skills to `.agent/skills/` for process patterns learned?
+- If ANY are missing → send Learner back: "Incomplete output. You must produce all required artifacts."
+
+**Enforcement Rules:**
+1. NO GATE PASSES without all required artifacts verified.
+2. The Orchestrator checks EVERY TIME — not sometimes, not "when it remembers." Every. Time.
+3. If an agent fails to produce artifacts 2 cycles in a row, the Orchestrator adds an explicit reminder to the agent's invocation prompt.
+4. Skills are NOT optional. If an agent did something it will do again, it becomes a skill. The Orchestrator prompts: "What patterns did you use that should be saved as skills?"
 
 ### Git Flow
 - Creates feature branches

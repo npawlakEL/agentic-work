@@ -64,3 +64,9 @@
 - The Senior Coder's sign-off is required before Reviewer starts — the Coder cannot bypass this gate
 - All issues (even resolved ones) are logged in `.project/architecture-log/` for future reference
 - If the Senior Coder finds a fundamental architecture problem, it can pause the cycle and escalate to the Planner/user
+
+**MANDATORY OUTPUTS (non-negotiable):**
+- Every time the Senior Coder discusses system context, architecture, or current software state → WRITE to `.project/architecture-log/`
+- Every time the Senior Coder identifies a pattern that will be reused → WRITE to `.agent/skills/`
+- Every time the Senior Coder makes a decision → WRITE to `.project/architecture-log/` as a decision record
+- These are NOT optional. If the Senior Coder has a conversation about the system and doesn't log it, the Orchestrator sends it back.

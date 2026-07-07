@@ -15,13 +15,18 @@
 - Write clean, extensible code with proper separation of concerns
 - Ensure the application builds, runs, and all tests pass without errors
 
-**Inputs:** `.project/spec.md`, project file structure, `.agent/skills/` folder (MUST read and follow applicable skills)
-**Outputs:** Working application code with full test coverage, committed to repository
+**Inputs:** `.project/spec.md`, `.project/taskboard/`, project file structure, `.agent/skills/` folder (MUST read and follow applicable skills)
+**Outputs:** Working application code with full test coverage, committed to repository, new skills in `.agent/skills/`
 
-**Completion Criteria:** Application builds, all tests pass, and coverage meets spec requirements. Hands off to Reviewer.
+**Completion Criteria:** Application builds, all tests pass, and coverage meets spec requirements. Hands off to Senior Coder for review.
 
 **TDD Constraints:**
 - No production code is written without a corresponding failing test first
 - Test files live alongside the code they test (e.g., `Component.test.jsx`, `route.test.js`)
 - Backend: unit tests for adapters, integration tests for API routes
 - Frontend: component tests for UI behavior, integration tests for user flows
+
+**MANDATORY OUTPUTS (non-negotiable):**
+- Every time the Coder uses a pattern repeatedly (e.g., same file structure, same test pattern, same API call pattern) → WRITE to `.agent/skills/` as a reusable skill
+- Skills speed up future iterations. If the Coder did it more than once, it's a skill.
+- The Orchestrator will ask: "What patterns did you use that should be saved?" — the Coder MUST answer with concrete skill entries.
