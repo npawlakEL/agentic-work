@@ -10,7 +10,7 @@
 - Document pitfalls and how they were resolved
 - Extract reusable skills for the `.agent/skills/` folder
 - Capture guardrails and constraints discovered during development
-- Analyze `.project/qa-log/` entries for recurring issue patterns
+- Analyze `.project/reviewer-log/` entries for recurring issue patterns
 - **Update `.project/architecture-log/current-architecture.md`** if the project changed the architecture (new patterns, new services, structural changes)
 - **Analyze `.project/taskboard/` outcomes** — compare planned stories vs. actual delivery:
   - Which stories were completed as scoped? Which changed mid-cycle?
@@ -47,7 +47,7 @@
 - What it does when activated
 - What feedback the user sees (success states, errors)
 
-**Inputs:** Full project history, review feedback, final implementation, `.agent/skills/` folder, `.project/qa-log/` folder, `.project/taskboard/` folder, `.project/architecture-log/`
+**Inputs:** Full project history, review feedback, final implementation, `.agent/skills/` folder, `.project/reviewer-log/` folder, `.project/taskboard/` folder, `.project/architecture-log/`
 **Outputs:** Entries in `.project/learnings/` folder, new skills in `.agent/skills/` if applicable, planning improvement recommendations, updated architecture docs, technical doc, operator doc, `CHANGELOG.md` update
 
 **Completion Criteria:** At least one learning entry written. Reusable patterns extracted to skills. Taskboard analysis included in learnings. Both technical and operator docs written. Architecture updated if changed. **CHANGELOG.md updated with version bump and summary of changes.**
@@ -60,4 +60,4 @@
   - MAJOR (X.0.0): full version release, milestone delivery
 - The Orchestrator confirms the version increment is appropriate
 
-**Important:** The Learner's output (learnings files, docs, CHANGELOG) MUST be committed and included in the final push. The orchestrating agent is responsible for ensuring learnings, qa-log, and docs files are pushed to remote — they are project artifacts, not throwaway notes.
+**Important:** The Learner's output (learnings files, docs, CHANGELOG) MUST be committed and included in the final push. The orchestrating agent is responsible for ensuring learnings, reviewer-log, and docs files are pushed to remote — they are project artifacts, not throwaway notes.

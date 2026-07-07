@@ -37,7 +37,7 @@
     - Planner → `.project/spec.md`, `.project/planner-tasks.md`
     - Orchestrator → `.project/planning-sessions/` (Q&A logs from planning conversations)
     - Senior Coder → `.project/taskboard/`, `.project/architecture-log/`
-    - Reviewer → `.project/qa-log/`
+    - Reviewer → `.project/reviewer-log/`
     - Learner → `.project/learnings/`, `docs/technical/`, `docs/operator/`, `CHANGELOG.md`
     - Senior Coder + Coder → `.agent/skills/` (new skills from repetitive patterns)
 - Ensures all artifacts are committed and pushed (nothing left local-only)
@@ -60,10 +60,10 @@ The Orchestrator MUST verify the following after EVERY agent invocation. If an a
 - If skills missing → prompt: "Document the patterns you used as skills for future iterations."
 
 **After Reviewer runs:**
-- [ ] Did it write/update `.project/qa-log/` with findings, problems, and solutions?
+- [ ] Did it write/update `.project/reviewer-log/` with findings, problems, and solutions?
 - [ ] Did it document WHO introduced each issue (accountability)?
 - [ ] Did it visually verify the UI loads (if applicable)?
-- If qa-log missing → send Reviewer back: "You did not write your findings to qa-log. Document everything."
+- If reviewer-log missing → send Reviewer back: "You did not write your findings to reviewer-log. Document everything."
 
 **After Learner runs:**
 - [ ] Did it write to `.project/learnings/`?
@@ -98,7 +98,7 @@ The Orchestrator MUST verify that all files and folders created by agents are in
 │   ├── planning-sessions/     ← Planner/Senior Coder Q&A logs ONLY here
 │   ├── taskboard/             ← Story breakdowns ONLY here
 │   ├── architecture-log/      ← Architecture logs ONLY here
-│   ├── qa-log/                ← QA logs ONLY here
+│   ├── reviewer-log/                ← QA logs ONLY here
 │   └── learnings/             ← Learnings ONLY here
 ├── docs/                      ← Public documentation
 │   ├── technical/             ← Technical docs ONLY here
