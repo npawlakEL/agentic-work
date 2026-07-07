@@ -1,14 +1,27 @@
-# Documentation
+# Client Documentation
 
-This folder contains project documentation produced by the **Learner Agent** after each development cycle.
+This folder contains project documentation produced collaboratively after each development cycle.
 
 ## Structure
 
 ```
-docs/
+.client-docs/
 ├── technical/    ← For Coders and Senior Coders
 └── operator/     ← For human operators using the system
 ```
+
+## Collaboration Model
+
+Documentation is NOT a solo effort. Different agents contribute based on doc type:
+
+| Doc Type | Primary Author | Collaborators |
+|----------|---------------|---------------|
+| **Technical** | Learner | Senior Coder (architecture accuracy, patterns) |
+| **Operator** | Learner | Planner (user workflows, UX context) |
+
+- **Senior Coder** reviews technical docs for architectural correctness and adds implementation details the Learner may miss
+- **Planner** reviews operator docs for user-facing accuracy — ensuring instructions match how the user actually interacts with the system
+- **Learner** drives the writing and owns the final output
 
 ## Technical Docs (`technical/`)
 
@@ -45,7 +58,9 @@ Example: `002-import-sorter-graphic.md`
 ## Rules
 
 1. The Learner writes BOTH docs after every cycle — no exceptions
-2. Technical docs focus on "how it works internally"
-3. Operator docs focus on "how to use it as a human"
-4. Never mix audiences — keep them separate
-5. Docs are cumulative — new cycles add new files, old files remain
+2. Senior Coder reviews technical docs before they're finalized
+3. Planner reviews operator docs before they're finalized
+4. Technical docs focus on "how it works internally"
+5. Operator docs focus on "how to use it as a human"
+6. Never mix audiences — keep them separate
+7. Docs are cumulative — new cycles add new files, old files remain
