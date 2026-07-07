@@ -88,7 +88,7 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 ### Gate 3: Reviewer → Learner
 - **Input:** Completed, reviewed code
 - **Output:** Learner documents what was learned — patterns, pitfalls, guardrails, reusable skills. Produces TWO docs: technical (for coders) and operator (for humans). Updates `.project/architecture-log/current-architecture.md` if architecture changed. **Updates `CHANGELOG.md` with version bump.**
-- **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `docs/technical/`. Operator doc in `docs/operator/`. Architecture updated if applicable. CHANGELOG updated.
+- **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `.client-.client-docs/technical/`. Operator doc in `.client-.client-docs/operator/`. Architecture updated if applicable. CHANGELOG updated.
 
 ## Hot-Path (Small Fixes / Bug Patches)
 

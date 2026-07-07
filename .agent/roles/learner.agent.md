@@ -22,7 +22,7 @@
 
 **Documentation Output — TWO separate documents per cycle:**
 
-### 1. Technical Doc (`docs/technical/`)
+### 1. Technical Doc (`.client-.client-docs/technical/`)
 **Audience:** Coders and Senior Coders
 - What was built (architecture-level)
 - New patterns introduced and how to use them
@@ -32,7 +32,7 @@
 - Testing patterns used
 - Known limitations or tech debt introduced
 
-### 2. Operator Doc (`docs/operator/`)
+### 2. Operator Doc (`.client-.client-docs/operator/`)
 **Audience:** Human operators using the system
 - What's new (plain language)
 - UI interactions: how to use new buttons, screens, features
