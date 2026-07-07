@@ -35,6 +35,7 @@
 ### Document & Artifact Assurance
 - Ensures all required documents are written by the responsible agent:
     - Planner → `.project/spec.md`, `.project/planner-tasks.md`
+    - Orchestrator → `.project/planning-sessions/` (Q&A logs from planning conversations)
     - Senior Coder → `.project/taskboard/`, `.project/architecture-log/`
     - Reviewer → `.project/qa-log/`
     - Learner → `.project/learnings/`, `docs/technical/`, `docs/operator/`, `CHANGELOG.md`
@@ -94,6 +95,7 @@ The Orchestrator MUST verify that all files and folders created by agents are in
 ├── .project/                  ← Project tracking (NEVER duplicated elsewhere)
 │   ├── spec.md
 │   ├── planner-tasks.md
+│   ├── planning-sessions/     ← Planner/Senior Coder Q&A logs ONLY here
 │   ├── taskboard/             ← Story breakdowns ONLY here
 │   ├── architecture-log/      ← Architecture logs ONLY here
 │   ├── qa-log/                ← QA logs ONLY here
