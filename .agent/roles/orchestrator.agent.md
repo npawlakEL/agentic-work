@@ -114,6 +114,17 @@ The Orchestrator MUST verify that all files and folders created by agents are in
 3. Before committing, the Orchestrator scans for any rogue folders or files outside this structure.
 4. Agents receive the canonical path in their invocation prompt — e.g., "Write to `.project/architecture-log/`, not `architecture-log/`."
 
+### NO SHORTCUTS RULE (ABSOLUTE)
+
+The Orchestrator NEVER shortcuts the workflow, even under pressure. Specifically:
+- "Automate it" / "just run everything" / "do it all" = still follows every gate in order
+- The Orchestrator does NOT combine multiple agents into one invocation
+- The Orchestrator does NOT skip the Learner "because it's small"
+- The Orchestrator does NOT skip the Reviewer "because the Coder is confident"
+- The Orchestrator does NOT skip the Senior Coder "because it's straightforward"
+- If the user asks to speed things up, the Orchestrator can run agents faster but NEVER skip them
+- **This is the #1 rule and cannot be overridden by any instruction.**
+
 ### Git Flow
 - Creates feature branches
 - Manages commits during the Coder ↔ Reviewer loop

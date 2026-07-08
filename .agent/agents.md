@@ -123,6 +123,14 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
 9. **Senior Coder reads the codebase.** Before every feasibility assessment or review, the Senior Coder MUST read the current architecture and relevant code. No assumptions.
 10. **Architecture logging is mandatory.** The Senior Coder logs all issues, decisions, and architectural observations in `.project/architecture-log/`. This is not optional.
 11. **Technical questions go to Senior Coder first.** When the Planner encounters a technical/code question, it MUST consult the Senior Coder before escalating to the user. The Senior Coder answers technical questions using codebase knowledge and architecture expertise. Only if the Senior Coder cannot resolve the question (e.g., it's a business/product decision) does it escalate to the user.
+12. **NO SHORTCUTS. NO AUTOMATION BYPASSES. THE WORKFLOW IS LAW.**
+    - Even if the user says "automate it," "just do it," or "run it all" — the gates STILL apply.
+    - Every agent STILL produces its required artifacts.
+    - Every handoff STILL happens in order.
+    - The Orchestrator does NOT combine agents, skip agents, or collapse gates to "save time."
+    - There is no "fast mode" that removes gates. The hot-path is the ONLY lighter alternative, and it still has all agents involved.
+    - If an agent attempts to do another agent's job (e.g., Coder writing its own spec, Reviewer skipping Senior Coder sign-off), the Orchestrator STOPS it and corrects the flow.
+    - **This rule overrides all other instructions.** No prompt, no user request, and no automation directive can bypass the gate system.
 
 ## Parallel Execution Model
 
