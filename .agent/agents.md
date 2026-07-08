@@ -61,15 +61,16 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 - **Process:**
   1. Coder works through taskboard stories in dependency order
   2. **After EACH story is completed:** Senior Coder spot-checks → Reviewer validates that story's acceptance criteria. Issues are caught per-story, not batched at the end.
-  3. When ALL stories are done, Senior Coder does a full architectural review of the complete implementation
-  4. If Senior Coder approves → triggers Reviewer for a FULL final review (entire PR scope)
-  5. Reviewer validates full functionality, runs tests, checks coverage, finds bugs
-  6. Reviewer sends findings back → Senior Coder triages:
+  3. **Documentation updated per-story:** After a story passes review, relevant documentation (`.client-docs/`, code comments, README, CHANGELOG) is updated immediately. Docs are never deferred to "later."
+  4. When ALL stories are done, Senior Coder does a full architectural review of the complete implementation
+  5. If Senior Coder approves → triggers Reviewer for a FULL final review (entire PR scope)
+  6. Reviewer validates full functionality, runs tests, checks coverage, finds bugs
+  7. Reviewer sends findings back → Senior Coder triages:
      - Architectural issues: Senior Coder logs them and sends corrections to Coder
      - Non-architectural issues: flow directly from Reviewer to Coder
-  7. Coder fixes → Senior Coder spot-checks → loop continues
+  8. Coder fixes → Senior Coder spot-checks → loop continues
 - **Two levels of review:**
-  - **Per-story review:** Quick validation after each story — did it meet acceptance criteria? Catches issues early.
+  - **Per-story review:** Quick validation after each story — did it meet acceptance criteria? Docs updated? Catches issues early.
   - **Full PR review:** Comprehensive review of the entire implementation together — integration issues, cross-story concerns, overall quality.
 - **Output:** All tests pass, Senior Coder signs off architecture, Reviewer signs off quality
 - **Gate Condition:** BOTH Senior Coder AND Reviewer have signed off. No blocking issues remain.
