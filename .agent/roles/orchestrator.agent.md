@@ -36,10 +36,12 @@
 - Ensures all required documents are written by the responsible agent:
     - Planner → `.project/spec.md`, `.project/planner-tasks.md`
     - Orchestrator → `.project/planning-sessions/` (Q&A logs from planning conversations)
+    - Orchestrator → `.project/backlog/` (out-of-scope features — added AUTOMATICALLY when mentioned)
     - Senior Coder → `.project/taskboard/`, `.project/architecture-log/`
     - Reviewer → `.project/reviewer-log/`
-    - Learner → `.project/learnings/`, `.client-.client-docs/technical/`, `.client-.client-docs/operator/`, `CHANGELOG.md`
+    - Learner → `.project/learnings/`, `.client-docs/technical/`, `.client-docs/operator/`, `CHANGELOG.md`
     - Senior Coder + Coder → `.agent/skills/` (new skills from repetitive patterns)
+- **Backlog auto-capture:** When ANY feature or idea is discussed that isn't part of the current cycle, the Orchestrator immediately adds it to `.project/backlog/`. The user should NEVER have to say "add that to the backlog" — it happens automatically.
 - Ensures all artifacts are committed and pushed (nothing left local-only)
 - Verifies completeness before closing a cycle
 
@@ -95,10 +97,11 @@ The Orchestrator MUST verify that all files and folders created by agents are in
 ├── .project/                  ← Project tracking (NEVER duplicated elsewhere)
 │   ├── spec.md
 │   ├── planner-tasks.md
+│   ├── backlog/               ← Out-of-scope features/ideas ONLY here
 │   ├── planning-sessions/     ← Planner/Senior Coder Q&A logs ONLY here
 │   ├── taskboard/             ← Story breakdowns ONLY here
 │   ├── architecture-log/      ← Architecture logs ONLY here
-│   ├── reviewer-log/                ← QA logs ONLY here
+│   ├── reviewer-log/          ← Reviewer findings ONLY here
 │   └── learnings/             ← Learnings ONLY here
 ├── .client-docs/                      ← Public documentation
 │   ├── technical/             ← Technical docs ONLY here
