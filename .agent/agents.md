@@ -59,14 +59,18 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 ### Gate 2: Coder ↔ Senior Coder ↔ Reviewer (TDD Iteration Loop)
 - **Input:** Coder produces working code using strict TDD (Red → Green → Refactor)
 - **Process:**
-  1. Senior Coder performs spot-checks during implementation (course-corrects if needed)
-  2. When Coder reports "done," Senior Coder does a full architectural review
-  3. If Senior Coder approves → triggers Reviewer
-  4. Reviewer validates functionality, runs tests, checks coverage, finds bugs
-  5. Reviewer sends findings back → Senior Coder triages:
+  1. Coder works through taskboard stories in dependency order
+  2. **After EACH story is completed:** Senior Coder spot-checks → Reviewer validates that story's acceptance criteria. Issues are caught per-story, not batched at the end.
+  3. When ALL stories are done, Senior Coder does a full architectural review of the complete implementation
+  4. If Senior Coder approves → triggers Reviewer for a FULL final review (entire PR scope)
+  5. Reviewer validates full functionality, runs tests, checks coverage, finds bugs
+  6. Reviewer sends findings back → Senior Coder triages:
      - Architectural issues: Senior Coder logs them and sends corrections to Coder
      - Non-architectural issues: flow directly from Reviewer to Coder
-  6. Coder fixes → Senior Coder spot-checks → loop continues
+  7. Coder fixes → Senior Coder spot-checks → loop continues
+- **Two levels of review:**
+  - **Per-story review:** Quick validation after each story — did it meet acceptance criteria? Catches issues early.
+  - **Full PR review:** Comprehensive review of the entire implementation together — integration issues, cross-story concerns, overall quality.
 - **Output:** All tests pass, Senior Coder signs off architecture, Reviewer signs off quality
 - **Gate Condition:** BOTH Senior Coder AND Reviewer have signed off. No blocking issues remain.
 - **TDD Requirement:** No production code exists without a corresponding test. Tests are written FIRST.
