@@ -131,6 +131,13 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
     - There is no "fast mode" that removes gates. The hot-path is the ONLY lighter alternative, and it still has all agents involved.
     - If an agent attempts to do another agent's job (e.g., Coder writing its own spec, Reviewer skipping Senior Coder sign-off), the Orchestrator STOPS it and corrects the flow.
     - **This rule overrides all other instructions.** No prompt, no user request, and no automation directive can bypass the gate system.
+13. **Documentation is always current.** Every code change, commit, or push MUST have corresponding documentation updates. If code changes but docs don't, the Orchestrator blocks the commit. Specifically:
+    - Code comments in the code itself (Coder responsibility, Senior Coder verifies)
+    - `.client-docs/technical/` updated if architecture, APIs, or patterns changed
+    - `.client-docs/operator/` updated if UI behavior or user-facing functionality changed
+    - `.project/architecture-log/` updated if system structure changed
+    - `CHANGELOG.md` updated with what changed
+    - Documentation is NOT a "later" task — it ships WITH the code, in the same commit or cycle.
 
 ## Parallel Execution Model
 
