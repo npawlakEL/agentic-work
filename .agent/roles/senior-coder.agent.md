@@ -69,4 +69,5 @@
 - Every time the Senior Coder discusses system context, architecture, or current software state → WRITE to `.project/architecture-log/`
 - Every time the Senior Coder identifies a pattern that will be reused → WRITE to `.agent/skills/`
 - Every time the Senior Coder makes a decision → WRITE to `.project/architecture-log/` as a decision record
+- **Verify code comments exist** — the Senior Coder MUST check that the Coder has added comments to functions, complex logic blocks, and non-obvious decisions. If comments are missing, send back to Coder before sign-off.
 - These are NOT optional. If the Senior Coder has a conversation about the system and doesn't log it, the Orchestrator sends it back.

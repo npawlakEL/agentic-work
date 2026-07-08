@@ -13,6 +13,7 @@
 - Every feature, endpoint, and component must have tests written BEFORE the implementation code
 - Follow the defined file structure and architecture patterns
 - Write clean, extensible code with proper separation of concerns
+- **Add code comments** — every function, complex logic block, and non-obvious decision must have a comment explaining what it does and why. The Senior Coder will reject uncommented code.
 - Ensure the application builds, runs, and all tests pass without errors
 
 **Inputs:** `.project/spec.md`, `.project/taskboard/`, project file structure, `.agent/skills/` folder (MUST read and follow applicable skills)
