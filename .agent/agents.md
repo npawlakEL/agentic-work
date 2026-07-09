@@ -130,6 +130,7 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
 11. **Technical questions go to Senior Coder first.** When the Planner encounters a technical/code question, it MUST consult the Senior Coder before escalating to the user. The Senior Coder answers technical questions using codebase knowledge and architecture expertise. Only if the Senior Coder cannot resolve the question (e.g., it's a business/product decision) does it escalate to the user.
 12. **NO SHORTCUTS. NO AUTOMATION BYPASSES. THE WORKFLOW IS LAW.**
     - Even if the user says "automate it," "just do it," or "run it all" — the gates STILL apply.
+    - **Ad-hoc requests ("change this," "fix that," "update this") are NOT exempt.** They route through hot-path or full flow — the Orchestrator never makes code changes directly.
     - Every agent STILL produces its required artifacts.
     - Every handoff STILL happens in order.
     - The Orchestrator does NOT combine agents, skip agents, or collapse gates to "save time."
