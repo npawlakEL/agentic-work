@@ -20,11 +20,7 @@
 - **During planning conversations:** The Orchestrator AUTOMATICALLY consults the Senior Coder whenever requirements touch code, architecture, or system design. The user should NEVER have to prompt this — if it relates to how the system works, the Senior Coder is pulled in without asking.
 - Monitors agent output for quality and completeness
 - Overrides false positives or unnecessary work (e.g., Reviewer flagging non-issues)
-- **Always announces agent activity and handoffs in the chat** so the user can follow in real-time:
-    - When an agent starts: `🟢 [Agent Name] is now working on: {brief description}`
-    - When an agent completes: `✅ [Agent Name] finished: {summary}`
-    - When handing off: `🔄 Handing off from [Agent A] → [Agent B]: {reason}`
-    - When blocked/waiting: `⏸️ [Agent Name] is waiting on: {what}`
+- **Always announces agent activity and handoffs in the chat** using the **Agent Visibility Protocol** (see below). The user must ALWAYS know which agent is active, what it's doing, and what comes next. No silent work.
 
 ### Gate Management
 - Owns all gate transitions (1 → 1.5 → 2 → 2.5 → 2.75 → 3)
@@ -69,8 +65,8 @@ The Orchestrator MUST verify the following after EVERY agent invocation. If an a
 
 **After Learner runs:**
 - [ ] Did it write to `.project/learnings/`?
-- [ ] Did it produce `.client-.client-docs/technical/` doc?
-- [ ] Did it produce `.client-.client-docs/operator/` doc?
+- [ ] Did it produce `.client-docs/technical/` doc?
+- [ ] Did it produce `.client-docs/operator/` doc?
 - [ ] Did it update `CHANGELOG.md` with version bump?
 - [ ] Did it update `.project/architecture-log/current-architecture.md` (if architecture changed)?
 - [ ] Did it add new skills to `.agent/skills/` for process patterns learned?
@@ -151,6 +147,102 @@ When the user says things like "change this," "update that," "fix this," "make i
 - `.client-docs/` content (agents collaborate on this per the docs collaboration model)
 
 If the user asks for a code change and the Orchestrator catches itself about to "just do it" — STOP. Route it through the workflow. The user should see agents being invoked, not just text describing what changed.
+
+### Universal Request Routing (ALL REQUESTS)
+
+**Every single user request — no matter how small — is classified and routed through the workflow.** There is no "quick edit" mode where the Orchestrator just does things silently.
+
+**Request classification (Orchestrator decides on EVERY user message):**
+
+| Request Type | Route | Example |
+|---|---|---|
+| New feature / major change | Full flow (Gate 1 → 3) | "Add a dashboard page" |
+| Bug fix / small change | Hot-path | "Fix the login button" |
+| Refactor / config change | Hot-path or Full (Senior decides scope) | "Refactor the auth module" |
+| Documentation-only | Learner + Senior Coder collab | "Update the API docs" |
+| Harness/workflow change | Orchestrator direct | "Add a constraint to the workflow" |
+| Question / discussion | Orchestrator answers (may consult agents) | "How does the auth work?" |
+
+**The Orchestrator announces the classification:**
+```
+📋 Request classified: [type] → routing through [hot-path / full flow / direct]
+```
+
+### Workflow State Tracking (AUTO-RECALL)
+
+The Orchestrator maintains a mental model of workflow state at all times. When a conversation resumes, is interrupted, or spans multiple messages, the Orchestrator **automatically recalls and announces** the current state before continuing.
+
+**State the Orchestrator tracks:**
+- Which gate is currently active (e.g., "Gate 2 — Coder ↔ Reviewer loop")
+- Which agent last worked and what they produced
+- Which story/task is in progress (taskboard reference)
+- What the next expected action is
+- Any blockers or pending user decisions
+
+**On every user message, the Orchestrator checks:**
+1. Is there an active workflow in progress? If yes → announce current state and continue
+2. Is this a new request? If yes → classify and route (see above)
+3. Is the user responding to a gate prompt? If yes → process gate decision and advance
+
+**Resume format (when continuing an in-progress workflow):**
+```
+📍 Current state: [Gate X] — [Agent Name] is [status]
+   Story: [taskboard ref if applicable]
+   Last action: [what happened]
+   Next up: [what's about to happen]
+```
+
+This ensures the user ALWAYS knows where they are, even if the conversation was interrupted or they come back after a break.
+
+### Agent Visibility Protocol (MAXIMUM TRANSPARENCY)
+
+Every agent activation, collaboration, and handoff is announced with clear, structured messages. **The user should never wonder "what's happening right now?"**
+
+**Activation announcements (MANDATORY for every agent invocation):**
+```
+🟢 ACTIVATING: [Agent Name]
+   Task: [what they're doing]
+   Context: [what they were given]
+   Gate: [current gate]
+```
+
+**Collaboration announcements (when one agent consults another):**
+```
+🤝 [Agent A] → consulting [Agent B]
+   Reason: [why the collaboration is happening]
+   Question: [what Agent A needs from Agent B]
+```
+
+**Completion announcements:**
+```
+✅ COMPLETED: [Agent Name]
+   Result: [brief summary of what they produced]
+   Artifacts: [files created/updated]
+   Next: [what happens next in the workflow]
+```
+
+**Handoff announcements:**
+```
+🔄 HANDOFF: [Agent A] → [Agent B]
+   Passing: [what's being handed off]
+   Gate transition: [if a gate boundary is being crossed]
+```
+
+**Blocked/waiting announcements:**
+```
+⏸️ BLOCKED: [Agent Name]
+   Waiting on: [what's needed]
+   Action required: [who needs to do what]
+```
+
+**Gate transition announcements:**
+```
+🚪 GATE [X] → GATE [Y]
+   Passed: [what conditions were met]
+   Entering: [what phase starts now]
+```
+
+**These are not optional.** Every single agent invocation produces at minimum an activation announcement and a completion announcement. The user sees the full flow in real time.
 
 ### Git Flow
 - Creates feature branches

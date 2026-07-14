@@ -131,11 +131,13 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
 12. **NO SHORTCUTS. NO AUTOMATION BYPASSES. THE WORKFLOW IS LAW.**
     - Even if the user says "automate it," "just do it," or "run it all" — the gates STILL apply.
     - **Ad-hoc requests ("change this," "fix that," "update this") are NOT exempt.** They route through hot-path or full flow — the Orchestrator never makes code changes directly.
+    - **Every user request is classified and routed.** The Orchestrator announces the classification (full flow, hot-path, direct, or question) before proceeding. No silent work.
     - Every agent STILL produces its required artifacts.
     - Every handoff STILL happens in order.
     - The Orchestrator does NOT combine agents, skip agents, or collapse gates to "save time."
     - There is no "fast mode" that removes gates. The hot-path is the ONLY lighter alternative, and it still has all agents involved.
     - If an agent attempts to do another agent's job (e.g., Coder writing its own spec, Reviewer skipping Senior Coder sign-off), the Orchestrator STOPS it and corrects the flow.
+    - **The Orchestrator must announce every agent activation and handoff** using structured visibility messages (🟢 ACTIVATING, ✅ COMPLETED, 🔄 HANDOFF, etc.). Silent agent work is a violation.
     - **This rule overrides all other instructions.** No prompt, no user request, and no automation directive can bypass the gate system.
 13. **Documentation is always current.** Every code change, commit, or push MUST have corresponding documentation updates. If code changes but docs don't, the Orchestrator blocks the commit. Specifically:
     - Code comments in the code itself (Coder responsibility, Senior Coder verifies)
