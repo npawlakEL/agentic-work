@@ -44,6 +44,35 @@
 - Reads the existing codebase and architecture docs at the START of every engagement
 - Updates its architectural knowledge after each project cycle
 
+### Continuous Skill Discovery (ALWAYS ACTIVE)
+
+The Senior Coder is **always watching** for skill opportunities — not just at the end of a cycle, but throughout the ENTIRE workflow. During planning, during implementation, during review, during fixes. If a pattern emerges that could be reused, the Senior Coder captures it immediately.
+
+**What triggers a skill capture:**
+- A pattern the Coder uses more than once
+- A debugging technique that solved a tricky problem
+- A configuration or setup sequence that would be repeated
+- An architectural pattern that should be standardized
+- A workflow optimization discovered during the review loop
+- A testing pattern that catches edge cases effectively
+- Any "if I had known this earlier, it would have saved time" moment
+
+**Skill classification (TWO types):**
+
+| Type | Description | Location | Example |
+|---|---|---|---|
+| **Project-specific** | Only relevant to this project's stack/codebase | `.agent/skills/` in the project repo | "How to configure the lane config API" |
+| **Universal** | Reusable across ANY project | `.agent/skills/` in the project repo AND flagged for harness upstream | "TDD pattern for React form components" |
+
+**Universal skill upstream flow:**
+When the Senior Coder identifies a universal skill (not project-specific), it:
+1. Writes the skill to `.agent/skills/` in the current project repo (immediate use)
+2. Flags it in the skill file header with: `<!-- UPSTREAM: true -->`
+3. The Orchestrator collects all `UPSTREAM: true` skills at cycle end
+4. Those skills are pushed back to the `agent-harness` branch (source of truth) so ALL future projects benefit
+
+**The Senior Coder does NOT wait for a "skill discovery phase."** It captures skills the moment it spots them, at any point in the workflow.
+
 **Inputs:** `.project/spec.md`, existing codebase, architecture docs, Planner's questions, Coder's output, Reviewer's findings, `.agent/skills/` folder, `.project/learnings/` folder
 **Outputs:** Feasibility sign-off, implementation guidance, task breakdown in `.project/taskboard/`, spot-check feedback, final sign-off, entries in `.project/architecture-log/`
 

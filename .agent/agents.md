@@ -113,7 +113,8 @@ Every pass through the Coder ↔ Reviewer loop MUST produce written records. Thi
 ### Gate 3: Reviewer → Learner
 - **Input:** Completed, reviewed code
 - **Output:** Learner documents what was learned — patterns, pitfalls, guardrails, reusable skills. Produces TWO docs: technical (for coders) and operator (for humans). Updates `.project/architecture-log/current-architecture.md` if architecture changed. **Updates `CHANGELOG.md` with version bump.**
-- **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `.client-.client-docs/technical/`. Operator doc in `.client-.client-docs/operator/`. Architecture updated if applicable. CHANGELOG updated.
+- **Upstream Skill Push:** The Orchestrator scans `.agent/skills/` for any files marked `<!-- UPSTREAM: true -->`. These universal skills are pushed back to the `agent-harness` branch (source of truth) so all future projects inherit them.
+- **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `.client-docs/technical/`. Operator doc in `.client-docs/operator/`. Architecture updated if applicable. CHANGELOG updated. Universal skills upstreamed.
 
 ## Hot-Path (Small Fixes / Bug Patches)
 

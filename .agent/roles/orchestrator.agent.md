@@ -50,7 +50,9 @@ The Orchestrator MUST verify the following after EVERY agent invocation. If an a
 - [ ] Did it update `.project/architecture-log/current-architecture.md` if architecture was discussed?
 - [ ] Did it write `.project/taskboard/` stories (if at Gate 1.5)?
 - [ ] Did it add new entries to `.agent/skills/` if repetitive patterns were identified?
+- [ ] Did it classify new skills as project-specific vs. universal (`<!-- UPSTREAM: true -->`)?
 - If ANY are missing → send Senior Coder back: "You did not write to architecture-log. Document what was discussed."
+- If skills exist without classification → send back: "Classify your skills as project-specific or universal (add UPSTREAM header)."
 
 **After Coder runs:**
 - [ ] Did it add new skills to `.agent/skills/` for patterns it used repeatedly?
@@ -86,6 +88,17 @@ The Orchestrator MUST verify the following after EVERY agent invocation. If an a
 2. The Orchestrator checks EVERY TIME — not sometimes, not "when it remembers." Every. Time.
 3. If an agent fails to produce artifacts 2 cycles in a row, the Orchestrator adds an explicit reminder to the agent's invocation prompt.
 4. Skills are NOT optional. If an agent did something it will do again, it becomes a skill. The Orchestrator prompts: "What patterns did you use that should be saved as skills?"
+
+### Universal Skill Upstream (Post-Cycle)
+
+At the end of every development cycle (after Gate 3), the Orchestrator:
+1. Scans `.agent/skills/` for files containing `<!-- UPSTREAM: true -->`
+2. Collects those universal skills
+3. Pushes them to the `agent-harness` branch of the harness repo (source of truth)
+4. This ensures every future project that clones the harness gets the latest universal skills
+5. Project-specific skills (without the UPSTREAM flag) stay in the project repo only
+
+**The `agent-harness` branch is the canonical source.** Universal skills flow from projects back upstream to it.
 
 ### Folder Structure Validation
 
