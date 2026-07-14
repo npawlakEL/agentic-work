@@ -60,8 +60,17 @@ The Orchestrator MUST verify the following after EVERY agent invocation. If an a
 **After Reviewer runs:**
 - [ ] Did it write/update `.project/reviewer-log/` with findings, problems, and solutions?
 - [ ] Did it document WHO introduced each issue (accountability)?
+- [ ] Are BOTH problems AND resolutions recorded? (No orphaned problem entries without resolution status)
+- [ ] Did it flag any fixes that changed user-facing behavior for `.client-docs/operator/` update?
+- [ ] Did it flag any fixes that changed APIs/architecture for `.client-docs/technical/` update?
 - [ ] Did it visually verify the UI loads (if applicable)?
 - If reviewer-log missing → send Reviewer back: "You did not write your findings to reviewer-log. Document everything."
+- If resolutions not recorded → send Reviewer back: "Your reviewer-log has problems without resolution status. Update every entry."
+
+**After ANY review loop iteration (Coder fix → Reviewer re-check):**
+- [ ] Were `.client-docs/` updated if the fix changed any user-facing functionality?
+- [ ] Were `.client-docs/` updated if the fix changed any API, pattern, or architecture?
+- If docs weren't updated and behavior changed → block advancement: "The fix changed [X behavior]. Update .client-docs/ before continuing."
 
 **After Learner runs:**
 - [ ] Did it write to `.project/learnings/`?

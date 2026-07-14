@@ -33,8 +33,14 @@ This ensures full transparency and gives the Learner agent concrete data to extr
 **Iteration Loop:**
 1. Reviewer runs tests and inspects code
 2. **If the project has a UI:** Reviewer MUST open the URL in a browser, verify the page loads, and confirm data is displayed. A passing test suite is not sufficient — visual confirmation is required.
-3. If issues found → writes them to `.project/reviewer-log/`, sends list back to Coder with reproduction steps
-4. Coder writes failing tests for each issue (TDD), then fixes
-5. Coder hands back to Reviewer
-6. Reviewer updates reviewer-log with verification status
-7. Repeat until Reviewer signs off
+3. If issues found → writes them to `.project/reviewer-log/` with severity, description, and who introduced the issue
+4. Sends list back to Coder with reproduction steps
+5. Coder writes failing tests for each issue (TDD), then fixes
+6. Coder hands back to Reviewer
+7. Reviewer verifies fixes and **updates the same reviewer-log entry** with:
+   - ✅ Fix verified — how it was resolved
+   - ❌ Fix incomplete — what's still broken
+8. **If any fix changed user-facing behavior:** Reviewer flags it for `.client-docs/operator/` update
+9. **If any fix changed APIs/architecture:** Reviewer flags it for `.client-docs/technical/` update
+10. Repeat until Reviewer signs off
+11. **Final step before sign-off:** Reviewer confirms ALL reviewer-log entries have both the problem AND the resolution recorded. No orphaned entries.

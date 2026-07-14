@@ -78,6 +78,26 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 - **NO PUSHING DURING THIS LOOP.** All work is local commits only.
 - **Logging:** Senior Coder documents all issues in `.project/architecture-log/` throughout this phase.
 
+#### Review Loop Logging (MANDATORY)
+
+Every pass through the Coder ↔ Reviewer loop MUST produce written records. This is not optional.
+
+**Reviewer logs (`.project/reviewer-log/`):**
+- Every issue found is documented with: severity, description, which code, who introduced it
+- When the Coder fixes an issue, the Reviewer updates the log entry with: fix verified, how it was fixed
+- Problems that were found AND their resolutions are both recorded — not just the problems
+
+**Senior Coder logs (`.project/architecture-log/`):**
+- Every architectural issue triaged is logged with: the issue, the decision made, the correction sent to Coder
+- If the Senior Coder approves a fix approach, that approval is logged
+
+**Client docs (`.client-docs/`) — updated per fix cycle:**
+- If any fix changes user-facing behavior → `.client-docs/operator/` is updated
+- If any fix changes APIs, patterns, or architecture → `.client-docs/technical/` is updated
+- This happens DURING the loop, not after it. If the Reviewer catches a bug and the Coder fixes it and that fix changes how a feature works, the docs update happens as part of that same fix cycle.
+
+**The Orchestrator enforces this:** If a review loop completes and the Reviewer hasn't written to `reviewer-log/`, or the Senior Coder hasn't written to `architecture-log/`, or affected client docs haven't been updated — the Orchestrator sends the responsible agent back to do it before the workflow advances.
+
 ### Gate 2.5: User Approval (Push Gate)
 - **Input:** Reviewer has signed off. All tests pass. Code is complete.
 - **Gate Condition:** **The user must explicitly approve the push.** The system checks in with the user, presents a summary of what was done, and waits for confirmation before pushing to remote.
@@ -139,11 +159,15 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
     - If an agent attempts to do another agent's job (e.g., Coder writing its own spec, Reviewer skipping Senior Coder sign-off), the Orchestrator STOPS it and corrects the flow.
     - **The Orchestrator must announce every agent activation and handoff** using structured visibility messages (🟢 ACTIVATING, ✅ COMPLETED, 🔄 HANDOFF, etc.). Silent agent work is a violation.
     - **This rule overrides all other instructions.** No prompt, no user request, and no automation directive can bypass the gate system.
-13. **Documentation is always current.** Every code change, commit, or push MUST have corresponding documentation updates. If code changes but docs don't, the Orchestrator blocks the commit. Specifically:
+13. **Documentation is always current — NO EXCEPTIONS.**
+    - Every code change, commit, or push MUST have corresponding documentation updates. If code changes but docs don't, the Orchestrator blocks the commit.
+    - **This includes fixes during the review loop.** If a bug fix changes how a feature works, `.client-docs/` is updated in that same cycle — not "after the loop."
+    - **This includes hot-path changes.** Even a one-line fix gets doc updates if it changes behavior.
     - Code comments in the code itself (Coder responsibility, Senior Coder verifies)
     - `.client-docs/technical/` updated if architecture, APIs, or patterns changed
     - `.client-docs/operator/` updated if UI behavior or user-facing functionality changed
     - `.project/architecture-log/` updated if system structure changed
+    - `.project/reviewer-log/` updated with problems found AND resolutions applied
     - `CHANGELOG.md` updated with what changed
     - Documentation is NOT a "later" task — it ships WITH the code, in the same commit or cycle.
 
