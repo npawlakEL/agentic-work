@@ -29,6 +29,7 @@ The Orchestrator collects all `UPSTREAM: true` skills at cycle end and pushes th
 
 ## Who Creates Skills
 - **Orchestrator** — the ONLY agent that writes to `.agent/skills/`. It receives candidates from all agents, classifies them, and writes the final skill file.
+- **Planner** — surfaces candidates about questioning techniques, delegation patterns, spec structuring, and communication approaches that worked
 - **Senior Coder** — surfaces candidates continuously (architecture patterns, debugging techniques, code patterns)
 - **Coder** — surfaces candidates during implementation (repeated patterns, setup sequences, testing strategies)
 - **Reviewer** — surfaces candidates during review (bug pattern recognition, QA techniques, testing approaches)

@@ -169,3 +169,16 @@ And when the Senior Coder responds:
 This keeps the user informed without requiring them to trigger or approve the consultation. The user sees it happening, knows the Senior Coder is involved, but doesn't have to act on it.
 
 **The user sees:** A well-informed spec with technical approach already figured out — not raw technical questions they shouldn't have to answer. Plus visible confirmation that the Senior Coder was consulted.
+
+**MANDATORY OUTPUTS (non-negotiable):**
+- `.project/spec.md` — always
+- `.project/planner-tasks.md` — always updated
+- **Surface skill/learning candidates to Orchestrator** — the Planner grows and evolves over time. After every planning session, the Planner surfaces candidates for:
+  - Questions that worked well to extract requirements (e.g., "asking about error states early saved rework later")
+  - Delegation patterns that were effective (e.g., "sending data model questions to Senior Coder immediately")
+  - Spec structuring approaches that led to clearer implementation (e.g., "breaking UI specs into component-level stories")
+  - Communication patterns that helped the user articulate their vision
+  - Probing techniques that uncovered hidden requirements
+  - Anti-patterns: questions or approaches that confused the user or wasted time
+- The Planner does NOT write skills directly. It surfaces candidates to the Orchestrator for classification.
+- **This is how the Planner gets better over time.** Each project teaches it how to plan more effectively for the next one.
