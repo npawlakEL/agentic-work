@@ -154,4 +154,18 @@ Senior Coder answers with technical recommendation →
 Planner incorporates into spec → presents complete picture to user
 ```
 
-**The user sees:** A well-informed spec with technical approach already figured out — not raw technical questions they shouldn't have to answer.
+**Visibility (MANDATORY):** Every time the Planner consults the Senior Coder, the Orchestrator announces it to the user:
+```
+🤝 Planner → consulting Senior Coder
+   Question: [the technical question being asked]
+   Context: [why this came up]
+```
+And when the Senior Coder responds:
+```
+✅ Senior Coder answered:
+   Recommendation: [brief summary of the technical answer]
+```
+
+This keeps the user informed without requiring them to trigger or approve the consultation. The user sees it happening, knows the Senior Coder is involved, but doesn't have to act on it.
+
+**The user sees:** A well-informed spec with technical approach already figured out — not raw technical questions they shouldn't have to answer. Plus visible confirmation that the Senior Coder was consulted.
