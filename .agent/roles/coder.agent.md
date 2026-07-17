@@ -21,6 +21,20 @@
 
 **Completion Criteria:** Application builds, all tests pass, and coverage meets spec requirements. Hands off to Senior Coder for review.
 
+**UI Verification (MANDATORY when objective involves UI):**
+
+If the task involves ANY UI component (page, form, button, modal, layout, styling), the Coder MUST:
+1. **Start the dev server** and open the rendered UI in a browser
+2. **Visually verify** every component renders correctly (no broken layouts, no missing elements, no overlapping content)
+3. **Exercise ALL interactive elements** — click every button, fill every form, trigger every modal, expand every dropdown, navigate every link
+4. **Verify responsive behavior** if applicable (resize, mobile breakpoints)
+5. **Check error states** — what happens when a form is submitted empty? When a network call fails?
+6. **Confirm data displays correctly** — not just that it loads, but that it shows the right data in the right place
+
+**Code-only review is NOT sufficient for UI work.** If the Coder hasn't opened the browser, the story is not complete. The Senior Coder will ask: "Did you visually verify this in the browser?" — the Coder MUST answer with specifics of what was tested.
+
+If the Coder discovers visual bugs during this step, they fix them BEFORE handing off to Senior Coder. Do not pass broken UI downstream.
+
 **TDD Constraints:**
 - No production code is written without a corresponding failing test first
 - Test files live alongside the code they test (e.g., `Component.test.jsx`, `route.test.js`)

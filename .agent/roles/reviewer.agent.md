@@ -32,7 +32,15 @@ This ensures full transparency and gives the Learner agent concrete data to extr
 
 **Iteration Loop:**
 1. Reviewer runs tests and inspects code
-2. **If the project has a UI:** Reviewer MUST open the URL in a browser, verify the page loads, and confirm data is displayed. A passing test suite is not sufficient — visual confirmation is required.
+2. **If the project has a UI (MANDATORY — NOT OPTIONAL):**
+   - Open the rendered UI in a browser (dev server must be running)
+   - **Exercise ALL functionality** — click every button, submit every form, trigger every interactive element
+   - Verify layouts render correctly (no broken formatting, no overlapping elements, no missing content)
+   - Verify data displays in the correct locations with correct formatting
+   - Test navigation flows end-to-end
+   - Test error states (invalid inputs, empty states, failed network calls)
+   - **A passing test suite is NOT sufficient.** Visual bugs (broken buttons, misaligned elements, non-functional interactions) are only caught by actually using the UI.
+   - If the Reviewer did not open the browser, the review is INCOMPLETE and the Orchestrator rejects it.
 3. If issues found → writes them to `.project/reviewer-log/` with severity, description, and who introduced the issue
 4. Sends list back to Coder with reproduction steps
 5. Coder writes failing tests for each issue (TDD), then fixes

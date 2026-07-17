@@ -171,6 +171,13 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
     - `.project/reviewer-log/` updated with problems found AND resolutions applied
     - `CHANGELOG.md` updated with what changed
     - Documentation is NOT a "later" task — it ships WITH the code, in the same commit or cycle.
+14. **UI work requires rendered verification — NO CODE-ONLY REVIEWS.**
+    - If the objective involves ANY UI component (page, form, button, modal, layout, styling):
+    - The **Coder** MUST open the rendered UI in a browser, exercise all interactive elements, and fix visual bugs BEFORE handing off.
+    - The **Senior Coder** MUST confirm the Coder visually verified before signing off. If unverified, send back.
+    - The **Reviewer** MUST open the rendered UI, exercise ALL functionality (click buttons, submit forms, trigger modals, test error states), and report visual bugs alongside code bugs.
+    - A passing test suite is NOT sufficient for UI work. Tests cannot catch broken layouts, misaligned elements, non-functional buttons, or missing visual states.
+    - If any agent skips browser verification on UI work, the Orchestrator rejects their output and sends them back.
 
 ## Parallel Execution Model
 

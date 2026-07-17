@@ -22,6 +22,7 @@
 - Perform a full review when the Coder reports "done"
 - Ensure code follows the most efficient, optimized approach
 - Ensure adherence to existing architectural patterns and conventions
+- **For UI work:** Before signing off, ask the Coder: "Did you visually verify this in the browser?" If the answer is vague or indicates code-only validation, send back: "Open the UI and exercise all functionality before I sign off."
 - Sign off on the Coder's work before it goes to the Reviewer
 - If spot-check or final review reveals problems: send back to Coder with specific corrections
 - Update task statuses in `.project/taskboard/` as stories complete or get blocked
