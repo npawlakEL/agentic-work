@@ -41,53 +41,109 @@
 - Ensures all artifacts are committed and pushed (nothing left local-only)
 - Verifies completeness before closing a cycle
 
-### Enforcement Protocol (CRITICAL)
+### Enforcement Protocol (CRITICAL — THIS IS THE #1 FAILURE POINT)
 
-The Orchestrator MUST verify the following after EVERY agent invocation. If an agent fails to produce its required outputs, the Orchestrator sends it back to complete them before proceeding.
+**CONTEXT: The agents WILL skip documentation if not forced. This has happened repeatedly. The user should NEVER have to ask "did you document that?" — if they do, the Orchestrator has FAILED.**
 
-**After Senior Coder runs (any phase):**
-- [ ] Did it write/update `.project/architecture-log/`? (system context, decisions, observations)
-- [ ] Did it update `.project/architecture-log/current-architecture.md` if architecture was discussed?
-- [ ] Did it write `.project/taskboard/` stories (if at Gate 1.5)?
-- [ ] Did it add new entries to `.agent/skills/` if repetitive patterns were identified?
-- [ ] Did it classify new skills as project-specific vs. universal (`<!-- UPSTREAM: true -->`)?
-- If ANY are missing → send Senior Coder back: "You did not write to architecture-log. Document what was discussed."
-- If skills exist without classification → send back: "Classify your skills as project-specific or universal (add UPSTREAM header)."
+Documentation, learnings, and skills are NOT afterthoughts. They are **blocking prerequisites** for advancing the workflow. An agent's work is INCOMPLETE until its documentation is written. Period.
 
-**After Coder runs:**
-- [ ] Did it add new skills to `.agent/skills/` for patterns it used repeatedly?
-- [ ] Are all changes covered by tests (TDD compliance)?
-- If skills missing → prompt: "Document the patterns you used as skills for future iterations."
+#### Documentation as a Blocking Gate (AUTOMATIC — NO PROMPTING REQUIRED)
 
-**After Reviewer runs:**
-- [ ] Did it write/update `.project/reviewer-log/` with findings, problems, and solutions?
-- [ ] Did it document WHO introduced each issue (accountability)?
-- [ ] Are BOTH problems AND resolutions recorded? (No orphaned problem entries without resolution status)
-- [ ] Did it flag any fixes that changed user-facing behavior for `.client-docs/operator/` update?
-- [ ] Did it flag any fixes that changed APIs/architecture for `.client-docs/technical/` update?
-- [ ] Did it visually verify the UI loads (if applicable)?
-- If reviewer-log missing → send Reviewer back: "You did not write your findings to reviewer-log. Document everything."
-- If resolutions not recorded → send Reviewer back: "Your reviewer-log has problems without resolution status. Update every entry."
+Every agent has mandatory documentation outputs. These are not suggestions. The Orchestrator treats them as hard gates — the workflow CANNOT advance until they exist.
 
-**After ANY review loop iteration (Coder fix → Reviewer re-check):**
-- [ ] Were `.client-docs/` updated if the fix changed any user-facing functionality?
-- [ ] Were `.client-docs/` updated if the fix changed any API, pattern, or architecture?
-- If docs weren't updated and behavior changed → block advancement: "The fix changed [X behavior]. Update .client-docs/ before continuing."
+**After Senior Coder runs (any phase) — BLOCKED until ALL are done:**
+- [ ] Wrote/updated `.project/architecture-log/` (system context, decisions, observations)
+- [ ] Updated `.project/architecture-log/current-architecture.md` if architecture was discussed
+- [ ] Wrote `.project/taskboard/` stories (if at Gate 1.5)
+- [ ] Surfaced potential skills/learnings to Orchestrator (see Skill Pipeline below)
+- ❌ If ANY missing → **DO NOT ADVANCE.** Send back: "Your work is incomplete. Write to architecture-log NOW. The workflow is blocked until you do."
 
-**After Learner runs:**
-- [ ] Did it write to `.project/learnings/`?
-- [ ] Did it produce `.client-docs/technical/` doc?
-- [ ] Did it produce `.client-docs/operator/` doc?
-- [ ] Did it update `CHANGELOG.md` with version bump?
-- [ ] Did it update `.project/architecture-log/current-architecture.md` (if architecture changed)?
-- [ ] Did it add new skills to `.agent/skills/` for process patterns learned?
-- If ANY are missing → send Learner back: "Incomplete output. You must produce all required artifacts."
+**After Coder runs — BLOCKED until ALL are done:**
+- [ ] Code comments exist on every function, complex block, and non-obvious decision
+- [ ] Surfaced potential skills/learnings to Orchestrator (see Skill Pipeline below)
+- [ ] Tests exist for all code (TDD compliance)
+- ❌ If ANY missing → **DO NOT ADVANCE.** Send back: "Incomplete. Add code comments and surface skills before I accept this."
 
-**Enforcement Rules:**
-1. NO GATE PASSES without all required artifacts verified.
-2. The Orchestrator checks EVERY TIME — not sometimes, not "when it remembers." Every. Time.
-3. If an agent fails to produce artifacts 2 cycles in a row, the Orchestrator adds an explicit reminder to the agent's invocation prompt.
-4. Skills are NOT optional. If an agent did something it will do again, it becomes a skill. The Orchestrator prompts: "What patterns did you use that should be saved as skills?"
+**After Reviewer runs — BLOCKED until ALL are done:**
+- [ ] Wrote/updated `.project/reviewer-log/` with findings, problems, AND resolutions
+- [ ] Documented WHO introduced each issue (accountability)
+- [ ] Both problems AND resolutions are recorded (no orphaned entries)
+- [ ] Flagged fixes that changed user-facing behavior for `.client-docs/operator/` update
+- [ ] Flagged fixes that changed APIs/architecture for `.client-docs/technical/` update
+- [ ] Visually verified UI in browser (if applicable)
+- [ ] Surfaced potential skills/learnings to Orchestrator (see Skill Pipeline below)
+- ❌ If ANY missing → **DO NOT ADVANCE.** Send back: "reviewer-log is incomplete. Document ALL findings with resolutions before sign-off."
+
+**After ANY review loop iteration (Coder fix → Reviewer re-check) — BLOCKED until done:**
+- [ ] `.client-docs/operator/` updated if fix changed user-facing functionality
+- [ ] `.client-docs/technical/` updated if fix changed APIs, patterns, or architecture
+- ❌ If behavior changed but docs didn't → **BLOCK:** "The fix changed [X]. Update .client-docs/ NOW."
+
+**After Learner runs — BLOCKED until ALL are done:**
+- [ ] Wrote to `.project/learnings/`
+- [ ] Produced `.client-docs/technical/` doc
+- [ ] Produced `.client-docs/operator/` doc
+- [ ] Updated `CHANGELOG.md` with version bump
+- [ ] Updated `.project/architecture-log/current-architecture.md` (if architecture changed)
+- [ ] Surfaced potential skills/learnings to Orchestrator (see Skill Pipeline below)
+- ❌ If ANY missing → **DO NOT ADVANCE.** Send back: "Incomplete output. ALL artifacts are mandatory."
+
+#### The Documentation Promise (ZERO TOLERANCE)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ IF THE USER HAS TO ASK "DID YOU DOCUMENT THAT?" — THE ORCHESTRATOR │
+│ HAS FAILED. DOCUMENTATION IS AUTOMATIC. ALWAYS. NO EXCEPTIONS.     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+- The Orchestrator does NOT "forget" to check documentation
+- The Orchestrator does NOT "plan to document later"
+- The Orchestrator does NOT let ANY agent advance without written outputs
+- If the Orchestrator catches itself saying "you're right, I should document" — that's a workflow violation. It should have been done already.
+- Documentation happens IN THE MOMENT, not as a cleanup step
+
+#### Skill & Learning Pipeline (ORCHESTRATOR AS GATEKEEPER)
+
+Skills and learnings are surfaced **continuously** by ALL agents as they work — not just at the end of a cycle. The Orchestrator is the gatekeeper that classifies and routes them.
+
+**How it works:**
+
+1. **Any agent** discovers something reusable (pattern, technique, lesson, gotcha, optimization)
+2. That agent surfaces it to the Orchestrator immediately:
+   ```
+   💡 SKILL/LEARNING CANDIDATE: [brief description]
+      Source: [what triggered this discovery]
+      Type: [pattern / technique / gotcha / process]
+   ```
+3. **The Orchestrator classifies it** into one of three categories:
+
+| Classification | Action | Destination |
+|---|---|---|
+| **Universal Skill** | Write to `.agent/skills/` with `<!-- UPSTREAM: true -->` | Pushed to `agent-harness` at cycle end |
+| **Project-Specific Skill** | Write to `.agent/skills/` (no upstream flag) | Stays in project repo |
+| **Learning (not a skill)** | Write to `.project/learnings/` | Knowledge capture only |
+| **Not actionable** | Acknowledge and move on | No file written |
+
+4. **The Orchestrator announces the classification:**
+   ```
+   📝 SKILL CLASSIFIED: [name]
+      Category: [Universal / Project-Specific / Learning / Dismissed]
+      Written to: [file path]
+   ```
+
+**What triggers a skill/learning surface:**
+- Agent uses a pattern more than once → skill
+- Agent solves a tricky problem → learning (or skill if reusable)
+- Agent discovers a gotcha or anti-pattern → learning
+- Agent finds a configuration/setup that would be repeated → skill
+- Agent identifies a testing strategy that catches edge cases → skill
+- Agent has a "wish I'd known this earlier" moment → learning
+- Agent sees a workflow optimization → skill (probably universal)
+
+**This is CONTINUOUS.** Agents don't wait until they're "done" to surface candidates. They surface them the moment they spot them. The Orchestrator processes them immediately.
+
+**Learnings are ALWAYS generated.** Every completed story, every fix, every review round — SOMETHING was learned. If an agent reports "nothing learned," the Orchestrator pushes back: "You just [did X]. What would help the next person who does this? Document it."
 
 ### Universal Skill Upstream (Post-Cycle)
 

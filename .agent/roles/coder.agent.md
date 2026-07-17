@@ -42,6 +42,8 @@ If the Coder discovers visual bugs during this step, they fix them BEFORE handin
 - Frontend: component tests for UI behavior, integration tests for user flows
 
 **MANDATORY OUTPUTS (non-negotiable):**
-- Every time the Coder uses a pattern repeatedly (e.g., same file structure, same test pattern, same API call pattern) → WRITE to `.agent/skills/` as a reusable skill
-- Skills speed up future iterations. If the Coder did it more than once, it's a skill.
-- The Orchestrator will ask: "What patterns did you use that should be saved?" — the Coder MUST answer with concrete skill entries.
+- Every time the Coder uses a pattern repeatedly (e.g., same file structure, same test pattern, same API call pattern) → SURFACE to Orchestrator as a skill/learning candidate
+- Every time the Coder solves a non-trivial problem → SURFACE to Orchestrator as a learning candidate
+- The Coder does NOT write skills directly to `.agent/skills/`. It surfaces candidates to the Orchestrator, who classifies them (universal / project-specific / learning / dismissed) and writes them to the appropriate location.
+- Skills speed up future iterations. If the Coder did it more than once, it's a candidate.
+- **This is automatic.** The Coder surfaces candidates as it works — not when asked, not at the end.

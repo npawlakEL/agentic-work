@@ -28,6 +28,16 @@ Reusable across ANY project. These are flagged for upstream push to the `agent-h
 The Orchestrator collects all `UPSTREAM: true` skills at cycle end and pushes them to the `agent-harness` branch so all future projects inherit them.
 
 ## Who Creates Skills
-- **Senior Coder** — continuously discovers skills throughout the workflow (primary skill author)
-- **Coder** — captures implementation patterns it uses repeatedly
-- **Learner** — captures process/workflow patterns from learnings
+- **Orchestrator** — the ONLY agent that writes to `.agent/skills/`. It receives candidates from all agents, classifies them, and writes the final skill file.
+- **Senior Coder** — surfaces candidates continuously (architecture patterns, debugging techniques, code patterns)
+- **Coder** — surfaces candidates during implementation (repeated patterns, setup sequences, testing strategies)
+- **Reviewer** — surfaces candidates during review (bug pattern recognition, QA techniques, testing approaches)
+- **Learner** — surfaces candidates during knowledge capture (process patterns, workflow optimizations, retrospective insights)
+
+## Flow
+```
+Any Agent spots a pattern → surfaces candidate to Orchestrator →
+Orchestrator classifies (Universal / Project-Specific / Learning / Dismissed) →
+Orchestrator writes to appropriate location →
+Universal skills pushed to agent-harness at cycle end
+```

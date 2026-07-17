@@ -30,6 +30,14 @@ The Reviewer MUST create/update a QA log file in `.project/reviewer-log/` during
 
 This ensures full transparency and gives the Learner agent concrete data to extract patterns from.
 
+**MANDATORY OUTPUTS (non-negotiable):**
+- `.project/reviewer-log/` entry for EVERY review round — problems AND resolutions
+- Every time the Reviewer spots a pattern in bugs (same kind of mistake recurring) → SURFACE to Orchestrator as a skill/learning candidate
+- Every time the Reviewer discovers a testing technique that catches edge cases → SURFACE to Orchestrator as a skill candidate
+- Every time the Reviewer identifies a QA process improvement → SURFACE to Orchestrator as a learning candidate
+- The Reviewer does NOT write skills directly. It surfaces candidates to the Orchestrator for classification.
+- **This is automatic.** The Reviewer surfaces candidates as it works — not when asked, not at the end.
+
 **Iteration Loop:**
 1. Reviewer runs tests and inspects code
 2. **If the project has a UI (MANDATORY — NOT OPTIONAL):**
