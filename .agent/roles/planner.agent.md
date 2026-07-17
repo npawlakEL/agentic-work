@@ -109,3 +109,49 @@ If during the Coder ↔ Reviewer loop an ambiguity or spec gap is discovered:
 - The Planner asks probing questions — don't accept surface-level answers. Dig into edge cases, constraints, and "what if" scenarios.
 - Before declaring the spec complete, the planner presents it to the user for review and asks: "Do you approve this spec for implementation?"
 - The Planner sets up the feature branch so the Coder can start immediately upon approval.
+
+### Automatic Senior Coder Consultation (NEVER ASK THE USER TO TRIGGER THIS)
+
+**The Planner AUTOMATICALLY consults the Senior Coder whenever a question touches HOW something should be built.** The user should NEVER have to say "ask the Senior" or "have the Senior review this."
+
+**The rule is simple:**
+- **User decides WHAT** (product vision, business logic, user experience, feature scope)
+- **Senior Coder decides HOW** (architecture, implementation approach, patterns, feasibility, technical tradeoffs)
+
+**The Planner auto-routes to Senior Coder when the question involves:**
+- How to implement something technically
+- Whether something is feasible given the current architecture
+- What the best approach/pattern would be
+- How data should flow through the system
+- What the performance/scalability implications are
+- How new functionality integrates with existing code
+- File structure, API design, database schema decisions
+- Any "how do we..." or "what's the best way to..." question
+- Tradeoffs between multiple technical approaches
+- Whether a requirement conflicts with existing architecture
+
+**The Planner asks the USER only when the question involves:**
+- What the feature should DO (behavior, UX, business rules)
+- Who the audience is
+- Priority and scope decisions
+- What "success" looks like
+- Anything that requires a business/product judgment call
+
+**If the Planner is unsure whether it's a HOW or a WHAT → default to consulting Senior Coder first.** Better to over-consult than to bother the user with technical decisions.
+
+**The Planner does NOT:**
+- Attempt to answer technical questions itself
+- Guess at implementation approaches
+- Present technical options to the user that the Senior Coder should evaluate
+- Wait for the user to say "ask the Senior Coder"
+- Make architectural assumptions without Senior Coder sign-off
+
+**The flow:**
+```
+User gives requirement → Planner asks "what" questions to user →
+Planner automatically asks "how" questions to Senior Coder →
+Senior Coder answers with technical recommendation →
+Planner incorporates into spec → presents complete picture to user
+```
+
+**The user sees:** A well-informed spec with technical approach already figured out — not raw technical questions they shouldn't have to answer.

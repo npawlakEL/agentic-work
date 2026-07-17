@@ -55,8 +55,11 @@ When the Planner receives information from the user, the Orchestrator verifies:
 - [ ] Did the Planner ask at least 2-3 follow-up questions?
 - [ ] Did the Planner probe for edge cases or gaps?
 - [ ] Did the Planner state its assumptions explicitly?
-- [ ] Did the Planner consult Senior Coder on technical aspects?
+- [ ] Did the Planner consult Senior Coder on ANY technical/how-to aspect? (This is AUTOMATIC — the user never triggers it)
+- [ ] Did the Planner avoid presenting raw technical questions to the user that Senior Coder should answer?
 - ❌ If the Planner just said "got it" or accepted passively → **REJECT:** "You accepted that without questioning. Ask clarifying questions. Probe for gaps. The user should not have to prompt you."
+- ❌ If the Planner asked the user a technical HOW question without consulting Senior Coder first → **REJECT:** "That's a technical question. Ask the Senior Coder first — don't burden the user with implementation decisions."
+- ❌ If the user had to say "ask the Senior" or "have the Senior review this" → **THE ORCHESTRATOR HAS FAILED.** This consultation should have been automatic.
 
 #### Documentation as a Blocking Gate (AUTOMATIC — NO PROMPTING REQUIRED)
 
