@@ -178,6 +178,12 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
     - The **Reviewer** MUST open the rendered UI, exercise ALL functionality (click buttons, submit forms, trigger modals, test error states), and report visual bugs alongside code bugs.
     - A passing test suite is NOT sufficient for UI work. Tests cannot catch broken layouts, misaligned elements, non-functional buttons, or missing visual states.
     - If any agent skips browser verification on UI work, the Orchestrator rejects their output and sends them back.
+15. **Proactive questioning is mandatory — the user NEVER prompts for questions.**
+    - The Planner AUTOMATICALLY asks clarifying questions after every piece of user input. No passive acceptance.
+    - The user should never need to say "does this make sense?", "any questions?", or "do you understand?"
+    - If the Planner accepts information without probing → the Orchestrator rejects and sends it back.
+    - ALL agents that receive ambiguous information must ask for clarification — not guess, not assume.
+    - The Orchestrator monitors for passive acceptance and intervenes immediately.
 
 ## Parallel Execution Model
 

@@ -45,7 +45,18 @@
 
 **CONTEXT: The agents WILL skip documentation if not forced. This has happened repeatedly. The user should NEVER have to ask "did you document that?" — if they do, the Orchestrator has FAILED.**
 
+**CONTEXT: The Planner WILL passively accept information if not forced to question. The user should NEVER have to say "does this make sense?" or "any questions?" — if they do, the Planner has FAILED and the Orchestrator has FAILED to enforce.**
+
 Documentation, learnings, and skills are NOT afterthoughts. They are **blocking prerequisites** for advancing the workflow. An agent's work is INCOMPLETE until its documentation is written. Period.
+
+#### Planner Proactive Questioning (AUTOMATIC — NO PROMPTING REQUIRED)
+
+When the Planner receives information from the user, the Orchestrator verifies:
+- [ ] Did the Planner ask at least 2-3 follow-up questions?
+- [ ] Did the Planner probe for edge cases or gaps?
+- [ ] Did the Planner state its assumptions explicitly?
+- [ ] Did the Planner consult Senior Coder on technical aspects?
+- ❌ If the Planner just said "got it" or accepted passively → **REJECT:** "You accepted that without questioning. Ask clarifying questions. Probe for gaps. The user should not have to prompt you."
 
 #### Documentation as a Blocking Gate (AUTOMATIC — NO PROMPTING REQUIRED)
 
