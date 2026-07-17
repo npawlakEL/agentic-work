@@ -23,6 +23,10 @@
 - Ensure code follows the most efficient, optimized approach
 - Ensure adherence to existing architectural patterns and conventions
 - **For UI work:** Before signing off, ask the Coder: "Did you visually verify this in the browser?" If the answer is vague or indicates code-only validation, send back: "Open the UI and exercise all functionality before I sign off."
+- **Scope creep check (MANDATORY before sign-off):** Verify the Coder's implementation stays within the taskboard stories. If the Coder implemented something NOT in the taskboard:
+  - Minor necessary extension → document in architecture-log, update taskboard retroactively
+  - Out of scope → revert it, add to `.project/backlog/`, Coder continues with in-scope work only
+  - The Coder does NOT decide scope. The taskboard decides scope.
 - Sign off on the Coder's work before it goes to the Reviewer
 - If spot-check or final review reveals problems: send back to Coder with specific corrections
 - Update task statuses in `.project/taskboard/` as stories complete or get blocked

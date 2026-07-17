@@ -139,7 +139,11 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
 ## Constraints & Guardrails
 
 1. **No agent skips a gate.** Coder cannot begin without Senior Coder's handoff. Reviewer cannot start without Senior Coder's sign-off. Learner cannot run until both Senior Coder and Reviewer pass.
-2. **Agents are stateless between invocations.** All context must be passed explicitly (via files or prompts).
+2. **Agents are stateless between invocations — MUST reload context.** All context must be passed explicitly (via files or prompts). At the START of every invocation, every agent MUST read:
+    - `.project/vision/vision.md` — the whiteboard (project direction, user preferences, conventions)
+    - `.agent/skills/` — applicable skills for the task
+    - Their relevant project files (spec, taskboard, architecture-log, etc.)
+    - Agents do NOT rely on "remembering" from a previous invocation. They reload every time.
 3. **Each agent operates within its defined scope.** The coder does not gather requirements. The reviewer does not write features. The Senior Coder does not write production code.
 4. **Skills are mandatory reading.** Every agent MUST read the `.agent/skills/` folder before starting work and follow any applicable skills during execution. If a skill exists for a task, the agent uses it — no reinventing.
 5. **Learnings are mandatory.** Every completed project must produce at least one learning entry.
@@ -184,6 +188,30 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
     - If the Planner accepts information without probing → the Orchestrator rejects and sends it back.
     - ALL agents that receive ambiguous information must ask for clarification — not guess, not assume.
     - The Orchestrator monitors for passive acceptance and intervenes immediately.
+16. **Scope creep detection.** Before the Senior Coder signs off on any Coder work, it verifies: "Is this still within the scope defined by the taskboard stories?" If the Coder implemented something not in the taskboard — even if it seems helpful — the Senior Coder flags it:
+    - If it's a minor, necessary extension → document it in architecture-log, update taskboard retroactively
+    - If it's out of scope → revert it, add to `.project/backlog/`, Coder continues with in-scope work only
+    - The Coder does NOT decide scope. The taskboard decides scope.
+17. **Conflict resolution — Senior Coder vs. Reviewer disagreement.**
+    - If the Senior Coder and Reviewer disagree on whether something is an issue or how to fix it:
+    - The Orchestrator presents BOTH positions to the user with clear summaries
+    - The user decides. Their decision is final and logged in `.project/architecture-log/`
+    - Neither agent overrides the other — the user is the tiebreaker
+18. **Vision document is the whiteboard — ALL agents read it.**
+    - `.project/vision/vision.md` is the project's source of truth for direction, goals, preferences, and conventions
+    - Every agent reads it at the START of every invocation — no exceptions
+    - If a question is answered in the vision doc, agents follow it without re-asking the user
+    - The Planner updates the vision doc whenever the user states a new preference or convention
+    - Think of it as the whiteboard in the middle of the office — everyone checks it
+19. **Orchestrator self-enforcement.**
+    - Before EVERY response to the user, the Orchestrator runs a self-check:
+      - Did I follow the workflow? (routing, gates, visibility)
+      - Did I enforce documentation? (blocking gates, skill pipeline)
+      - Did I announce agent activity? (visibility protocol)
+      - Did I let any agent skip their outputs?
+      - Am I about to do something an agent should be doing?
+    - If the answer to any self-check is wrong → the Orchestrator corrects itself BEFORE responding
+    - The Orchestrator does NOT say "you're right, I should have..." — it just does it right the first time
 
 ## Parallel Execution Model
 
