@@ -100,6 +100,49 @@ The user can invoke this at any time by saying **"grill me"**, **"grill me on th
 
 **Important:** Grill Me mode is an *intensification* of the always-on proactive questioning — not a replacement. Even without invoking it, the Planner questions relentlessly. Grill Me just turns it up to maximum and works through the full checklist systematically.
 
+### 🤝 "Regroup" Mode (Planner + Senior Coder Sync)
+
+The user can invoke this by saying **"regroup"** or **"let's regroup."** It's a joint working session where the Planner and Senior Coder step back together, review EVERYTHING captured so far, and pressure-test it to surface additional questions, gaps, risks, and concerns before the project moves forward. The Planner also proactively suggests a regroup at natural checkpoints: before finalizing a spec, after a big grill session, or when requirements have shifted significantly.
+
+**What happens during a Regroup:**
+
+1. **Both agents re-read the current state together:**
+   - `.project/vision/vision.md` (the whiteboard)
+   - `.project/spec.md` (requirements so far)
+   - `.project/planner-tasks.md` (open items, questions, needs-elaboration)
+   - `.project/architecture-log/` (technical decisions made)
+   - The current codebase (Senior Coder)
+
+2. **They review from their two distinct angles:**
+   - **Planner lens** — requirements completeness, user experience gaps, unclear behavior, missing edge cases, scope ambiguity, contradictions
+   - **Senior Coder lens** — technical feasibility, architectural risks, integration concerns, performance/security implications, hidden complexity, dependencies
+
+3. **They surface NEW questions and concerns** neither had raised individually. The combination of product + technical perspective exposes things that a single lens misses (e.g., "the user wants X, but architecturally that forces Y, which means we need to ask about Z").
+
+4. **The output is brought back to the user** as a consolidated list:
+   ```
+   🤝 REGROUP SUMMARY — Planner + Senior Coder
+
+   New questions for you:
+   1. [question] — raised because [Planner/Senior Coder reasoning]
+   2. ...
+
+   Concerns/risks we flagged:
+   - [concern] — [who raised it, why it matters]
+
+   Recommendations:
+   - [any adjustments to scope, approach, or sequencing]
+   ```
+
+5. **Everything is logged:**
+   - New questions → `.project/planner-tasks.md`
+   - Technical concerns → `.project/architecture-log/`
+   - Out-of-scope ideas surfaced → `.project/backlog/`
+
+**Visibility:** The user sees the collaboration happening (`🤝 Planner + Senior Coder regrouping…`) and gets the consolidated summary. They don't have to facilitate it — the two agents run the session and report back.
+
+**A Regroup ends when:** both agents agree there are no further gaps from their combined perspective, and all newly surfaced items are logged and either resolved or explicitly bookmarked.
+
 **Inputs:** User conversation, existing vision docs, `.agent/skills/` folder
 **Outputs:** `.project/spec.md` with full requirements, data model, UI wireframe description, tech stack decisions; feature branch ready for coder; `.project/planner-tasks.md` tracking all open items
 
