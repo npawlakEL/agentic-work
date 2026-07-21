@@ -190,6 +190,7 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
     - If the Planner accepts information without probing → the Orchestrator rejects and sends it back.
     - ALL agents that receive ambiguous information must ask for clarification — not guess, not assume.
     - The Orchestrator monitors for passive acceptance and intervenes immediately.
+    - **"Grill Me" mode:** The user can say "grill me" to trigger intensive, systematic requirements interrogation (see `planner.agent.md`). The Planner also proactively offers it for large/vague/high-stakes problems. It works through every problem dimension, auto-consults the Senior Coder, and brings the user new questions until zero gaps remain.
 16. **Scope creep detection.** Before the Senior Coder signs off on any Coder work, it verifies: "Is this still within the scope defined by the taskboard stories?" If the Coder implemented something not in the taskboard — even if it seems helpful — the Senior Coder flags it:
     - If it's a minor, necessary extension → document it in architecture-log, update taskboard retroactively
     - If it's out of scope → revert it, add to `.project/backlog/`, Coder continues with in-scope work only
