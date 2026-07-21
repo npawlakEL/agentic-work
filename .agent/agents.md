@@ -138,6 +138,8 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
 
 ## Constraints & Guardrails
 
+> **Reading these:** The emphatic language (MANDATORY, NO EXCEPTIONS, BLOCKED) is intentional — it exists so the workflow holds even on smaller models. On Opus-tier reasoning agents (see `.agent/model-config.md`), treat these as firm intent rather than rote checklists: follow the *purpose* of each constraint, not just its literal wording. The Orchestrator is the enforcement authority for all of them.
+
 1. **No agent skips a gate.** Coder cannot begin without Senior Coder's handoff. Reviewer cannot start without Senior Coder's sign-off. Learner cannot run until both Senior Coder and Reviewer pass.
 2. **Agents are stateless between invocations — MUST reload context.** All context must be passed explicitly (via files or prompts). At the START of every invocation, every agent MUST read:
     - `.project/vision/vision.md` — the whiteboard (project direction, user preferences, conventions)

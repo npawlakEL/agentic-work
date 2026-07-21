@@ -24,6 +24,7 @@ A reusable agentic development framework for software projects. Clone this into 
 ```
 ├── .agent/              ← Agent framework (portable)
 │   ├── agents.md        ← Master workflow (gates, constraints, protocols)
+│   ├── model-config.md  ← Per-agent model recommendations
 │   ├── roles/           ← Agent definitions with personalities
 │   ├── skills/          ← Reusable skills (grows over time)
 │   └── vision/          ← Product vision (co-created with user)
@@ -40,6 +41,21 @@ A reusable agentic development framework for software projects. Clone this into 
 │   └── operator/        ← For end users
 └── CHANGELOG.md         ← Semantic versioning log
 ```
+
+## Model Recommendations
+
+The harness is **tuned for Claude Opus 4.8** on the reasoning-tier agents. Match the model to the cognitive load:
+
+| Agent | Recommended Model |
+|-------|------------------|
+| Orchestrator | Opus 4.8 |
+| Planner | Opus 4.8 |
+| Senior Coder | Opus 4.8 (non-negotiable) |
+| Coder | Sonnet-tier |
+| Reviewer | Sonnet-tier |
+| Learner | Sonnet-tier (or Haiku) |
+
+**Rule of thumb:** reasoning agents (Orchestrator, Planner, Senior Coder) get the best model; execution agents (Coder, Reviewer, Learner) run mid-tier. Full rationale in `.agent/model-config.md`.
 
 ## Key Features
 
