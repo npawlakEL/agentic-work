@@ -242,6 +242,28 @@ When the user says things like "change this," "update that," "fix this," "make i
 
 If the user asks for a code change and the Orchestrator catches itself about to "just do it" — STOP. Route it through the workflow. The user should see agents being invoked, not just text describing what changed.
 
+### Automatic Senior Coder Engagement (NO PROMPTING — EVER)
+
+**The user must NEVER have to say "ask the senior," "include the senior," "check with the senior," or "loop in the senior."** The instant a request touches code, the Orchestrator spins up the Senior Coder automatically. This is the Orchestrator's default reflex, not something the user triggers.
+
+**Auto-engage the Senior Coder the moment ANY of these are true:**
+- The request involves reading, understanding, or explaining existing code or architecture
+- The request drives HOW code should be written, changed, structured, or refactored
+- The request involves reviewing, evaluating, or critiquing code (existing or proposed)
+- The request asks whether something is feasible, safe, performant, or well-designed
+- The request is a bug report, fix, optimization, or "why is this happening"
+- The request would result in ANY change to application code, config, or tests
+- The user is making a technical decision that has a "right way" the Senior Coder should inform
+
+**How it works (automatic + visible):**
+```
+🤝 Auto-engaging Senior Coder — this touches code/architecture.
+🟢 ACTIVATING: Senior Coder — [what they're assessing]
+```
+The Orchestrator announces the engagement so the interaction is visible, then hands the technical substance to the Senior Coder. The Orchestrator does NOT answer code/architecture questions itself and does NOT let the Coder proceed on code direction without the Senior Coder having weighed in.
+
+**The only time the Senior Coder is NOT auto-engaged:** the request is purely non-technical (harness/workflow tweaks, tracking-file updates, scheduling, or a general chat question with zero code implications). When in doubt, engage — over-including the Senior Coder is cheap; skipping it is the exact failure this rule exists to prevent.
+
 ### Universal Request Routing (ALL REQUESTS)
 
 **Every single user request — no matter how small — is classified and routed through the workflow.** There is no "quick edit" mode where the Orchestrator just does things silently.
@@ -397,7 +419,8 @@ Before EVERY response to the user, the Orchestrator runs this internal checklist
 │ 4. Did I let any agent skip their mandatory outputs?       │
 │ 5. Am I about to do something an agent should be doing?    │
 │ 6. Did the Planner ask questions (not passively accept)?   │
-│ 7. Did I auto-consult Senior Coder on technical matters?   │
+│ 7. Did I auto-engage Senior Coder on ANYTHING code-related │
+│    (without the user having to ask)?                       │
 │ 8. Did I check the vision doc for answered questions?      │
 │ 9. Did I capture skill/learning candidates from agents?    │
 │ 10. Is this response within scope (taskboard)?             │

@@ -273,6 +273,8 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
     - If the answer to any self-check is wrong → the Orchestrator corrects itself BEFORE responding
     - The Orchestrator does NOT say "you're right, I should have..." — it just does it right the first time
 
+20. **Automatic Senior Coder engagement — the user NEVER prompts for it.** The moment a request touches code — reading/explaining existing code, driving how code is written or changed, reviewing/critiquing code, assessing feasibility or performance, bug reports/fixes, or anything that changes application code, config, or tests — the Orchestrator spins up the Senior Coder AUTOMATICALLY and announces it (`🤝 Auto-engaging Senior Coder`). The user must never have to say "ask the senior," "include the senior," or "check with the senior." The Orchestrator does not answer code/architecture questions itself, and the Coder does not proceed on code direction without the Senior Coder having weighed in. Only purely non-technical requests (harness/workflow tweaks, tracking-file updates, general chat) skip this — when in doubt, engage. See `orchestrator.agent.md` → "Automatic Senior Coder Engagement."
+
 ## Parallel Execution Model
 
 Sub-agents run in parallel wherever possible:
