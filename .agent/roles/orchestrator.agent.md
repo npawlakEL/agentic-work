@@ -256,11 +256,34 @@ If the user asks for a code change and the Orchestrator catches itself about to 
 | Documentation-only | Learner + Senior Coder collab | "Update the API docs" |
 | Harness/workflow change | Orchestrator direct | "Add a constraint to the workflow" |
 | Question / discussion | Orchestrator answers (may consult agents) | "How does the auth work?" |
+| Codebase audit | **Finalize mode** — fan out Senior Coder(s), read-only audit | "finalize" |
 
 **The Orchestrator announces the classification:**
 ```
 📋 Request classified: [type] → routing through [hot-path / full flow / direct]
 ```
+
+### Finalize Mode Orchestration
+
+When the user says **"finalize,"** the Orchestrator runs a parallelized codebase audit:
+
+1. **Scope the codebase** — assess size and structure to decide how many Senior Coder instances to spin up and how to divide coverage (by layer, module, or concern). Small codebase = one Senior Coder; large = several in parallel.
+2. **Announce the plan:**
+   ```
+   🔍 FINALIZE initiated — spinning up [N] Senior Coder(s)
+      Senior Coder 1 → [scope]
+      Senior Coder 2 → [scope]
+      ...
+   ```
+3. **Fan out** — launch the Senior Coders in parallel, each with its assigned scope and the full finalize checklist (bugs, security, quality, optimization, architecture, tests, open questions, docs).
+4. **Consolidate** — merge all findings into ONE prioritized report (Critical / High / Medium / Low + Open Questions + Optimizations). Deduplicate overlapping findings.
+5. **Log** — write the audit to `.project/architecture-log/` (dated), open questions to `.project/planner-tasks.md`, out-of-scope ideas to `.project/backlog/`.
+6. **Present to user** — the user decides what to act on. Approved fixes route through the normal workflow (hot-path or full flow). Nothing is auto-fixed.
+
+**Rules:**
+- Finalize is READ-ONLY. No code changes during the audit.
+- Every finding must be actionable (location + reason + recommendation).
+- Finalize does NOT bypass gates — it surfaces work; fixes still go through the workflow.
 
 ### Workflow State Tracking (AUTO-RECALL)
 

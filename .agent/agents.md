@@ -136,6 +136,62 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
 - Hot-path: bug fix, typo, config change, style tweak, < 20 lines changed
 - Full flow: new feature, architectural change, new UI component, anything that needs a taskboard
 
+## 🔍 "Finalize" Mode (Multi-Senior Codebase Audit)
+
+The user invokes this by saying **"finalize"** (or "finalize this," "run a finalize"). It is a comprehensive, parallelized codebase audit performed by one or more Senior Coders before the user considers the project — or a major milestone — done. It is NOT a merge or a push; it is a deep inspection pass that produces a prioritized findings report.
+
+**How it works:**
+
+1. **The Orchestrator scopes the codebase and fans out Senior Coders.** Based on codebase size and structure, the Orchestrator spins up **as many Senior Coder instances as needed** and divides the codebase among them so coverage is complete and parallel. Examples of division:
+   - By layer (frontend / backend / data / infra)
+   - By module or feature area
+   - By concern (security, performance, correctness, maintainability)
+   - For a small codebase, a single Senior Coder may cover everything.
+
+2. **Each Senior Coder audits its assigned scope for:**
+   - **Bugs & correctness holes** — logic errors, unhandled edge cases, race conditions, off-by-one, null/undefined handling
+   - **Security issues** — injection risks, auth gaps, exposed secrets, unvalidated input
+   - **Code quality** — duplication, dead code, tangled dependencies, poor separation of concerns, missing error handling
+   - **Optimization opportunities** — inefficient algorithms, N+1 queries, unnecessary re-renders, memory leaks, redundant work
+   - **Architectural concerns** — pattern violations, tech debt, brittle coupling, scalability limits
+   - **Missing tests** — untested paths, gaps in coverage, missing edge-case tests
+   - **Open questions about functionality** — behavior that's ambiguous, incomplete, or doesn't match the spec/vision
+   - **Documentation gaps** — undocumented functions, stale docs, missing comments
+
+3. **Findings are consolidated by the Orchestrator into a single prioritized report:**
+   ```
+   🔍 FINALIZE REPORT — [N] Senior Coders audited [scope]
+
+   🔴 CRITICAL (fix before shipping):
+   - [finding] — [file:line] — [why it matters] — [recommendation]
+
+   🟠 HIGH (should fix):
+   - ...
+
+   🟡 MEDIUM (worth addressing):
+   - ...
+
+   🟢 LOW / NICE-TO-HAVE:
+   - ...
+
+   ❓ OPEN QUESTIONS FOR YOU:
+   - [functionality question that needs a product decision]
+
+   💡 OPTIMIZATION RECOMMENDATIONS:
+   - ...
+   ```
+
+4. **Everything is logged** to `.project/architecture-log/` as a finalize audit record (dated). Open questions also go to `.project/planner-tasks.md`. Out-of-scope improvement ideas go to `.project/backlog/`.
+
+5. **The user decides what to act on.** Finalize does NOT auto-fix. Each finding the user chooses to address is routed through the normal workflow (hot-path or full flow) so every fix still passes through the gates. Findings the user defers are bookmarked in the backlog.
+
+**Key rules:**
+- Finalize is **read-only analysis** — no code changes happen during the audit itself.
+- The number of Senior Coders scales with the codebase — the Orchestrator decides, no fixed limit.
+- Finalize can be run at any time: before a release, at a milestone, or whenever the user wants a health check.
+- Every finding must be **actionable** — vague "could be better" notes are not allowed; each needs a location, a reason, and a recommendation.
+- Findings the user approves for fixing STILL go through the full workflow — Finalize surfaces work, it doesn't bypass gates.
+
 ## Constraints & Guardrails
 
 > **Reading these:** The emphatic language (MANDATORY, NO EXCEPTIONS, BLOCKED) is intentional — it exists so the workflow holds even on smaller models. On Opus-tier reasoning agents (see `.agent/model-config.md`), treat these as firm intent rather than rote checklists: follow the *purpose* of each constraint, not just its literal wording. The Orchestrator is the enforcement authority for all of them.

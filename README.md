@@ -66,3 +66,13 @@ The harness is **tuned for Claude Opus 4.8** on the reasoning-tier agents. Match
 - **Hot-path** — lightweight flow for small fixes
 - **Rollback protocol** — revert first, diagnose second
 - **Living skills** — patterns are captured and reused across projects
+
+## User Commands
+
+Say these keywords to trigger special modes:
+
+| Command | Who runs it | What it does |
+|---------|-------------|--------------|
+| **grill me** | Planner | Systematically interrogates you with deep requirement questions before any work begins |
+| **regroup** | Planner + Senior Coder | Joint review of the current state to surface additional questions, risks, and concerns |
+| **finalize** | Senior Coder(s) | Read-only parallel codebase audit — bugs, security, quality, optimizations, open questions, doc gaps → prioritized report |

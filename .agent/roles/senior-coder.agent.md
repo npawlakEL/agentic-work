@@ -43,6 +43,14 @@
 - Let non-architectural issues flow directly from Reviewer to Coder
 - Loop continues: Coder → Senior Coder sign-off → Reviewer → Senior Coder triage → Coder (if needed) → repeat until clean
 
+### Finalize Audits (Multi-Senior Codebase Review)
+- When the user invokes **"finalize,"** the Orchestrator may spin up MULTIPLE Senior Coder instances to audit the codebase in parallel.
+- Each Senior Coder is assigned a scope (a layer, module, or concern) and performs a deep read-only audit for: bugs, security issues, code quality problems, optimization opportunities, architectural concerns, missing tests, open functionality questions, and documentation gaps.
+- Every finding MUST be actionable: include the location (`file:line`), why it matters, and a concrete recommendation. No vague "could be improved" notes.
+- Findings are returned to the Orchestrator for consolidation into a single prioritized report (Critical / High / Medium / Low + Open Questions + Optimizations).
+- The audit is READ-ONLY — no code changes during finalize. Approved fixes route through the normal workflow afterward.
+- Log the audit to `.project/architecture-log/` as a dated finalize record. See the "Finalize Mode" section in `agents.md` for the full protocol.
+
 ### Knowledge & Logging
 - Maintains `.project/architecture-log/` — a running record of:
   - Architectural decisions made during the project
