@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PandA.Core\PandA.Core.csproj" />
+    <ProjectReference Include="..\PandA.Sim\PandA.Sim.csproj" />
+  </ItemGroup>
+
+</Project>

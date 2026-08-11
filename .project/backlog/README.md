@@ -116,3 +116,34 @@ the global allow-all bypass is not wired into the induct gate yet.
 **Description:** When scheduled, plumb a line/global ReprintLabels flag into the induct reprint gate so that
 ON allows reprints without per-carton authorization. Default OFF preserves current behavior.
 **Priority:** Low (default-off; per-carton path covers the primary workflow)
+
+### Sim harness — advanced data creation / editing
+**Added:** 2026-08-11
+**Source:** User (sim harness discussion)
+**Context:** Pass-1 sim seeds cartons on startup and only runs the fixed slice. Users will want to create /
+edit carton + line/printer data interactively (add cartons, change label sets, toggle printer health).
+**Description:** Add data-authoring commands (or a small scenario file) to the harness so operators can
+build and mutate test data without recompiling.
+**Priority:** Medium
+
+### Sim harness — expand message coverage beyond the bare-bones slice
+**Added:** 2026-08-11
+**Source:** User (sim harness discussion)
+**Context:** Pass-1 speaks only 281 (induct, DeviceId=1) and 286 (verify) on the happy path (auto-pass).
+**Description:** Layer on, in order: user-selectable verify outcome (pass / wrong / no-read → Verified vs
+Held), the reprint/authorize loop, then codes 282 (print), 283 (printer status), 284 (zone status),
+285 (late assign). Also type the 286 label buffer via the real Settings_LabelBufferOrder map instead of
+the advised-order stand-in.
+
+### Fire points / tracking devices / apply-vs-print + lane destination (outbound to PLC)
+**Added:** 2026-08-11
+**Source:** PLC Process_PA reverse-engineering (ItmSort-AI)
+**Context:** The real 281 response is NOT "send ZPL" — it writes a bundle of vPA.Assign[i] tags to the PLC
+(RecID, Seq, Sorter, SourceMode, Dest lane, PrintPoint/PrintPointDevice[printerId], ApplyPoint/
+ApplyPointDevice[printerId], MsgRdy) computed by sdisp_TOOL_PA_GetPrinterFirePoints. This coordinates WHERE
+on the conveyor to fire the print head and the applicator, and which lane to route to. Core does not model
+fire points, tracking devices, the apply-vs-print station split, or lane destination yet.
+**Description:** After the bare-bones sim is solid, design the fire-point/lane outbound: model print vs
+apply firing positions per printer + the destination lane, and emit the vPA.Assign tag bundle. Discuss
+with the user first (flagged as the next design conversation).
+**Priority:** High (core to real PLC integration)
