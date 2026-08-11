@@ -275,6 +275,13 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
 
 20. **Automatic Senior Coder engagement — the user NEVER prompts for it.** The moment a request touches code — reading/explaining existing code, driving how code is written or changed, reviewing/critiquing code, assessing feasibility or performance, bug reports/fixes, or anything that changes application code, config, or tests — the Orchestrator spins up the Senior Coder AUTOMATICALLY and announces it (`🤝 Auto-engaging Senior Coder`). The user must never have to say "ask the senior," "include the senior," or "check with the senior." The Orchestrator does not answer code/architecture questions itself, and the Coder does not proceed on code direction without the Senior Coder having weighed in. Only purely non-technical requests (harness/workflow tweaks, tracking-file updates, general chat) skip this — when in doubt, engage. See `orchestrator.agent.md` → "Automatic Senior Coder Engagement."
 
+21. **Regression guardrail — every code change runs the relevant test suites.** No code change (feature, fix, refactor, or config touch) is considered done until the relevant automated tests are run GREEN — not just the tests for the changed unit, but every suite that exercises code lightly or tightly coupled to it (unit tests, e.g. xUnit; and driver/integration/end-to-end tests). The purpose is to catch breakage in functionality that depends on the changed code indirectly.
+    - **Senior Coder** (auto-engaged) determines the blast radius: which modules/tests are coupled to the change and therefore MUST run. It errs wide — if a suite *might* be affected, it runs. It never assumes "this change is isolated" without checking call sites and dependents.
+    - **Coder** runs the identified suites locally after implementing and reports actual results (pass/fail counts, not "should pass"). Red = not done; the Coder fixes forward or the loop escalates per the Failure Escalation Protocol.
+    - **Reviewer** independently re-runs the full relevant suites (unit + driver) and confirms green before signing off. A partial or skipped run is a blocking issue logged to `reviewer-log/`.
+    - If a change is genuinely untestable by the existing suites, the Senior Coder says so explicitly and the gap becomes a test-to-add item — it is never silently skipped.
+    - Evidence over claims: the actual test command and its summarized output are recorded (Coder in the story handoff, Reviewer in `reviewer-log/`). "Tests pass" without a run is not accepted.
+
 ## Parallel Execution Model
 
 Sub-agents run in parallel wherever possible:

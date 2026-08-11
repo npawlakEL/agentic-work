@@ -9,6 +9,7 @@
 **Responsibilities:**
 - Validate that the coder's output meets the spec
 - Run the full test suite and verify all tests pass
+- **Run the full RELEVANT regression scope, not just the changed unit** — re-run every suite coupled to the change: unit tests (e.g. xUnit) AND driver/integration/end-to-end tests. Confirm green with actual command output before signing off. A partial or skipped run is a blocking issue logged to `reviewer-log/`.
 - Verify test coverage is comprehensive (no untested paths)
 - Test functionality (manual walkthrough of user flows)
 - Identify bugs, edge cases, and missing test scenarios

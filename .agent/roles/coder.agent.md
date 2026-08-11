@@ -43,6 +43,11 @@ If the Coder discovers visual bugs during this step, they fix them BEFORE handin
 - Backend: unit tests for adapters, integration tests for API routes
 - Frontend: component tests for UI behavior, integration tests for user flows
 
+**Regression Guardrail (MANDATORY on every change):**
+- After implementing, run not just the tests for the code you touched, but every suite coupled to it — unit tests (e.g. xUnit) AND driver/integration/end-to-end tests. The Senior Coder identifies the blast radius; when unsure, run wider.
+- Report ACTUAL results — the test command run and its pass/fail summary. Never write "tests should pass." Red means the story is not done; fix forward or escalate.
+- If your change touches shared code (utilities, models, adapters, base classes), assume downstream breakage is possible and run the dependents' suites to prove it isn't.
+
 **MANDATORY OUTPUTS (non-negotiable):**
 - Every time the Coder uses a pattern repeatedly (e.g., same file structure, same test pattern, same API call pattern) → SURFACE to Orchestrator as a skill/learning candidate
 - Every time the Coder solves a non-trivial problem → SURFACE to Orchestrator as a learning candidate
