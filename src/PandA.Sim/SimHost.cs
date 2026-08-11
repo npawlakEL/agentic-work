@@ -106,15 +106,17 @@ public sealed class SimHost
 
         // 2) Inbound 286 verify scan — auto-generate a matching read from the advised labels (happy path).
         var reloaded = await _store.FindActiveByTuIdAsync(blindLabel);
-        var scanned = BuildMatchingScan(reloaded!);
+        var line = await _lines.GetLineAsync(SourceLine);
+        var bufferOrder = line!.Config.BufferOrder;
+        var rawBuffer = BuildMatchingBuffer(reloaded!, bufferOrder);
         var verifyMsg = new VerifyScanMessage(
             SourceMode, SorterNumber, SorterMode, VerifyDeviceId,
-            SeqNum: parsedScan.SeqNum, LabelBuffer: [.. scanned.Select(s => s.ScannedValue)]);
+            SeqNum: parsedScan.SeqNum, LabelBuffer: rawBuffer);
         var verifyFrame = verifyMsg.ToFrame();
         log.Add($"  >> IN  286 PANDA_SCAN_VERIFY   {verifyFrame.ToWire()}");
 
         var parsedVerify = VerifyScanMessage.FromFrame(PaFrame.Parse(verifyFrame.ToWire()));
-        var typed = TypeBuffer(reloaded!, parsedVerify.LabelBuffer);
+        var typed = bufferOrder.Type(parsedVerify.LabelBuffer);
         var verify = await _verify.VerifyAsync(blindLabel, typed, new VerifyOptions(), failThreshold: 3);
         log.Add($"     verify → {verify.Verify!.Outcome} ⇒ station {verify.Status}");
 
@@ -123,25 +125,30 @@ public sealed class SimHost
         return log;
     }
 
-    /// <summary>Auto-generate a verify read that matches the advised labels exactly (happy path).</summary>
-    private static ScannedLabel[] BuildMatchingScan(TransportOrder order) =>
-        [.. order.Labels.Labels.Select(l => new ScannedLabel(l.LabelType, l.Lpn))];
-
     /// <summary>
-    /// Type a positional 286 buffer using the carton's advised label order (bare-bones stand-in for the
-    /// real <c>Settings_LabelBufferOrder</c> map, which is bookmarked).
+    /// Build a raw scanner buffer aligned to the line's <see cref="LabelBufferOrder"/>: each advised label
+    /// is placed at its type's configured position; positions with no matching advised label are left empty
+    /// (a scanner slot with nothing physically read). This mirrors a fixed-slot multi-head scanner.
     /// </summary>
-    private static ScannedLabel[] TypeBuffer(TransportOrder order, IReadOnlyList<string> buffer)
+    private static string[] BuildMatchingBuffer(TransportOrder order, LabelBufferOrder bufferOrder)
     {
-        var types = order.Labels.Labels;
-        var count = Math.Min(types.Count, buffer.Count);
-        var result = new ScannedLabel[count];
-        for (var i = 0; i < count; i++)
+        var buffer = new string[bufferOrder.MaxPosition];
+        for (var i = 0; i < buffer.Length; i++)
         {
-            result[i] = new ScannedLabel(types[i].LabelType, buffer[i]);
+            buffer[i] = string.Empty;
         }
 
-        return result;
+        foreach (var pos in bufferOrder.Positions)
+        {
+            var label = order.Labels.Labels.FirstOrDefault(
+                l => string.Equals(l.LabelType, pos.LabelType, StringComparison.OrdinalIgnoreCase));
+            if (label is not null)
+            {
+                buffer[pos.Position - 1] = label.Lpn;
+            }
+        }
+
+        return buffer;
     }
 
     private void Seed()

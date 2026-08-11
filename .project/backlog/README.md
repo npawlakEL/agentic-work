@@ -74,16 +74,18 @@ per-label-type/profile) to be confirmed when scheduled.
 printed and reprint off). Model the setting seam now; implement append + reprint rules when scheduled.
 **Priority:** Medium (Phase-1 uses fixed overwrite; toggle deferred)
 
-### Scanner buffer-order parsing (delimited string -> typed scanned labels)
+### Scanner buffer-order parsing (delimited string -> typed scanned labels) — DONE 2026-08-11
 **Added:** 2026-08-11
 **Source:** User (Phase-2 verify grill)
 **Context:** Verify (msg 286) receives a **delimited multi-barcode string** from the scanner; each position
-maps to a `LabelName` via `Settings_LabelBufferOrder`. Phase-2 verify tests accept **pre-typed** scanned
-labels to focus on the compare/code logic; the position-based parser is needed for real integration.
-**Description:** Implement a `Settings_LabelBufferOrder`-driven parser that splits the raw scanner string and
-maps each slot to a `LabelType`, producing the typed scanned-label list the verify service consumes. Feed
-from the real verify message point at integration.
-**Priority:** Medium (needed for final integration; deferred from Phase-2 logic tests)
+maps to a `LabelName` via `Settings_LabelBufferOrder`. Phase-2 verify tests accepted **pre-typed** scanned
+labels; the position-based parser is needed for real integration.
+**Resolution:** Implemented `LabelBufferOrder` (+ `LabelBufferPosition`) in Core — a **per-line** position→type
+map (default 1=BlindLabel,2=Shipping,3=Content,4=Parcel) with `Type(buffer)` doing the source's
+`STRING_SPLIT`+`JOIN ON rownum=LabelNumber` (INNER JOIN, empty slots = physically-absent, skipped). Wired to
+`LineConfig.BufferOrder`; `SimHost` now types the real 286 buffer through it. Covered by `LabelBufferOrderTests`
+(15 tests) + live harness. See architecture-log 009 §8.
+**Priority:** ~~Medium~~ Done.
 
 ### BluePaw stop-line / slow-line tag (codes TBD)
 **Added:** 2026-08-11

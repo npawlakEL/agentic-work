@@ -66,8 +66,8 @@ public sealed record InductScanMessage(
 /// Message code 286 — <c>PANDA_SCAN_VERIFY</c>. Carries the verify scanner's read as a single
 /// pipe-delimited label buffer (e.g. <c>123456798|0154006001</c>). Field layout (after the code):
 /// SourceMode, SorterNumber, SorterMode, DeviceId, SeqNum, LabelBuffer, Length.
-/// Mapping buffer positions to label types (source <c>Settings_LabelBufferOrder</c>) is bookmarked; the
-/// bare-bones harness types the buffer from the carton's advised label order.
+/// Mapping buffer positions to label types uses the line's <c>LabelBufferOrder</c> (port of
+/// <c>Settings_LabelBufferOrder</c>), configurable per line.
 /// </summary>
 /// <param name="SourceMode">param02 — application database.</param>
 /// <param name="SorterNumber">param03 — sorter / lane number.</param>

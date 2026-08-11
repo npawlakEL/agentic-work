@@ -10,7 +10,8 @@ public sealed class LineConfig
         string lineId,
         IEnumerable<PrinterConfig> printers,
         bool loadBalance = true,
-        string? placeId = null)
+        string? placeId = null,
+        LabelBufferOrder? bufferOrder = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentNullException.ThrowIfNull(printers);
@@ -19,6 +20,7 @@ public sealed class LineConfig
         Printers = [.. printers];
         LoadBalance = loadBalance;
         PlaceId = placeId;
+        BufferOrder = bufferOrder ?? LabelBufferOrder.Default;
     }
 
     public string LineId { get; }
@@ -27,6 +29,9 @@ public sealed class LineConfig
 
     /// <summary>When true, distribute by least-recently-printed; when false, first-configured wins.</summary>
     public bool LoadBalance { get; }
+
+    /// <summary>Per-line scanner-buffer layout (position → label type) used to type verify reads.</summary>
+    public LabelBufferOrder BufferOrder { get; }
 
     public IReadOnlyList<PrinterConfig> Printers { get; }
 }
