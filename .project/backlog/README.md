@@ -73,3 +73,14 @@ per-label-type/profile) to be confirmed when scheduled.
 [Phase-1 default], (b) append + disambiguate at induct (oldest-wins unless overwrite; skip if already
 printed and reprint off). Model the setting seam now; implement append + reprint rules when scheduled.
 **Priority:** Medium (Phase-1 uses fixed overwrite; toggle deferred)
+
+### Scanner buffer-order parsing (delimited string -> typed scanned labels)
+**Added:** 2026-08-11
+**Source:** User (Phase-2 verify grill)
+**Context:** Verify (msg 286) receives a **delimited multi-barcode string** from the scanner; each position
+maps to a `LabelName` via `Settings_LabelBufferOrder`. Phase-2 verify tests accept **pre-typed** scanned
+labels to focus on the compare/code logic; the position-based parser is needed for real integration.
+**Description:** Implement a `Settings_LabelBufferOrder`-driven parser that splits the raw scanner string and
+maps each slot to a `LabelType`, producing the typed scanned-label list the verify service consumes. Feed
+from the real verify message point at integration.
+**Priority:** Medium (needed for final integration; deferred from Phase-2 logic tests)

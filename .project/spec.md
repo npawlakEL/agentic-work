@@ -106,6 +106,22 @@ Loaded by `IPandaConfigProvider`: Sim reads the JSON file directly; econtroller 
 7. `PandA.Core` + `PandA.Sim` build clean and tests pass here; `PandA.EController` present and written
    against real interfaces (compile deferred).
 
+## 7b. Phase 2 — Verify (locked 2026-08-11 grill)
+**Scope:** verify-core + verify-fail threshold. Lane routing **deferred** (folds into criteria-based
+sorting from Exol at integration). Authoritative model: architecture-log **006**.
+- **Verify-core:** compare scanned labels to the TO's expected `PandaLabelSet` (+ xref backups). Produce a
+  result carrying an **outcome enum** `{Pass, Fail, NoRead, NoData, Conflict, Ignore}` **plus label-type
+  detail** (which label, which type, which reason). The exact numeric `VerifyPass` codes (006 legend) are
+  **not** surfaced on the model now — kept in 006 for a later host/GUI telemetry mapper.
+- **Only `Pass` passes.** Any non-pass re-arms the carton to reprint (Printed=0, ActiveRecord=1 semantics).
+  `Ignore` = bypass/disabled. Missing PandaData ⇒ Fail (reject).
+- **`VerifyContentLabel=false`** ⇒ verify only Shipping/Exception types.
+- **Scanner input:** Phase-2 tests pass **pre-typed scanned labels** (`{LabelType, ScannedValue}`). The raw
+  delimited-string + `Settings_LabelBufferOrder` position parser is **bookmarked** (backlog) — needed for the
+  final integration.
+- **Fail threshold:** per-line **consecutive** fail counter; increment on non-pass, **reset on pass**; when
+  `count >= VerifyFailThreshold` raise a **pause-printer** signal (egress port deferred).
+
 ## 8. Risks / open items
 - `TuId` non-unique → active-status filtering + TO purge/aging (full purge port is later).
 - Real telegram/MP ids + printer TCP framing come from the site protocol at integration (abstracted behind
