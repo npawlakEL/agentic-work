@@ -156,13 +156,16 @@ and DynamicApplyPoint.
 ### Fire-point profile switching + host-driven ProfileName + DynamicApplyPoint
 **Added:** 2026-08-11
 **Source:** User (fire-point design conversation) + sdisp_PA2BP_SendPrinterFirePoints
+**Depends on:** Operator/GUI screens (see "GUI / operator screens" backlog item) — profile switching is a **UI**
+feature and should be built with those Blazor screens, not before.
 **Context:** This slice ships one static generic profile per line (`LineConfig.ActiveProfile`). The source and
 the domain owner describe three ways the active profile can change: (1) the operator/GUI manually switches
-which profile (or profile group / "map") is active on the line; (2) the host sends `PandaData.ProfileName`
-per carton to pattern-match the profile; (3) `sdisp_TOOL_CUSTOM_DynamicApplyPoint` adjusts the resolved
-`ApplyFirePoint` by carton size / printer orientation before the tags are written.
-**Description:** Add (a) a switchable active-profile mechanism per line (GUI/operator), (b) host-driven
-per-carton ProfileName resolution, and (c) DynamicApplyPoint adjustment. Also consider an explicit
-map→profile-group container if named maps that own groups of profiles are wanted. Design with the user first.
-**Priority:** Medium (happy path covered; switching is the next fire-point conversation)
+which profile (or profile group / "map") is active on the line — **this is UI**; (2) the host sends
+`PandaData.ProfileName` per carton to pattern-match the profile; (3) `sdisp_TOOL_CUSTOM_DynamicApplyPoint`
+adjusts the resolved `ApplyFirePoint` by carton size / printer orientation before the tags are written.
+**Description:** Add (a) a switchable active-profile mechanism per line (**GUI/operator screen** — bookmark as
+UI), (b) host-driven per-carton ProfileName resolution, and (c) DynamicApplyPoint adjustment. Also consider an
+explicit map→profile-group container if named maps that own groups of profiles are wanted. Design with the
+user first.
+**Priority:** Medium (happy path covered; switching lands with the UI work)
 
