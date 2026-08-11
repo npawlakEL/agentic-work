@@ -16,6 +16,7 @@
 - [ ] Error handling is consistent with existing patterns
 - [ ] No hardcoded values that should be configurable
 - [ ] Tests are meaningful (not just coverage padding)
+- [ ] **Code comments are present** — functions, complex logic, and non-obvious decisions must have comments explaining what/why
 
 ## Before Final Sign-off
 - [ ] All acceptance criteria from taskboard are met

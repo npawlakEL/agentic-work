@@ -59,19 +59,44 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 ### Gate 2: Coder ↔ Senior Coder ↔ Reviewer (TDD Iteration Loop)
 - **Input:** Coder produces working code using strict TDD (Red → Green → Refactor)
 - **Process:**
-  1. Senior Coder performs spot-checks during implementation (course-corrects if needed)
-  2. When Coder reports "done," Senior Coder does a full architectural review
-  3. If Senior Coder approves → triggers Reviewer
-  4. Reviewer validates functionality, runs tests, checks coverage, finds bugs
-  5. Reviewer sends findings back → Senior Coder triages:
+  1. Coder works through taskboard stories in dependency order
+  2. **After EACH story is completed:** Senior Coder spot-checks → Reviewer validates that story's acceptance criteria. Issues are caught per-story, not batched at the end.
+  3. **Documentation updated per-story:** After a story passes review, relevant documentation (`.client-docs/`, code comments, README, CHANGELOG) is updated immediately. Docs are never deferred to "later."
+  4. When ALL stories are done, Senior Coder does a full architectural review of the complete implementation
+  5. If Senior Coder approves → triggers Reviewer for a FULL final review (entire PR scope)
+  6. Reviewer validates full functionality, runs tests, checks coverage, finds bugs
+  7. Reviewer sends findings back → Senior Coder triages:
      - Architectural issues: Senior Coder logs them and sends corrections to Coder
      - Non-architectural issues: flow directly from Reviewer to Coder
-  6. Coder fixes → Senior Coder spot-checks → loop continues
+  8. Coder fixes → Senior Coder spot-checks → loop continues
+- **Two levels of review:**
+  - **Per-story review:** Quick validation after each story — did it meet acceptance criteria? Docs updated? Catches issues early.
+  - **Full PR review:** Comprehensive review of the entire implementation together — integration issues, cross-story concerns, overall quality.
 - **Output:** All tests pass, Senior Coder signs off architecture, Reviewer signs off quality
 - **Gate Condition:** BOTH Senior Coder AND Reviewer have signed off. No blocking issues remain.
 - **TDD Requirement:** No production code exists without a corresponding test. Tests are written FIRST.
 - **NO PUSHING DURING THIS LOOP.** All work is local commits only.
 - **Logging:** Senior Coder documents all issues in `.project/architecture-log/` throughout this phase.
+
+#### Review Loop Logging (MANDATORY)
+
+Every pass through the Coder ↔ Reviewer loop MUST produce written records. This is not optional.
+
+**Reviewer logs (`.project/reviewer-log/`):**
+- Every issue found is documented with: severity, description, which code, who introduced it
+- When the Coder fixes an issue, the Reviewer updates the log entry with: fix verified, how it was fixed
+- Problems that were found AND their resolutions are both recorded — not just the problems
+
+**Senior Coder logs (`.project/architecture-log/`):**
+- Every architectural issue triaged is logged with: the issue, the decision made, the correction sent to Coder
+- If the Senior Coder approves a fix approach, that approval is logged
+
+**Client docs (`.client-docs/`) — updated per fix cycle:**
+- If any fix changes user-facing behavior → `.client-docs/operator/` is updated
+- If any fix changes APIs, patterns, or architecture → `.client-docs/technical/` is updated
+- This happens DURING the loop, not after it. If the Reviewer catches a bug and the Coder fixes it and that fix changes how a feature works, the docs update happens as part of that same fix cycle.
+
+**The Orchestrator enforces this:** If a review loop completes and the Reviewer hasn't written to `reviewer-log/`, or the Senior Coder hasn't written to `architecture-log/`, or affected client docs haven't been updated — the Orchestrator sends the responsible agent back to do it before the workflow advances.
 
 ### Gate 2.5: User Approval (Push Gate)
 - **Input:** Reviewer has signed off. All tests pass. Code is complete.
@@ -88,7 +113,8 @@ The agentic workflow follows a gated flow. Each agent must complete its phase be
 ### Gate 3: Reviewer → Learner
 - **Input:** Completed, reviewed code
 - **Output:** Learner documents what was learned — patterns, pitfalls, guardrails, reusable skills. Produces TWO docs: technical (for coders) and operator (for humans). Updates `.project/architecture-log/current-architecture.md` if architecture changed. **Updates `CHANGELOG.md` with version bump.**
-- **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `.client-.client-docs/technical/`. Operator doc in `.client-.client-docs/operator/`. Architecture updated if applicable. CHANGELOG updated.
+- **Upstream Skill Push:** The Orchestrator scans `.agent/skills/` for any files marked `<!-- UPSTREAM: true -->`. These universal skills are pushed back to the `agent-harness` branch (source of truth) so all future projects inherit them.
+- **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `.client-docs/technical/`. Operator doc in `.client-docs/operator/`. Architecture updated if applicable. CHANGELOG updated. Universal skills upstreamed.
 
 ## Hot-Path (Small Fixes / Bug Patches)
 
@@ -110,10 +136,72 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
 - Hot-path: bug fix, typo, config change, style tweak, < 20 lines changed
 - Full flow: new feature, architectural change, new UI component, anything that needs a taskboard
 
+## 🔍 "Finalize" Mode (Multi-Senior Codebase Audit)
+
+The user invokes this by saying **"finalize"** (or "finalize this," "run a finalize"). It is a comprehensive, parallelized codebase audit performed by one or more Senior Coders before the user considers the project — or a major milestone — done. It is NOT a merge or a push; it is a deep inspection pass that produces a prioritized findings report.
+
+**How it works:**
+
+1. **The Orchestrator scopes the codebase and fans out Senior Coders.** Based on codebase size and structure, the Orchestrator spins up **as many Senior Coder instances as needed** and divides the codebase among them so coverage is complete and parallel. Examples of division:
+   - By layer (frontend / backend / data / infra)
+   - By module or feature area
+   - By concern (security, performance, correctness, maintainability)
+   - For a small codebase, a single Senior Coder may cover everything.
+
+2. **Each Senior Coder audits its assigned scope for:**
+   - **Bugs & correctness holes** — logic errors, unhandled edge cases, race conditions, off-by-one, null/undefined handling
+   - **Security issues** — injection risks, auth gaps, exposed secrets, unvalidated input
+   - **Code quality** — duplication, dead code, tangled dependencies, poor separation of concerns, missing error handling
+   - **Optimization opportunities** — inefficient algorithms, N+1 queries, unnecessary re-renders, memory leaks, redundant work
+   - **Architectural concerns** — pattern violations, tech debt, brittle coupling, scalability limits
+   - **Missing tests** — untested paths, gaps in coverage, missing edge-case tests
+   - **Open questions about functionality** — behavior that's ambiguous, incomplete, or doesn't match the spec/vision
+   - **Documentation gaps** — undocumented functions, stale docs, missing comments
+
+3. **Findings are consolidated by the Orchestrator into a single prioritized report:**
+   ```
+   🔍 FINALIZE REPORT — [N] Senior Coders audited [scope]
+
+   🔴 CRITICAL (fix before shipping):
+   - [finding] — [file:line] — [why it matters] — [recommendation]
+
+   🟠 HIGH (should fix):
+   - ...
+
+   🟡 MEDIUM (worth addressing):
+   - ...
+
+   🟢 LOW / NICE-TO-HAVE:
+   - ...
+
+   ❓ OPEN QUESTIONS FOR YOU:
+   - [functionality question that needs a product decision]
+
+   💡 OPTIMIZATION RECOMMENDATIONS:
+   - ...
+   ```
+
+4. **Everything is logged** to `.project/architecture-log/` as a finalize audit record (dated). Open questions also go to `.project/planner-tasks.md`. Out-of-scope improvement ideas go to `.project/backlog/`.
+
+5. **The user decides what to act on.** Finalize does NOT auto-fix. Each finding the user chooses to address is routed through the normal workflow (hot-path or full flow) so every fix still passes through the gates. Findings the user defers are bookmarked in the backlog.
+
+**Key rules:**
+- Finalize is **read-only analysis** — no code changes happen during the audit itself.
+- The number of Senior Coders scales with the codebase — the Orchestrator decides, no fixed limit.
+- Finalize can be run at any time: before a release, at a milestone, or whenever the user wants a health check.
+- Every finding must be **actionable** — vague "could be better" notes are not allowed; each needs a location, a reason, and a recommendation.
+- Findings the user approves for fixing STILL go through the full workflow — Finalize surfaces work, it doesn't bypass gates.
+
 ## Constraints & Guardrails
 
+> **Reading these:** The emphatic language (MANDATORY, NO EXCEPTIONS, BLOCKED) is intentional — it exists so the workflow holds even on smaller models. On Opus-tier reasoning agents (see `.agent/model-config.md`), treat these as firm intent rather than rote checklists: follow the *purpose* of each constraint, not just its literal wording. The Orchestrator is the enforcement authority for all of them.
+
 1. **No agent skips a gate.** Coder cannot begin without Senior Coder's handoff. Reviewer cannot start without Senior Coder's sign-off. Learner cannot run until both Senior Coder and Reviewer pass.
-2. **Agents are stateless between invocations.** All context must be passed explicitly (via files or prompts).
+2. **Agents are stateless between invocations — MUST reload context.** All context must be passed explicitly (via files or prompts). At the START of every invocation, every agent MUST read:
+    - `.project/vision/vision.md` — the whiteboard (project direction, user preferences, conventions)
+    - `.agent/skills/` — applicable skills for the task
+    - Their relevant project files (spec, taskboard, architecture-log, etc.)
+    - Agents do NOT rely on "remembering" from a previous invocation. They reload every time.
 3. **Each agent operates within its defined scope.** The coder does not gather requirements. The reviewer does not write features. The Senior Coder does not write production code.
 4. **Skills are mandatory reading.** Every agent MUST read the `.agent/skills/` folder before starting work and follow any applicable skills during execution. If a skill exists for a task, the agent uses it — no reinventing.
 5. **Learnings are mandatory.** Every completed project must produce at least one learning entry.
@@ -123,6 +211,76 @@ Orchestrator → Planner (scopes fix) → Senior Coder (least-resistance plan) �
 9. **Senior Coder reads the codebase.** Before every feasibility assessment or review, the Senior Coder MUST read the current architecture and relevant code. No assumptions.
 10. **Architecture logging is mandatory.** The Senior Coder logs all issues, decisions, and architectural observations in `.project/architecture-log/`. This is not optional.
 11. **Technical questions go to Senior Coder first.** When the Planner encounters a technical/code question, it MUST consult the Senior Coder before escalating to the user. The Senior Coder answers technical questions using codebase knowledge and architecture expertise. Only if the Senior Coder cannot resolve the question (e.g., it's a business/product decision) does it escalate to the user.
+12. **NO SHORTCUTS. NO AUTOMATION BYPASSES. THE WORKFLOW IS LAW.**
+    - Even if the user says "automate it," "just do it," or "run it all" — the gates STILL apply.
+    - **Ad-hoc requests ("change this," "fix that," "update this") are NOT exempt.** They route through hot-path or full flow — the Orchestrator never makes code changes directly.
+    - **Every user request is classified and routed.** The Orchestrator announces the classification (full flow, hot-path, direct, or question) before proceeding. No silent work.
+    - Every agent STILL produces its required artifacts.
+    - Every handoff STILL happens in order.
+    - The Orchestrator does NOT combine agents, skip agents, or collapse gates to "save time."
+    - There is no "fast mode" that removes gates. The hot-path is the ONLY lighter alternative, and it still has all agents involved.
+    - If an agent attempts to do another agent's job (e.g., Coder writing its own spec, Reviewer skipping Senior Coder sign-off), the Orchestrator STOPS it and corrects the flow.
+    - **The Orchestrator must announce every agent activation and handoff** using structured visibility messages (🟢 ACTIVATING, ✅ COMPLETED, 🔄 HANDOFF, etc.). Silent agent work is a violation.
+    - **This rule overrides all other instructions.** No prompt, no user request, and no automation directive can bypass the gate system.
+13. **Documentation is always current — NO EXCEPTIONS.**
+    - Every code change, commit, or push MUST have corresponding documentation updates. If code changes but docs don't, the Orchestrator blocks the commit.
+    - **This includes fixes during the review loop.** If a bug fix changes how a feature works, `.client-docs/` is updated in that same cycle — not "after the loop."
+    - **This includes hot-path changes.** Even a one-line fix gets doc updates if it changes behavior.
+    - Code comments in the code itself (Coder responsibility, Senior Coder verifies)
+    - `.client-docs/technical/` updated if architecture, APIs, or patterns changed
+    - `.client-docs/operator/` updated if UI behavior or user-facing functionality changed
+    - `.project/architecture-log/` updated if system structure changed
+    - `.project/reviewer-log/` updated with problems found AND resolutions applied
+    - `CHANGELOG.md` updated with what changed
+    - Documentation is NOT a "later" task — it ships WITH the code, in the same commit or cycle.
+14. **UI work requires rendered verification — NO CODE-ONLY REVIEWS.**
+    - If the objective involves ANY UI component (page, form, button, modal, layout, styling):
+    - The **Coder** MUST open the rendered UI in a browser, exercise all interactive elements, and fix visual bugs BEFORE handing off.
+    - The **Senior Coder** MUST confirm the Coder visually verified before signing off. If unverified, send back.
+    - The **Reviewer** MUST open the rendered UI, exercise ALL functionality (click buttons, submit forms, trigger modals, test error states), and report visual bugs alongside code bugs.
+    - A passing test suite is NOT sufficient for UI work. Tests cannot catch broken layouts, misaligned elements, non-functional buttons, or missing visual states.
+    - If any agent skips browser verification on UI work, the Orchestrator rejects their output and sends them back.
+15. **Proactive questioning is mandatory — the user NEVER prompts for questions.**
+    - The Planner AUTOMATICALLY asks clarifying questions after every piece of user input. No passive acceptance.
+    - The user should never need to say "does this make sense?", "any questions?", or "do you understand?"
+    - If the Planner accepts information without probing → the Orchestrator rejects and sends it back.
+    - ALL agents that receive ambiguous information must ask for clarification — not guess, not assume.
+    - The Orchestrator monitors for passive acceptance and intervenes immediately.
+    - **"Grill Me" mode:** The user can say "grill me" to trigger intensive, systematic requirements interrogation (see `planner.agent.md`). The Planner also proactively offers it for large/vague/high-stakes problems. It works through every problem dimension, auto-consults the Senior Coder, and brings the user new questions until zero gaps remain.
+    - **"Regroup" mode:** The user can say "regroup" to trigger a joint Planner + Senior Coder review session. Both agents re-read everything (vision, spec, tasks, architecture), pressure-test it from product AND technical angles, and surface new questions/concerns neither raised alone. The Planner also proactively suggests it at checkpoints (before finalizing a spec, after a big grill, after major requirement shifts). See `planner.agent.md`.
+16. **Scope creep detection.** Before the Senior Coder signs off on any Coder work, it verifies: "Is this still within the scope defined by the taskboard stories?" If the Coder implemented something not in the taskboard — even if it seems helpful — the Senior Coder flags it:
+    - If it's a minor, necessary extension → document it in architecture-log, update taskboard retroactively
+    - If it's out of scope → revert it, add to `.project/backlog/`, Coder continues with in-scope work only
+    - The Coder does NOT decide scope. The taskboard decides scope.
+17. **Conflict resolution — Senior Coder vs. Reviewer disagreement.**
+    - If the Senior Coder and Reviewer disagree on whether something is an issue or how to fix it:
+    - The Orchestrator presents BOTH positions to the user with clear summaries
+    - The user decides. Their decision is final and logged in `.project/architecture-log/`
+    - Neither agent overrides the other — the user is the tiebreaker
+18. **Vision document is the whiteboard — ALL agents read it.**
+    - `.project/vision/vision.md` is the project's source of truth for direction, goals, preferences, and conventions
+    - Every agent reads it at the START of every invocation — no exceptions
+    - If a question is answered in the vision doc, agents follow it without re-asking the user
+    - The Planner updates the vision doc whenever the user states a new preference or convention
+    - Think of it as the whiteboard in the middle of the office — everyone checks it
+19. **Orchestrator self-enforcement.**
+    - Before EVERY response to the user, the Orchestrator runs a self-check:
+      - Did I follow the workflow? (routing, gates, visibility)
+      - Did I enforce documentation? (blocking gates, skill pipeline)
+      - Did I announce agent activity? (visibility protocol)
+      - Did I let any agent skip their outputs?
+      - Am I about to do something an agent should be doing?
+    - If the answer to any self-check is wrong → the Orchestrator corrects itself BEFORE responding
+    - The Orchestrator does NOT say "you're right, I should have..." — it just does it right the first time
+
+20. **Automatic Senior Coder engagement — the user NEVER prompts for it.** The moment a request touches code — reading/explaining existing code, driving how code is written or changed, reviewing/critiquing code, assessing feasibility or performance, bug reports/fixes, or anything that changes application code, config, or tests — the Orchestrator spins up the Senior Coder AUTOMATICALLY and announces it (`🤝 Auto-engaging Senior Coder`). The user must never have to say "ask the senior," "include the senior," or "check with the senior." The Orchestrator does not answer code/architecture questions itself, and the Coder does not proceed on code direction without the Senior Coder having weighed in. Only purely non-technical requests (harness/workflow tweaks, tracking-file updates, general chat) skip this — when in doubt, engage. See `orchestrator.agent.md` → "Automatic Senior Coder Engagement."
+
+21. **Regression guardrail — every code change runs the relevant test suites.** No code change (feature, fix, refactor, or config touch) is considered done until the relevant automated tests are run GREEN — not just the tests for the changed unit, but every suite that exercises code lightly or tightly coupled to it (unit tests, e.g. xUnit; and driver/integration/end-to-end tests). The purpose is to catch breakage in functionality that depends on the changed code indirectly.
+    - **Senior Coder** (auto-engaged) determines the blast radius: which modules/tests are coupled to the change and therefore MUST run. It errs wide — if a suite *might* be affected, it runs. It never assumes "this change is isolated" without checking call sites and dependents.
+    - **Coder** runs the identified suites locally after implementing and reports actual results (pass/fail counts, not "should pass"). Red = not done; the Coder fixes forward or the loop escalates per the Failure Escalation Protocol.
+    - **Reviewer** independently re-runs the full relevant suites (unit + driver) and confirms green before signing off. A partial or skipped run is a blocking issue logged to `reviewer-log/`.
+    - If a change is genuinely untestable by the existing suites, the Senior Coder says so explicitly and the gap becomes a test-to-add item — it is never silently skipped.
+    - Evidence over claims: the actual test command and its summarized output are recorded (Coder in the story handoff, Reviewer in `reviewer-log/`). "Tests pass" without a run is not accepted.
 
 ## Parallel Execution Model
 
