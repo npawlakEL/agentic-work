@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\PandA.Core\PandA.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -6,3 +6,8 @@ coverage/
 *.db-wal
 .env
 .env.local
+
+# .NET
+[Bb]in/
+[Oo]bj/
+*.user

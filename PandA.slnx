@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PandA.Core/PandA.Core.csproj" />
+    <Project Path="src/PandA.Sim/PandA.Sim.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PandA.Tests/PandA.Tests.csproj" />
+  </Folder>
+</Solution>
