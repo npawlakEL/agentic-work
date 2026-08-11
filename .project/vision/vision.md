@@ -53,32 +53,39 @@ _(Draft — to refine after we scope Phase 1.)_
 - **Target stack:** econtroller conventions — .NET 9 / C# 13, EF Core code-first, Blazor Server plugins,
   xUnit v3 tests. Prefer idiomatic econtroller patterns over reproducing SQL structure.
 
-## Integration model (RESOLVED — see architecture-log/002)
+## Integration model (RESOLVED — see architecture-log/002 + decision-002)
 
-PandA logic → C# classes implementing `IMfcAction`; each `sdisp_BP2PA_*` entry proc → a method. Wired to
-print-and-apply **message points** via per-project `MfcAction.json` (Mp + TelegramType + TypeName +
-MethodName + ServiceValues, sequenced). PandA tables via persistent-tables/EF; TU data via
-`trans.ApplyExtension<PandaData>`; outbound (print/PLC/host) via `ITelegramOutbox<T>`. Business logic
-(the SP bodies) → C# services; actions stay thin.
+PandA logic → C# classes implementing `IMfcAction`; entry points → methods wired to print-and-apply
+**message points** via per-project `MfcAction.json`. **Architecture = ports-and-adapters** (decision-002):
+- **`PandA.Core`** — pure domain + services + config model, zero econtroller dependency (compiles/tests here).
+- **`PandA.Sim`** — simulated backend adapter for standalone end-to-end validation.
+- **`PandA.EController`** — thin adapter (actions, config loader, outbox wiring, TU-extension mapping),
+  written against real interfaces, compiled at integration.
+- Carton = **`MfcTransportOrder`**; `TuId` = **blind label**; per-carton data via **TU extensions**
+  (persisted through `DynamicField`). Config = **JSON files** via EffortlessConfiguration (NOT a config DB);
+  DB only for runtime host data. Outbound via an `IPrinterGateway` port → `ITelegramOutbox` at integration.
+  Actions stay thin; SP bodies → C# services.
 
-## Phase 1 (LOCKED) — proof-of-pattern vertical slice
+## Phase 1 (LOCKED) — proof-of-pattern vertical slice (see decision-002 + spec.md)
 
-**Scope:** induct → lookup carton → pick printer → print (happy path), **backend-only** (no operator GUI).
-Exercises every layer: `MfcAction.json` → `PandaActions.ScanInduct/SendPrintCommand` → PandA EF/persistent
-tables → TU extension data → `ITelegramOutbox` (printer outbound **stubbed**).
+**Scope:** **advice → induct → pick printer → send ZPL**, backend-only. The host provides ready ZPL, so
+Phase 1 is a **pass-through** (label-template→ZPL engine is out of scope for now).
+- **MP1 label-advice (host inbound):** blind label + typed ZPL set → creates TO shell (`TuId`=blind label,
+  status `ADVISED`) + stores a `PandaLabelSet` extension (`[{ LabelType, Lpn, Zpl }]`).
+- **MP2 induct scan:** blind label → match TO by `TuId` → pick printer(s) by matching each label's
+  `LabelType` to the printer `LabelMap` → emit ZPL via `IPrinterGateway`.
+- **Done bar:** in the Sim, advice + induct yields correct ZPL to the correctly-matched printer(s),
+  proven by unit + integration tests (TDD).
 
-**Config ported in Phase 1** (see architecture-log/decision-001) — groups A–D, ~16 tables:
-Settings; Settings_CartonStatuses; LabelTypes/LabelDef/LabelPrintLocations; LaneDef; PandAState/PrinterState;
-PandAs/PandADetails; Printers/PrinterDetails/PrinterFirePoints; LabelProfileHeader/Detail/Map,
-LabelTemplates, Settings_DefaultAttributes, Settings_LabelBufferOrder.
+**Config for Phase 1:** `PandaLine.json` (per-line: printers + LabelMap + load-balance) is what Phase 1
+needs; labeling/profile config deferred (host sends ZPL).
 
-**Bookmarked (E):** Wave/WaveRange + wave lifecycle; operator GUI. (backlog)
-**Architectural replacement — NOT ported as data (F & G):** SQL eventing plumbing (EventStoredProcedureList,
-CreateSystemMessages, EventDescriptions) → native logging/eventing; synonyms/SynBuilder → transport/connector
-config. Their behavior is re-expressed natively, not carried over.
+**Bookmarked / deferred:** Wave/WaveRange + wave lifecycle; operator GUI; label-template→ZPL engine;
+verify + lane routing; real TCP/PLC/host connectors; SiteBuilder UI.
+**Architectural replacement (not ported as data):** SQL eventing plumbing → native logging/eventing;
+synonyms/SynBuilder → transport/connector config.
 
-## Open objective questions (being resolved with user)
+## Status
 
-1. DB engine target — SQL Server only, or cross-DB (Postgres/SQLite) like the rest of econtroller?
-2. Site/config tooling (`SiteBuilder`) — port the commissioning CRUD or replace with econtroller-native config?
-3. Confirm ready to move to Gate 1 (Planner writes the Phase-1 spec).
+Discovery + design pressure-testing COMPLETE (decision-002 accepted). Next: Planner Phase-1 spec (`spec.md`)
+→ user approval (Gate 1) → TDD implementation of `PandA.Core` + `PandA.Sim`.
