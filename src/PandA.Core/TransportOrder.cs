@@ -5,20 +5,36 @@ public enum TransportOrderStatus
     /// <summary>Advised by the host; label set stored, awaiting induct scan (source PandaData/ADVISED).</summary>
     Advised = 0,
 
-    /// <summary>Labels have been dispatched to printers.</summary>
+    /// <summary>Every label was dispatched to printers in a full run.</summary>
     Printed = 1,
 
     /// <summary>Labels were scanned and verified OK; the carton may proceed (source ActiveRecord=0).</summary>
     Verified = 2,
+
+    /// <summary>
+    /// Verify failed. The carton is held for manual intervention; it is NOT automatically made printable
+    /// again (decision-003 — corrects the source auto-re-arm hole).
+    /// </summary>
+    HeldForIntervention = 3,
+
+    /// <summary>
+    /// An operator has authorized a reprint for this carton (per-carton web-screen override). Permits
+    /// exactly one further full print run, after which the authorization is consumed.
+    /// </summary>
+    ReprintAuthorized = 4,
 }
 
 /// <summary>
 /// The carton, modelled as a Transport Order (decision-002): keyed by the blind label (<see cref="TuId"/>),
-/// carrying the typed <see cref="PandaLabelSet"/> as an extension. Backend-agnostic; the econtroller adapter
-/// maps this onto MfcTransportOrder + DynamicField at integration.
+/// carrying the typed <see cref="PandaLabelSet"/> as an extension. Reprint policy per decision-003:
+/// <see cref="PrintCount"/> is a monotonic run counter, verify failures hold for manual intervention, and
+/// a reprint requires an explicit operator authorization. Backend-agnostic; the econtroller adapter maps
+/// this onto MfcTransportOrder + DynamicField at integration.
 /// </summary>
 public sealed class TransportOrder
 {
+    private Dictionary<string, LabelPrintState> _printStates;
+
     public TransportOrder(string tuId, string lineId, PandaLabelSet labels, DateTimeOffset createdAt)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tuId);
@@ -30,6 +46,7 @@ public sealed class TransportOrder
         Labels = labels;
         CreatedAt = createdAt;
         Status = TransportOrderStatus.Advised;
+        _printStates = BuildPrintStates(labels);
     }
 
     /// <summary>The blind label / transport-unit id used to match advice with the induct scan.</summary>
@@ -43,9 +60,36 @@ public sealed class TransportOrder
 
     public DateTimeOffset CreatedAt { get; private set; }
 
-    public DateTimeOffset? PrintedAt { get; private set; }
+    /// <summary>Number of completed (full) print runs this carton has been through (source Printed, monotonic).</summary>
+    public int PrintCount { get; private set; }
+
+    public DateTimeOffset? FirstPrintedAt { get; private set; }
+
+    public DateTimeOffset? LastPrintedAt { get; private set; }
 
     public DateTimeOffset? VerifiedAt { get; private set; }
+
+    public DateTimeOffset? VerifyFailedAt { get; private set; }
+
+    /// <summary>Reason recorded when an operator authorized a reprint (audit).</summary>
+    public string? ReprintAuthorizationReason { get; private set; }
+
+    /// <summary>Per-label-type print outcome for the current run.</summary>
+    public IReadOnlyCollection<LabelPrintState> PrintStates => _printStates.Values;
+
+    public LabelPrintState PrintStateFor(string labelType)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(labelType);
+        return _printStates[labelType];
+    }
+
+    /// <summary>
+    /// True when the carton may be printed now: never printed and freshly advised, or an operator has
+    /// authorized a reprint (decision-003). A held/printed/verified carton without authorization may not.
+    /// </summary>
+    public bool CanPrint =>
+        (PrintCount == 0 && Status == TransportOrderStatus.Advised)
+        || Status == TransportOrderStatus.ReprintAuthorized;
 
     /// <summary>Replace the advised label set (Phase-1 duplicate-advice = overwrite / last-wins; spec §6a).</summary>
     public void OverwriteAdvice(string lineId, PandaLabelSet labels, DateTimeOffset advisedAt)
@@ -57,14 +101,35 @@ public sealed class TransportOrder
         Labels = labels;
         CreatedAt = advisedAt;
         Status = TransportOrderStatus.Advised;
-        PrintedAt = null;
+        PrintCount = 0;
+        FirstPrintedAt = null;
+        LastPrintedAt = null;
         VerifiedAt = null;
+        VerifyFailedAt = null;
+        ReprintAuthorizationReason = null;
+        _printStates = BuildPrintStates(labels);
     }
 
-    public void MarkPrinted(DateTimeOffset printedAt)
+    /// <summary>Record that a single label type was dispatched to a printer (partial-safe, no counter change).</summary>
+    public void MarkLabelPrinted(string labelType, string printerId, DateTimeOffset at)
     {
+        if (_printStates.TryGetValue(labelType, out var state))
+        {
+            state.MarkPrinted(printerId, at);
+        }
+    }
+
+    /// <summary>
+    /// Complete a full print run: every label printed. Increments the monotonic <see cref="PrintCount"/>,
+    /// stamps timestamps, and consumes any reprint authorization. Only call when the run printed all labels.
+    /// </summary>
+    public void CompletePrintRun(DateTimeOffset at)
+    {
+        PrintCount++;
+        LastPrintedAt = at;
+        FirstPrintedAt ??= at;
         Status = TransportOrderStatus.Printed;
-        PrintedAt = printedAt;
+        ReprintAuthorizationReason = null;
     }
 
     /// <summary>Verify passed: carton is complete and may proceed (source ActiveRecord=0, VerifyTime set).</summary>
@@ -75,13 +140,31 @@ public sealed class TransportOrder
     }
 
     /// <summary>
-    /// Verify failed: re-arm the carton so it can be reprinted and re-verified (source Printed=0,
-    /// ActiveRecord=1). The advised label set is preserved.
+    /// Verify failed: hold the carton for manual intervention. The carton is NOT re-armed automatically
+    /// (decision-003). The advised set and print history are preserved.
     /// </summary>
-    public void ReArmForReprint()
+    public void MarkVerifyFailed(DateTimeOffset failedAt)
     {
-        Status = TransportOrderStatus.Advised;
-        PrintedAt = null;
-        VerifiedAt = null;
+        Status = TransportOrderStatus.HeldForIntervention;
+        VerifyFailedAt = failedAt;
     }
+
+    /// <summary>
+    /// Operator authorization to reprint this carton (per-carton web-screen override). Enables exactly one
+    /// further full print run. Never called automatically; does not reset <see cref="PrintCount"/>.
+    /// </summary>
+    public void AuthorizeReprint(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        Status = TransportOrderStatus.ReprintAuthorized;
+        ReprintAuthorizationReason = reason;
+        foreach (var state in _printStates.Values)
+        {
+            state.Reset();
+        }
+    }
+
+    private static Dictionary<string, LabelPrintState> BuildPrintStates(PandaLabelSet labels) =>
+        labels.DistinctLabelTypes()
+            .ToDictionary(t => t, t => new LabelPrintState(t), StringComparer.OrdinalIgnoreCase);
 }

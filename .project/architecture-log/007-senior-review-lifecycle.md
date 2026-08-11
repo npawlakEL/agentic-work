@@ -18,24 +18,31 @@ verify → threshold). **Result: sound.** One lifecycle gap found and closed (ve
    tracker were pure/standalone — nothing looked up the TO at the verify station, fed the threshold
    counter, or advanced the carton. Added **`VerifyStationService`** (MP286 analogue of `InductService`):
    lookup active TO → verify → threshold register → **pass/bypass ⇒ `MarkVerified`**, **fail ⇒
-   `ReArmForReprint`** (source Printed=0/ActiveRecord=1). Added `TransportOrderStatus.Verified`,
-   `VerifiedAt`, `MarkVerified`, `ReArmForReprint`.
-3. **Re-arm closes the loop.** A failed carton returns to `Advised`/`PrintedAt=null`, so `InductService`
-   can reprint it and it can be re-verified — proven end-to-end.
+   `MarkVerifyFailed` (HeldForIntervention)**. See **decision-003**: a failed carton is **not** auto-re-armed
+   (that corrects a source hole where `VerifyLabel` set `Printed=0`, defeating the reprint gate).
+   `TransportOrder` carries a monotonic **`PrintCount`**, per-label-type print state, and the states
+   `Printed`/`Verified`/`HeldForIntervention`/`ReprintAuthorized`.
+3. **Reprint is operator-gated, not automatic.** A held carton returns to printable only via
+   `AuthorizeReprint` (per-carton web-screen override). `InductService` gates on `CanPrint`, counts only
+   **full** runs, and increments `PrintCount` (1→2…); an unauthorized reprint yields `InductStatus.NoReprint`.
 4. **Bypass semantics correct.** `Ignore` (verify disabled + bypass) proceeds and does **not** increment
    the fail streak; a hard-disabled non-bypass carton fails.
 5. **Threshold is per-line and consecutive.** A pass resets the streak; the pause signal is surfaced as a
    flag (`PrinterPaused`) — egress deferred to a connector (see BluePaw backlog item).
 
-## End-to-end coverage added (`LifecycleEndToEndTests`, 6 tests, all green)
+## End-to-end coverage added (`LifecycleEndToEndTests`, all green)
 - Happy path advise→induct→verify pass → carton `Verified`.
-- Mismatch → re-arm → reprint → re-verify pass (full failure-recovery loop).
+- Mismatch → **held for intervention** → plain re-induct **blocked** (`NoReprint`).
+- Operator authorizes reprint → exactly one more full run (`PrintCount 1→2`) → re-verify pass; authorization
+  consumed (next blind re-induct blocked again).
 - Consecutive failures across cartons trip the printer-pause threshold.
 - Bypass completes without failing the threshold.
 - Verify on an unknown blind label → `NoActiveOrder`.
 - Multi-type carton (Shipping/Content/Parcel) prints all then verifies all.
 
-**Suite total: 51 tests green.**
+Plus `TransportOrderTests` (lifecycle/counter transitions) and `InductServiceTests` reprint-gate cases.
+
+**Suite total: 64 tests green.**
 
 ## Still deferred (unchanged, tracked in backlog)
 - `PandA.EController` adapter + real telegram/MP codes (integration).

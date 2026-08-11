@@ -95,4 +95,74 @@ public sealed class InductServiceTests
         Assert.Equal("P1", _gateway.Jobs[0].PrinterId);
         Assert.Equal("P2", _gateway.Jobs[1].PrinterId);
     }
+
+    [Fact]
+    public async Task Induct_FullPrint_SetsPrintCountToOne_AndRecordsPerLabelState()
+    {
+        _lines.Add(new LineConfig("L1",
+        [
+            Printer("Ship1", ["Shipping"], 0),
+            Printer("Cont1", ["Content"], 1),
+        ]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping", "Content"));
+
+        await _induct.InductAsync("L1", "BLIND1");
+
+        var stored = await _store.FindActiveByTuIdAsync("BLIND1");
+        Assert.Equal(1, stored!.PrintCount);
+        Assert.Equal(TransportOrderStatus.Printed, stored.Status);
+        Assert.True(stored.PrintStateFor("Shipping").Printed);
+        Assert.Equal("Ship1", stored.PrintStateFor("Shipping").PrinterId);
+        Assert.True(stored.PrintStateFor("Content").Printed);
+    }
+
+    [Fact]
+    public async Task Induct_PartialPrint_DoesNotCount_NorMarkPrinted()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping", "Content")); // no Content printer
+
+        var result = await _induct.InductAsync("L1", "BLIND1");
+
+        Assert.Equal(InductStatus.PartiallyPrinted, result.Status);
+        var stored = await _store.FindActiveByTuIdAsync("BLIND1");
+        Assert.Equal(0, stored!.PrintCount); // partial run does not count
+        Assert.Equal(TransportOrderStatus.Advised, stored.Status);
+        Assert.True(stored.PrintStateFor("Shipping").Printed);
+        Assert.False(stored.PrintStateFor("Content").Printed);
+    }
+
+    [Fact]
+    public async Task Induct_AlreadyPrinted_WithoutAuthorization_IsBlockedAsNoReprint()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+        await _induct.InductAsync("L1", "BLIND1"); // PrintCount → 1
+
+        var second = await _induct.InductAsync("L1", "BLIND1");
+
+        Assert.Equal(InductStatus.NoReprint, second.Status);
+        Assert.Single(_gateway.Jobs); // nothing re-sent
+        var stored = await _store.FindActiveByTuIdAsync("BLIND1");
+        Assert.Equal(1, stored!.PrintCount);
+    }
+
+    [Fact]
+    public async Task Induct_AfterOperatorAuthorization_ReprintsAndIncrementsToTwo()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+        await _induct.InductAsync("L1", "BLIND1");
+
+        var order = await _store.FindActiveByTuIdAsync("BLIND1");
+        order!.AuthorizeReprint("relabel");
+        await _store.UpsertAsync(order);
+
+        var reprint = await _induct.InductAsync("L1", "BLIND1");
+
+        Assert.Equal(InductStatus.Printed, reprint.Status);
+        var stored = await _store.FindActiveByTuIdAsync("BLIND1");
+        Assert.Equal(2, stored!.PrintCount);
+        Assert.Equal(2, _gateway.Jobs.Count);
+    }
 }

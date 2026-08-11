@@ -6,8 +6,8 @@ public enum VerifyStationStatus
     /// <summary>Verify passed (or was bypassed); the carton is marked verified and may proceed.</summary>
     Verified = 0,
 
-    /// <summary>Verify failed; the carton was re-armed for reprint/re-verify.</summary>
-    ReArmed = 1,
+    /// <summary>Verify failed; the carton is held for manual intervention (decision-003; no auto re-arm).</summary>
+    HeldForIntervention = 1,
 
     /// <summary>No active transport order matched the scanned blind label.</summary>
     NoActiveOrder = 2,

@@ -69,28 +69,53 @@ public sealed class LifecycleEndToEndTests
     }
 
     [Fact]
-    public async Task Mismatch_ReArmsCarton_ThenReprintAndReverifyPasses()
+    public async Task Mismatch_HoldsCartonForIntervention_AndBlocksReprintUntilAuthorized()
     {
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         await _induct.InductAsync("L1", "BLIND1");
 
-        // Operator applied the wrong label → verify fails and the carton is re-armed.
+        // Operator applied the wrong label → verify fails → carton is HELD (no auto re-arm).
         var firstVerify = await _verify.VerifyAsync(
             "BLIND1", Scan(("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 3);
 
-        Assert.Equal(VerifyStationStatus.ReArmed, firstVerify.Status);
-        var reArmed = await _store.FindActiveByTuIdAsync("BLIND1");
-        Assert.Equal(TransportOrderStatus.Advised, reArmed!.Status);
-        Assert.Null(reArmed.PrintedAt);
+        Assert.Equal(VerifyStationStatus.HeldForIntervention, firstVerify.Status);
+        var held = await _store.FindActiveByTuIdAsync("BLIND1");
+        Assert.Equal(TransportOrderStatus.HeldForIntervention, held!.Status);
+        Assert.Equal(1, held.PrintCount);
 
-        // Re-armed carton can be re-inducted (reprint) and re-verified correctly.
+        // A plain re-induct must NOT reprint — reprint policy blocks it.
+        var blocked = await _induct.InductAsync("L1", "BLIND1");
+        Assert.Equal(InductStatus.NoReprint, blocked.Status);
+        Assert.Single(_gateway.Jobs); // still only the original print
+    }
+
+    [Fact]
+    public async Task OperatorAuthorizedReprint_AllowsExactlyOneMoreRun_ThenReverifyPasses()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
+        await _induct.InductAsync("L1", "BLIND1");
+        await _verify.VerifyAsync("BLIND1", Scan(("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 3);
+
+        // Operator intervenes on the web screen: authorize a reprint for this carton.
+        var held = await _store.FindActiveByTuIdAsync("BLIND1");
+        held!.AuthorizeReprint("operator relabel");
+        await _store.UpsertAsync(held);
+
+        // Now a re-induct is permitted → second full run (counter 1 → 2).
         var reprint = await _induct.InductAsync("L1", "BLIND1");
         Assert.Equal(InductStatus.Printed, reprint.Status);
+        var reprinted = await _store.FindActiveByTuIdAsync("BLIND1");
+        Assert.Equal(2, reprinted!.PrintCount);
 
+        // Authorization is consumed: another blind re-induct is blocked again.
+        var blockedAgain = await _induct.InductAsync("L1", "BLIND1");
+        Assert.Equal(InductStatus.NoReprint, blockedAgain.Status);
+
+        // Re-verify correctly → carton passes.
         var secondVerify = await _verify.VerifyAsync(
             "BLIND1", Scan(("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 3);
-
         Assert.Equal(VerifyStationStatus.Verified, secondVerify.Status);
         Assert.Equal(0, secondVerify.ConsecutiveFailures); // pass cleared the streak
     }

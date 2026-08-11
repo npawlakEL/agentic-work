@@ -94,3 +94,25 @@ tag values/telegram codes are **not yet known** and need to be captured from the
 verify-threshold printer-pause signal. Likely a small `ILineControl` port emitting the BluePaw command.
 Related to the shutdown / slow-down behavior noted in architecture-log 005 (LaneEval spare logic).
 **Priority:** Medium (blocked on codes)
+
+### Operator reprint authorization (web-screen action)
+**Added:** 2026-08-11
+**Source:** User (decision-003)
+**Context:** A verify-failed carton is HeldForIntervention and cannot reprint automatically. The operator
+manually authorizes a reprint per carton on the web screen (source sdisp_GUI_SetPrintedFlag / per-carton
+reprint override). Core exposes TransportOrder.AuthorizeReprint(reason); the operator-facing GUI action
++ audit is not built yet.
+**Description:** Build the operator web action (+ permissions/audit) that calls AuthorizeReprint for a
+carton, and surface held cartons for intervention. Also consider a reprint-only-the-missing-labels flow,
+enabled by the per-label print state now tracked on TransportOrder.
+**Priority:** High (operational; part of operator GUI)
+
+### Global "Reprint Labels" allow-all setting
+**Added:** 2026-08-11
+**Source:** Settings RecID 17 (default 0)
+**Context:** The source setting "Reprint Labels" permits reprinting even after successful verify when ON.
+Core currently models only the per-carton operator authorization (the emphasized manual-intervention path);
+the global allow-all bypass is not wired into the induct gate yet.
+**Description:** When scheduled, plumb a line/global ReprintLabels flag into the induct reprint gate so that
+ON allows reprints without per-carton authorization. Default OFF preserves current behavior.
+**Priority:** Low (default-off; per-carton path covers the primary workflow)

@@ -68,13 +68,14 @@ public sealed class VerifyStationService : IVerifyStationService
         }
         else
         {
-            order.ReArmForReprint();
+            // Decision-003: no auto re-arm. Hold the carton for manual intervention.
+            order.MarkVerifyFailed(_clock.UtcNow);
         }
 
         await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
 
         return new VerifyStationResult(
-            proceed ? VerifyStationStatus.Verified : VerifyStationStatus.ReArmed,
+            proceed ? VerifyStationStatus.Verified : VerifyStationStatus.HeldForIntervention,
             verify,
             threshold.PausePrinter,
             threshold.ConsecutiveFailures);

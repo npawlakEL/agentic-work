@@ -16,6 +16,12 @@ public enum InductStatus
 
     /// <summary>No active transport order matched the scanned blind label.</summary>
     NoActiveOrder = 4,
+
+    /// <summary>
+    /// The carton has already been printed and no reprint is authorized (decision-003 reprint policy).
+    /// Nothing was printed.
+    /// </summary>
+    NoReprint = 5,
 }
 
 /// <summary>Outcome of an induct scan: overall status plus the per-label selection assignments.</summary>
@@ -34,6 +40,8 @@ public sealed class InductResult
     public static InductResult NoActiveOrder() => new(InductStatus.NoActiveOrder, []);
 
     public static InductResult NoData() => new(InductStatus.NoData, []);
+
+    public static InductResult NoReprint() => new(InductStatus.NoReprint, []);
 
     public static InductResult FromAssignments(IReadOnlyList<LabelAssignment> assignments)
     {

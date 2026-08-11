@@ -53,6 +53,13 @@ public sealed class InductService : IInductService
             return InductResult.NoData();
         }
 
+        // Reprint policy (decision-003): an already-printed carton may only reprint when an operator has
+        // authorized it. Otherwise nothing is printed.
+        if (!order.CanPrint)
+        {
+            return InductResult.NoReprint();
+        }
+
         var context = await _lines.GetLineAsync(lineId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"No line configuration for line '{lineId}'.");
 
@@ -80,12 +87,22 @@ public sealed class InductService : IInductService
             {
                 state.LastPrinted = now;
             }
+
+            // Record which label type printed, to which printer (per-label outcome; decision-003).
+            order.MarkLabelPrinted(label.LabelType, printer.PrinterId, now);
         }
 
         var result = InductResult.FromAssignments(selection.Assignments);
-        if (result.Status is InductStatus.Printed or InductStatus.PartiallyPrinted)
+
+        // Only a FULL run counts as a print run and increments the monotonic counter (decision-003).
+        if (result.Status == InductStatus.Printed)
         {
-            order.MarkPrinted(now);
+            order.CompletePrintRun(now);
+            await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
+        }
+        else if (result.Status == InductStatus.PartiallyPrinted)
+        {
+            // Persist per-label print state, but do not count the run or advance status.
             await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
         }
 
