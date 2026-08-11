@@ -20,6 +20,11 @@ for every file cited — **zero per-plant divergence** in the 281–286 layer.
 - The PLC writes a raw `VARCHAR(4000)` buffer into a Service Broker queue.
 - A buffer **may contain multiple back-to-back messages with no separator**:
   `<281,1,1,1,1,8,0,0154006001,0,0,0,0,0,0,24092,118><283,1,1,2,0>`
+  > **In the C# port this splitting is NOT ours to do:** an upstream process — the **ADS BluePaw
+  > connector** NuGet package (referenced in the Exol project) — owns the PLC transport, message
+  > deframing, and writing the outbound bluepaw/fire-point tags. The adapter receives already-split,
+  > typed messages and hands back assignment data; it does not parse the raw wire buffer or push OPC
+  > tags itself.
 - **STX/ETX = `<` / `>`.** Content between the brackets is a flat comma-separated field list, no
   trailing delimiter.
 - `sdisp_VLC2DB_Msgs_PreProcess` (SHA `9dd130cf`) loops `WHILE LEN(@VLCBuffer) > 0`:
@@ -208,12 +213,20 @@ yet modeled.
 
 ## 7. Concepts NOT yet in the C# Core (adapter seams / backlog)
 
-🔴 **Fire points / tracking devices** — the whole `PrintPointDevice/PrintPoint/ApplyPointDevice/
-ApplyPoint` bundle. The 281 response is fire-point coordination, **not** ZPL dispatch. Highest gap.
+🔴 **Fire points / tracking devices** — the `PrintPointDevice/PrintPoint/ApplyPointDevice/
+ApplyPoint` bundle. **Clarification from owner:** at the 281 level PandA does **two things at once** —
+(a) dispatches the **ZPL to the printer** (the print job our Core already models) *and* (b) sends the
+**bluepaw / fire-point tags down** to the PLC (where/when to fire print head + applicator). So the
+281 is *both* print-job dispatch and fire-point coordination, not one or the other. The tag transport
+is handled by the upstream **ADS BluePaw connector** NuGet; Core needs to *produce* the fire-point
+values (print device+point, apply device+point, dest lane), the connector writes them. Still the
+top modelling gap.
 🔴 **Print-vs-apply split** — two physically separate fire operations at two encoder positions,
 possibly on different tracking devices. Core models print-and-apply as one action.
 🔴 **`vPA` vs `vCtn` tag namespaces** — adapter must choose per message type.
-🔴 **SourceMode multi-DB routing** — field 2 of every message selects the app context (up to 6).
+🔴 **SourceMode multi-DB routing** — field 2 selects the app context (up to 6). **Owner: not
+applicable for our port** (single-context deployment) — kept here for protocol completeness only,
+not a Core requirement.
 🟡 **SorterMode 1–4** (normal/aim/alignment/round-robin) — affects lane assignment; pass-through.
 🟡 **Weight / Gap / Length** — physical measurements available to assignment; unused in Core.
 🟡 **LabelStatus=1 (lowboy)** — may need different print/apply params.
@@ -221,8 +234,56 @@ possibly on different tracking devices. Core models print-and-apply as one actio
 🟡 **6-scanner label arbitration (281)** and **pipe-buffer arbitration (286)** — the best-label
 scoring lives in the PandA DB; adapter must replicate in C#. The harness currently stands this in
 with positional/order-based typing.
-🟢 **`Settings_LabelBufferOrder`** — searched exhaustively; **not present** in this repo. Buffer→type
-mapping is either in the PandA DB or implicitly positional.
+🟢 **`Settings_LabelBufferOrder`** — the senior's PLC-repo search missed it, but it **exists in the
+PandA DB source** (`5.0_CreateTables` + `6.0_PopulateTables`). See §8 — it is the authoritative
+buffer-position → label-type map and drives verify. Resolved.
+
+---
+
+## 8. `Settings_LabelBufferOrder` + the real verify SP (from PandA DB source)
+
+Source: `files/panda-src/.../5.0_CreateTables/Settings_LabelBufferOrder.sql`,
+`6.0_PopulateTables/Settings_LabelBufferOrder.sql`, and consumer
+`8.0_CreateSP/sdisp_TOOL_PA_VerifyLabel.sql`. (These live in the PandA app DB, which the senior's
+PLC-only snapshot did not include.)
+
+**Table:** `(RecID, PandaRecID, LabelName, LabelNumber)`. `PandaRecID` scopes a config; `LabelNumber`
+is the **1-based position in the scanned buffer**; `LabelName` is the type at that position. Seeded:
+
+| LabelNumber | LabelName |
+|-------------|-----------|
+| 1 | BlindLabel |
+| 2 | Shipping |
+| 3 | Content |
+| 4 | Parcel |
+
+**How verify consumes it (`sdisp_TOOL_PA_VerifyLabel`):**
+- `@Label` is the scanned buffer, split on `':'` (**note:** the `|` seen in the 286 message is the
+  PLC-layer buffer; by the time it reaches this SP it is `:`-delimited), `ROW_NUMBER()`-ed, then
+  `JOIN Settings_LabelBufferOrder ON rownum = LabelNumber` → each scanned value gets its type.
+- Expected set is built from `PandaData.LabelBarcode1..6`/`LabelType1..6` UNION `PandaDataXRef`
+  (xref rows typed `BlindLabel`); rows with null/empty barcode or `LabelName='Orientation'` dropped.
+- **`VerifyContentLabel=0`** deletes from BOTH scanned and expected everything not in
+  `('Shipping','Exception')` — confirms senior correction #4 (filters both sides).
+- Ordered cursor over scanned labels, **first-failure short-circuits** (`GOTO ENDCURSOR`); on match
+  the expected row is **deleted (consumed)**; leftover expected rows after the loop ⇒ **Missing**;
+  a scanned label with no expected counterpart (`-`) ⇒ **Extra/fail**. This is exactly the
+  order-sensitive, consume-slot model our `VerificationService` already implements.
+- Sentinels: `?` = no-read, `!`/`~`/`0` = no-data, `#` = label conflict — each maps to a specific
+  **VerifyPass code** (see below).
+- **xref branch:** if an expected `LabelName` has >1 candidate barcode and the scanned value matches
+  any, it passes (xref alternates), else fails.
+
+**VerifyPass code taxonomy (DCMS reason codes)** — richer than our current outcome enum:
+`1`=pass; `3`=bypass/ignore; `0`/`12`=generic/no-data fail; per-type fail codes —
+BlindLabel `14`/conflict `15`; Shipping mismatch `21`/missing-or-noread `20`/conflict `33`;
+Content mismatch `23`/missing `22`/conflict `34`; Parcel mismatch `29`/missing `27`/conflict `28`.
+Candidate for a Core `VerifyReasonCode` enum later.
+
+**⚠️ Confirms the reprint auto-re-arm hole (decision-003):** lines 460–467 — on any `VerifyPass<>1`
+the SP does `UPDATE PandaData SET Printed=0, ActiveRecord=1`, i.e. it re-arms the carton to print
+again automatically. This is exactly the source bug we corrected to `HeldForIntervention` +
+operator-gated `AuthorizeReprint`. Good independent confirmation.
 
 ---
 
