@@ -47,3 +47,18 @@ wave control, printer/print-engine status, panda list, scan logs, reject cartons
 backend services exist. User has flagged this as **essential** to the overall product (not optional) — it
 is deferred, not dropped. Schedule as a dedicated phase after the backend engine slices land.
 **Priority:** High (essential; deferred)
+
+### Dynamic height→orientation apply-point transfer (Side↔Top)
+**Added:** 2026-08-11
+**Source:** User (during load-balancing grill)
+**Context:** Reviewing printer selection (architecture-log 005). A label type (e.g. `Shipping`) can map to
+both a Side-apply and a Top-apply printer. The rule: print **Side by default**, but **transfer to Top when
+the carton height is below a threshold**. Lives in custom `sdisp_TOOL_CUSTOM_DynamicApplyPoint` /
+`DynamicPrintPoint` setting; not in the core `PickPrinter` body.
+**Description:** Implement height-driven orientation resolution as a pre-filter to printer selection:
+resolve required orientation (Side default / host value / height<threshold→Top), then load-balance within
+printers of that orientation. **Provisioned now** — `IPrinterSelectionService` treats candidates as
+(label type + orientation), printer config carries `PrinterType`, and carton height flows into selection;
+only the threshold-transfer decision is deferred. Threshold scope (global vs per-line vs
+per-label-type/profile) to be confirmed when scheduled.
+**Priority:** Medium (provisioned; deferred)

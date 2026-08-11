@@ -59,11 +59,21 @@ Read `PrinterType` (TOP/SIDE) for the chosen printer → apply-point math (TOP: 
 EncoderResolution` → pulses) → send fire points (`PA2BP_SendPrinterFirePoints`; bad fire point `ErrorCode=2`
 → skip **that** label, continue) → print (`PA_Print`) → stamp `LastPrinted`.
 
-### Notes / to-confirm
-- Orientation label (`LabelType='Orientation'`) is extracted and removed from `@labels` before selection;
-  whether orientation additionally constrains eligibility (vs. label type alone) is still to be confirmed
-  at implementation — currently eligibility keys on label type via `LabelProfileMap`.
+### Notes / provisioned seams
+- **Orientation is a provisioned dimension (deferred).** Beyond label type, a label carries an **orientation**
+  (host sends it; defaults to `Side` when absent) and printers have a `PrinterType` (`TOP`/`SIDE`). A
+  customer rule (seen as custom `sdisp_TOOL_CUSTOM_DynamicApplyPoint` / `DynamicPrintPoint` setting)
+  **dynamically transfers a label from Side to Top when the carton height is below a threshold** — e.g.
+  `Shipping` maps to both a side and a top printer, prints Side by default, Top when height < cutover.
+  **Design implication:** `IPrinterSelectionService` must treat candidate resolution as
+  **(label type + required orientation)** — resolve orientation first (default/host/height-rule), then run
+  the per-label-type least-recently-printed round robin **within the printers of that orientation**. Model
+  `PrinterType` on the printer config and pass carton height into selection now, even though the
+  height-threshold transfer itself is deferred (Phase 1 uses orientation = default/host value only).
 - `MANDA%` (manual apply) PandAs short-circuit to a directly chosen printer.
+- The orientation label (`LabelType='Orientation'`) is extracted from the label set and removed before
+  selection; in this core proc version it only defaults to `Side` and the apply-point math uses the chosen
+  printer's `PrinterType`.
 
 ## Part 2 — Spare designation & pool health (`sdisp_PA_LaneEval`, on status change, under lock)
 
