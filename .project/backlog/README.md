@@ -84,3 +84,13 @@ labels to focus on the compare/code logic; the position-based parser is needed f
 maps each slot to a `LabelType`, producing the typed scanned-label list the verify service consumes. Feed
 from the real verify message point at integration.
 **Priority:** Medium (needed for final integration; deferred from Phase-2 logic tests)
+
+### BluePaw stop-line / slow-line tag (codes TBD)
+**Added:** 2026-08-11
+**Source:** User
+**Context:** There is a "BluePaw" tag/command used to **stop a line** or **slow a line** down. The exact
+tag values/telegram codes are **not yet known** and need to be captured from the site/protocol.
+**Description:** Once the codes are known, model a line-control egress (stop / slow-down) alongside the
+verify-threshold printer-pause signal. Likely a small `ILineControl` port emitting the BluePaw command.
+Related to the shutdown / slow-down behavior noted in architecture-log 005 (LaneEval spare logic).
+**Priority:** Medium (blocked on codes)

@@ -7,6 +7,9 @@ public enum TransportOrderStatus
 
     /// <summary>Labels have been dispatched to printers.</summary>
     Printed = 1,
+
+    /// <summary>Labels were scanned and verified OK; the carton may proceed (source ActiveRecord=0).</summary>
+    Verified = 2,
 }
 
 /// <summary>
@@ -42,6 +45,8 @@ public sealed class TransportOrder
 
     public DateTimeOffset? PrintedAt { get; private set; }
 
+    public DateTimeOffset? VerifiedAt { get; private set; }
+
     /// <summary>Replace the advised label set (Phase-1 duplicate-advice = overwrite / last-wins; spec §6a).</summary>
     public void OverwriteAdvice(string lineId, PandaLabelSet labels, DateTimeOffset advisedAt)
     {
@@ -53,11 +58,30 @@ public sealed class TransportOrder
         CreatedAt = advisedAt;
         Status = TransportOrderStatus.Advised;
         PrintedAt = null;
+        VerifiedAt = null;
     }
 
     public void MarkPrinted(DateTimeOffset printedAt)
     {
         Status = TransportOrderStatus.Printed;
         PrintedAt = printedAt;
+    }
+
+    /// <summary>Verify passed: carton is complete and may proceed (source ActiveRecord=0, VerifyTime set).</summary>
+    public void MarkVerified(DateTimeOffset verifiedAt)
+    {
+        Status = TransportOrderStatus.Verified;
+        VerifiedAt = verifiedAt;
+    }
+
+    /// <summary>
+    /// Verify failed: re-arm the carton so it can be reprinted and re-verified (source Printed=0,
+    /// ActiveRecord=1). The advised label set is preserved.
+    /// </summary>
+    public void ReArmForReprint()
+    {
+        Status = TransportOrderStatus.Advised;
+        PrintedAt = null;
+        VerifiedAt = null;
     }
 }
