@@ -61,10 +61,24 @@ MethodName + ServiceValues, sequenced). PandA tables via persistent-tables/EF; T
 `trans.ApplyExtension<PandaData>`; outbound (print/PLC/host) via `ITelegramOutbox<T>`. Business logic
 (the SP bodies) → C# services; actions stay thin.
 
+## Phase 1 (LOCKED) — proof-of-pattern vertical slice
+
+**Scope:** induct → lookup carton → pick printer → print (happy path), **backend-only** (no operator GUI).
+Exercises every layer: `MfcAction.json` → `PandaActions.ScanInduct/SendPrintCommand` → PandA EF/persistent
+tables → TU extension data → `ITelegramOutbox` (printer outbound **stubbed**).
+
+**Config ported in Phase 1** (see architecture-log/decision-001) — groups A–D, ~16 tables:
+Settings; Settings_CartonStatuses; LabelTypes/LabelDef/LabelPrintLocations; LaneDef; PandAState/PrinterState;
+PandAs/PandADetails; Printers/PrinterDetails/PrinterFirePoints; LabelProfileHeader/Detail/Map,
+LabelTemplates, Settings_DefaultAttributes, Settings_LabelBufferOrder.
+
+**Bookmarked (E):** Wave/WaveRange + wave lifecycle; operator GUI. (backlog)
+**Architectural replacement — NOT ported as data (F & G):** SQL eventing plumbing (EventStoredProcedureList,
+CreateSystemMessages, EventDescriptions) → native logging/eventing; synonyms/SynBuilder → transport/connector
+config. Their behavior is re-expressed natively, not carried over.
+
 ## Open objective questions (being resolved with user)
 
 1. DB engine target — SQL Server only, or cross-DB (Postgres/SQLite) like the rest of econtroller?
-2. Integration scope now vs later — how much of PLC / TCP-printer / DCMS-host channels in Phase 1?
-3. Operator GUI — reimplement `sdisp_GUI_*` screens in Blazor, and when (backend-first?)?
-4. Site/config tooling (`SiteBuilder`/`SynBuilder`) — port or replace with econtroller-native config?
-5. Phase 1 vertical slice definition.
+2. Site/config tooling (`SiteBuilder`) — port the commissioning CRUD or replace with econtroller-native config?
+3. Confirm ready to move to Gate 1 (Planner writes the Phase-1 spec).

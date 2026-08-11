@@ -28,4 +28,21 @@ Each entry:
 
 ## Items
 
-_(Items will be added here as conversations surface out-of-scope features.)_
+### Wave / WaveRange data + wave lifecycle
+**Added:** 2026-08-11
+**Source:** Senior Coder + User (config disposition triage)
+**Context:** Scoping the PandA→eController Phase-1 vertical slice (induct→print happy path). Config
+disposition decision (see architecture-log/decision-001).
+**Description:** `Wave` (435 rows) and `WaveRange` (27 rows) are live/operational wave data, not
+commissioning config. The wave *lifecycle* logic (`sdisp_GUI_PandaWaveAction_*`, `sdisp_PA2DCMS_WaveStatus`,
+`sdisp_TOOL_CUSTOM_Wave*`) is a later functional phase. Not required for Phase 1.
+**Priority:** Medium
+
+### Operator GUI (Blazor reimplementation of sdisp_GUI_* screens)
+**Added:** 2026-08-11
+**Source:** User (Phase-1 = backend-only)
+**Context:** Phase 1 is backend-only. The ~30 `sdisp_GUI_*` procs back operator screens (label profiles,
+wave control, printer/print-engine status, panda list, scan logs, reject cartons).
+**Description:** Reimplement operator screens as Blazor pages using CrudTable/PropertyPanel once the
+backend services exist.
+**Priority:** Medium
