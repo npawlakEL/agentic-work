@@ -110,7 +110,60 @@ Actions stay thin; logic lives in injectable services (unit-testable).
 | Apply point / fire point geometry (`PrinterFirePoints`, `DynamicPrintPoint`) | fire-point config (File 1) + dynamic apply logic in `IPrinterSelectionService` |
 | Final lane / destination (`LaneDef`, lane eval) | route/destination place; set via `INavi`/`ILayout` |
 
-## Open confirmations
-- Fire points: nested under printer in `PandaLine.json` (recommended) vs. File 2.
-- Whether `Settings`/vocab is its own `PandaSettings.json` or a section of File 2.
-- Plugin-owned JSON config registration mechanism — under source verification (agent `json-config-ext`).
+## 8. Reference implementation alignment (Exol `SimTest` branch)
+
+`eController-Projects/Exol` already contains an in-flight PandA implementation
+(`src/eController.PlcSim/CustomSimControllerWork_PandA/`). It validates this map almost exactly and
+supplies the concrete patterns to follow:
+
+**Config file + loading (confirms the JSON-config pivot):**
+- `PandAConfig { List<PandAConfigData> Lines }` — **per-line array**, exactly as proposed.
+- `PandAConfigData : IEntity { PlaceId PlaceID; string PandAID; bool LoadBalance; string VerifyThreshold;
+  List<PandAPrinterConfigData> Printers; }` — printers **nested per line**.
+- `PandAPrinterConfigData { IPAddress; PortNumber; LabelMap; int Online; }`.
+- Loaded by the plugin itself (no MFC core change) via **EffortlessConfiguration**:
+  `IEffortlessConfigurationRegistry.AppConfigFolder.GetFiles().FirstOrDefault(f => f.Name.Contains("PandAConfig"))`
+  → `JsonSerializer.Deserialize<PandAConfig>(json)`.
+- Then materialized into a **persistent table** for query: `tableProvider.Table<PandAConfigData>()`
+  (`Delete` → `Create().AddRange(Lines)`), run once as a startup **Step**. So: JSON file = source of
+  truth (authoring); persistent table = runtime access mechanism. This satisfies "config in JSON, not a
+  config DB."
+
+**Registration (DI/builder):**
+```csharp
+public static ControllerBuilder AddPandA(this ControllerBuilder builder)
+{
+    builder.SetupSteps(ctx => ctx.Step(PandASteps.GenerateTableForConfig))
+           .SetupMfcActions(ctx => ctx.AddActions<PandAActions>());
+    return builder;
+}
+```
+
+**Message point:** `PandABehavior : IPlaceBehavior` (empty marker) attached to a layout place; actions find
+the current MP via `snapshot.MfcPlaces.Where(mp => mp.HasBehavior<PandABehavior>())`.
+
+**Actions:** `PandAActions : IMfcAction` with method-per-entrypoint (`ExecuteVerifyScan`,
+`RouteAfterVerify`). Params injected: `MfcTransportOrder trans`, `SystemSnapshot snapshot`,
+`ITableProvider tableProvider`, `[ServiceValue] string[] VerifyLabels` (from `MfcAction.json`
+ServiceValues).
+
+**Per-carton data:** TU **extensions** — `LabelExtension { string[] Labels }` and polymorphic
+`iPandaVerificationResult` (`PandaVerificationSuccess`/`Fail` with `reasonCode`), via
+`trans.SetExtension<T>` / `TryGetExtension<T>`. Confirms carton fields ride the TransportOrder, not a table.
+
+**Label/host data:** `LabelData : IEntity { blindLabel; labelBarcode; labelType; labelData }` table, queried
+`Where(row => row.blindLabel == trans.TuId)` — i.e. host label data keyed by `TuId`.
+
+### Plugin-owned JSON config — verified (agent `json-config-ext`)
+- `MfcCrudContextService.AddJsonTable<T>()` is **private** → cannot add new MFC-core JSON tables from a
+  plugin. BUT **EffortlessConfiguration** (`IEffortlessConfigurationRegistry`, `AppConfigFolder`,
+  `AddJsonFileSource()`) is fully injectable and hot-reloadable → a plugin owns its own JSON files with its
+  own reader, **zero MFC core changes**. The reference impl uses exactly this path. (Optional small core PR
+  only if we want CrudTable UI editing of PandA config later.)
+
+## Open confirmations (mostly resolved by reference impl)
+- Per-line structure — **confirmed** (`PandAConfig.Lines`, printers nested per line).
+- Config loading — **confirmed**: `PandAConfig*.json` via EffortlessConfiguration → persistent table.
+- Fire points: reference config carries printer IP/port/LabelMap/Online only (no fire points yet). Treat
+  fire points as a later addition nested under the printer. Not required for Phase-1 verify/print happy path.
+- `Settings`/status vocab file split (own `PandaSettings.json` vs. section) — still our choice; low risk.
