@@ -69,7 +69,9 @@ Verify Pass/Fail, etc.
 - Looks up the pass instance by CartonListID; pre-verify short-circuits: No Read/Data/Conflict → fail codes
   7/5/8; Gap Error → 4; `SeqNum > 2000` → Tracking Error.
 - **Happy path:** scanned barcode compared against `LabelBarcode1..6`; match → **VerifyPass=1**; mismatch →
-  **0 (generic) or a specific code 2–12**. `VerifyContentLabel` toggles content-label check.
+  a code from a **(label type × failure reason) matrix**. `VerifyContentLabel` toggles content-label check.
+  > The exact code matrix and rules are now in **architecture-log 006 (verify model)** — treat 006 as
+  > authoritative; the earlier "code 2–12" shorthand here was incomplete.
 - **Thresholds:** `sdisp_PA_VerifyThreshold_Update`/`_Add`/`_Refresh` track consecutive fail counts
   (health/alarming).
 - Result → routing via `sdisp_TOOL_PA_GetFinalLaneFromStatus`.
