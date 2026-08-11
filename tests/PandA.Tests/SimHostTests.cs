@@ -90,6 +90,10 @@ public sealed class SimHostTests
         // Three labels → three print jobs emitted in the transcript.
         Assert.Equal(3, log.Count(l => l.Contains("OUT PRINT")));
 
+        // The resolved fire point (print/apply firing points) surfaces on each print line.
+        Assert.Equal(3, log.Count(l => l.Contains("OUT PRINT") && l.Contains("fire[print dev")));
+        Assert.Contains("apply dev5@0M", text); // Parcel → Par1, seeded apply point 0M
+
         // After the run the carton is actually Verified in the store.
         Assert.Contains("0154006003: Verified", text);
     }

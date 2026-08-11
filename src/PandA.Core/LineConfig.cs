@@ -11,7 +11,8 @@ public sealed class LineConfig
         IEnumerable<PrinterConfig> printers,
         bool loadBalance = true,
         string? placeId = null,
-        LabelBufferOrder? bufferOrder = null)
+        LabelBufferOrder? bufferOrder = null,
+        FirePointProfile? activeProfile = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentNullException.ThrowIfNull(printers);
@@ -21,6 +22,7 @@ public sealed class LineConfig
         LoadBalance = loadBalance;
         PlaceId = placeId;
         BufferOrder = bufferOrder ?? LabelBufferOrder.Default;
+        ActiveProfile = activeProfile;
     }
 
     public string LineId { get; }
@@ -32,6 +34,13 @@ public sealed class LineConfig
 
     /// <summary>Per-line scanner-buffer layout (position → label type) used to type verify reads.</summary>
     public LabelBufferOrder BufferOrder { get; }
+
+    /// <summary>
+    /// The line's active fire-point profile (per-printer-per-label print/apply firing points).
+    /// This slice carries a single static generic profile; profile switching / host-driven
+    /// selection are backlog (see architecture-log 010). Null when no profile is configured.
+    /// </summary>
+    public FirePointProfile? ActiveProfile { get; }
 
     public IReadOnlyList<PrinterConfig> Printers { get; }
 }

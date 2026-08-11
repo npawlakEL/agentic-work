@@ -143,9 +143,26 @@ the advised-order stand-in.
 **Context:** The real 281 response is NOT "send ZPL" — it writes a bundle of vPA.Assign[i] tags to the PLC
 (RecID, Seq, Sorter, SourceMode, Dest lane, PrintPoint/PrintPointDevice[printerId], ApplyPoint/
 ApplyPointDevice[printerId], MsgRdy) computed by sdisp_TOOL_PA_GetPrinterFirePoints. This coordinates WHERE
-on the conveyor to fire the print head and the applicator, and which lane to route to. Core does not model
-fire points, tracking devices, the apply-vs-print station split, or lane destination yet.
-**Description:** After the bare-bones sim is solid, design the fire-point/lane outbound: model print vs
-apply firing positions per printer + the destination lane, and emit the vPA.Assign tag bundle. Discuss
-with the user first (flagged as the next design conversation).
-**Priority:** High (core to real PLC integration)
+on the conveyor to fire the print head and the applicator, and which lane to route to.
+**Status:** **PARTIALLY DONE (2026-08-11).** The fire-point *model* is now in Core (architecture-log 010):
+`ApplyPoint` (inch+edge notation, sign/edge guard), `FirePoint` (print/apply tracking devices + points,
+neglect-print + tracking-device guards), `FirePointProfile` (per printer+label), `FirePointResolver`, and a
+static per-line `LineConfig.ActiveProfile`. Fire points resolve during induct and surface on `PrintJob`
+(harness logs them). **Still deferred (below):** lane destination, the vPA.Assign tag *transport* (owned by
+the ADS BluePaw connector in the eController adapter — 009 §2), profile *switching*, host-driven ProfileName,
+and DynamicApplyPoint.
+**Priority:** Model done; remaining items tracked below.
+
+### Fire-point profile switching + host-driven ProfileName + DynamicApplyPoint
+**Added:** 2026-08-11
+**Source:** User (fire-point design conversation) + sdisp_PA2BP_SendPrinterFirePoints
+**Context:** This slice ships one static generic profile per line (`LineConfig.ActiveProfile`). The source and
+the domain owner describe three ways the active profile can change: (1) the operator/GUI manually switches
+which profile (or profile group / "map") is active on the line; (2) the host sends `PandaData.ProfileName`
+per carton to pattern-match the profile; (3) `sdisp_TOOL_CUSTOM_DynamicApplyPoint` adjusts the resolved
+`ApplyFirePoint` by carton size / printer orientation before the tags are written.
+**Description:** Add (a) a switchable active-profile mechanism per line (GUI/operator), (b) host-driven
+per-carton ProfileName resolution, and (c) DynamicApplyPoint adjustment. Also consider an explicit
+map→profile-group container if named maps that own groups of profiles are wanted. Design with the user first.
+**Priority:** Medium (happy path covered; switching is the next fire-point conversation)
+

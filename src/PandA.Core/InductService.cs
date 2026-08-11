@@ -19,6 +19,7 @@ public sealed class InductService : IInductService
     private readonly IPrinterSelectionService _selection;
     private readonly IPrinterGateway _gateway;
     private readonly IClock _clock;
+    private readonly FirePointResolver _firePoints = new();
 
     public InductService(
         ITransportOrderStore store,
@@ -78,8 +79,17 @@ public sealed class InductService : IInductService
 
             var printer = printersById[assignment.PrinterId];
             var label = assignment.Label;
+
+            // Resolve the print/apply firing points from the line's active fire-point profile (if any).
+            FirePoint? firePoint = null;
+            if (context.Config.ActiveProfile is { } profile)
+            {
+                var resolution = _firePoints.Resolve(profile, printer.PrinterId, label.LabelType);
+                firePoint = resolution.FirePoint;
+            }
+
             await _gateway.SendAsync(
-                new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, label.Zpl),
+                new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, label.Zpl, firePoint),
                 cancellationToken).ConfigureAwait(false);
 
             // Stamp LastPrinted so the next carton rotates (round-robin state).

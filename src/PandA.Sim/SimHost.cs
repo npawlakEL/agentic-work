@@ -12,8 +12,9 @@ namespace PandA.Sim;
 /// services over the in-memory Sim adapters and returns a human-readable transcript.
 /// <para>
 /// Out of scope for this first pass (bookmarked): advanced data creation/editing, BluePaw tag writes,
-/// fire points / tracking devices / apply-vs-print split, lane destination, sorter modes, and codes
-/// 282–285. See the backlog.
+/// lane destination, sorter modes, and codes 282–285. Fire points (print/apply firing points per
+/// printer per label) are now resolved from the line's static profile and surfaced on the print job.
+/// See the backlog.
 /// </para>
 /// </summary>
 public sealed class SimHost
@@ -95,7 +96,10 @@ public sealed class SimHost
 
         foreach (var job in _gateway.Jobs.Skip(before))
         {
-            log.Add($"  << OUT PRINT  {job.LabelType,-10} lpn={job.Lpn} → printer {job.PrinterId} ({job.Ip}:{job.Port})");
+            var fp = job.FirePoint is { } f
+                ? $"  fire[print dev{f.PrintTrackingDevice}@{f.PrintFirePoint}, apply dev{f.ApplyTrackingDevice}@{f.ApplyFirePoint}]"
+                : string.Empty;
+            log.Add($"  << OUT PRINT  {job.LabelType,-10} lpn={job.Lpn} → printer {job.PrinterId} ({job.Ip}:{job.Port}){fp}");
         }
 
         if (induct.Status != InductStatus.Printed)
@@ -153,12 +157,24 @@ public sealed class SimHost
 
     private void Seed()
     {
-        _lines.Add(new LineConfig(SourceLine,
-        [
+        var printers = new[]
+        {
             new PrinterConfig("Ship1", "10.0.0.11", 9100, ["Shipping"], ApplyOrientation.Side, 0),
             new PrinterConfig("Cont1", "10.0.0.12", 9100, ["Content"], ApplyOrientation.Side, 1),
             new PrinterConfig("Par1", "10.0.0.13", 9100, ["Parcel"], ApplyOrientation.Side, 2),
-        ]));
+        };
+
+        // A single static "generic" fire-point profile (happy path): one print/apply fire point per
+        // printer + label slot. Print point is the static encoder count (800) seeded in the source;
+        // apply points use inch+edge notation. Profile switching / host-driven selection are backlog.
+        var profile = new FirePointProfile("Generic",
+        [
+            (("Ship1", "Shipping"), new FirePoint(2, 800, 3, ApplyPoint.Parse("1T"))),
+            (("Cont1", "Content"), new FirePoint(2, 800, 4, ApplyPoint.Parse("1L"))),
+            (("Par1", "Parcel"), new FirePoint(2, 800, 5, ApplyPoint.Parse("0M"))),
+        ]);
+
+        _lines.Add(new LineConfig(SourceLine, printers, activeProfile: profile));
 
         Advise("0154006001", ("Shipping", "SHIP-0154006001"), ("Content", "CONT-0154006001"));
         Advise("0154006002", ("Shipping", "SHIP-0154006002"), ("Parcel", "PARC-0154006002"));
