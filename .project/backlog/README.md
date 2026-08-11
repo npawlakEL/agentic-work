@@ -40,9 +40,10 @@ commissioning config. The wave *lifecycle* logic (`sdisp_GUI_PandaWaveAction_*`,
 
 ### Operator GUI (Blazor reimplementation of sdisp_GUI_* screens)
 **Added:** 2026-08-11
-**Source:** User (Phase-1 = backend-only)
+**Source:** User (Phase-1 = backend-only; reaffirmed as essential-but-not-yet)
 **Context:** Phase 1 is backend-only. The ~30 `sdisp_GUI_*` procs back operator screens (label profiles,
 wave control, printer/print-engine status, panda list, scan logs, reject cartons).
 **Description:** Reimplement operator screens as Blazor pages using CrudTable/PropertyPanel once the
-backend services exist.
-**Priority:** Medium
+backend services exist. User has flagged this as **essential** to the overall product (not optional) — it
+is deferred, not dropped. Schedule as a dedicated phase after the backend engine slices land.
+**Priority:** High (essential; deferred)
