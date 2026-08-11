@@ -41,6 +41,9 @@ For each **label type the carton actually needs** (`avl.LabelName IN (SELECT DIS
 
 Round-robin is therefore **scoped within each label type**, keyed on `LastPrinted` (ascending = staleest
 first). After a label prints, `PrinterState.LastPrinted` is stamped to now, so the next carton rotates.
+**Tie-break (port decision):** when candidates share an equal `LastPrinted` (incl. cold start / never
+printed = min), **configured order wins** — the first printer listed for that label type in `PandaLine.json`.
+This makes the otherwise non-deterministic SQL `ORDER BY` deterministic and testable.
 
 ### 1c. Same-carton collision avoidance (the critical, easy-to-miss rule)
 A carton often needs several label types. If **one printer is chosen as PID1 for more than one of the

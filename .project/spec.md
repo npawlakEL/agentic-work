@@ -79,9 +79,23 @@ then (append→oldest / overwrite→newest) by creation, then stable id. Exclude
 Loaded by `IPandaConfigProvider`: Sim reads the JSON file directly; econtroller adapter reads it via
 `IEffortlessConfigurationRegistry.AppConfigFolder` (file name contains `PandaLine`), hot-reloadable.
 
+## 6a. Locked Phase-1 behaviors (from 2026-08-11 design grill)
+- **Deliverable = tests only** (xUnit). MP1/MP2 are exercised as service calls; no telegram parsing and no
+  runnable harness yet. A msg-in/msg-out Sim comes **after** the verify phase.
+- **Duplicate advice = overwrite / last-wins** for Phase 1. This must be a **toggle** later
+  (`OverwriteLabelData`-style); see backlog. So §5.3/§7.2 collapse to last-wins for now.
+- **Line scope:** test a **single line**, but config + services stay **multi-line-capable** (line resolved
+  from the message point).
+- **Load-balance tie-break:** when eligible printers share an equal `LastPrinted` (incl. cold start / never
+  printed), **configured order wins** — the first printer listed in `PandaLine.json` for that label type.
+  Deterministic and testable.
+- **Orientation** is a provisioned selection dimension (label type + orientation); the height→Side/Top
+  transfer is deferred (backlog). Phase 1 uses orientation = default/host value only.
+
 ## 7. Acceptance criteria (Gate — TDD)
 1. Advice creates a TO shell with `TuId=blind label`, status `ADVISED`, and a `PandaLabelSet` extension.
-2. Repeated advice appends or overwrites per the setting; already-printed + reprint-off is rejected.
+2. Repeated advice **overwrites** the label set (last-wins) for Phase 1; the append-vs-overwrite +
+   don't-reprint-if-printed rules are behind a deferred toggle (backlog).
 3. Induct scan with a matching TO emits **each** label's ZPL to a printer whose `LabelMap` includes that
    label's type; multi-type carton fires multiple printers.
 4. Load-balancing distributes across eligible printers when `LoadBalance=true`, scoped **per label type** by

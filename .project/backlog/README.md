@@ -62,3 +62,14 @@ printers of that orientation. **Provisioned now** — `IPrinterSelectionService`
 only the threshold-transfer decision is deferred. Threshold scope (global vs per-line vs
 per-label-type/profile) to be confirmed when scheduled.
 **Priority:** Medium (provisioned; deferred)
+
+### Duplicate-advice handling toggle (overwrite ↔ append + reprint rules)
+**Added:** 2026-08-11
+**Source:** User (during design grill)
+**Context:** MP1 receives label-advice keyed by blind label (`TuId`). Source has `OverwriteLabelData`
+(default 0) plus a don't-reprint-if-printed rule and append/oldest-wins disambiguation
+(`sdisp_PA_LookupCarton`). User wants this **toggleable**, but Phase 1 uses **overwrite / last-wins**.
+**Description:** Introduce a config setting that selects duplicate-advice semantics: (a) overwrite/last-wins
+[Phase-1 default], (b) append + disambiguate at induct (oldest-wins unless overwrite; skip if already
+printed and reprint off). Model the setting seam now; implement append + reprint rules when scheduled.
+**Priority:** Medium (Phase-1 uses fixed overwrite; toggle deferred)
