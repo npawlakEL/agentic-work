@@ -73,7 +73,10 @@ Phase 1 is a **pass-through** (label-template→ZPL engine is out of scope for n
 - **MP1 label-advice (host inbound):** blind label + typed ZPL set → creates TO shell (`TuId`=blind label,
   status `ADVISED`) + stores a `PandaLabelSet` extension (`[{ LabelType, Lpn, Zpl }]`).
 - **MP2 induct scan:** blind label → match TO by `TuId` → pick printer(s) by matching each label's
-  `LabelType` to the printer `LabelMap` → emit ZPL via `IPrinterGateway`.
+  `LabelType` to the printer `LabelMap` → emit ZPL via `IPrinterGateway`. Selection is **load-balanced per
+  label type** (least-recently-printed) with **same-carton collision→backup routing** so a multi-label
+  carton spreads across distinct printers — the authoritative algorithm (incl. spare/min pool rules) is
+  **architecture-log 005**.
 - **Done bar:** in the Sim, advice + induct yields correct ZPL to the correctly-matched printer(s),
   proven by unit + integration tests (TDD).
 

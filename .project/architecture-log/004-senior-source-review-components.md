@@ -47,7 +47,10 @@ Verify Pass/Fail, etc.
 1. Extracts carton length/height and labels 1–6; **orientation from label #2** (metadata, not printed).
 2. **Eligible-printer CTE** filters: PLC status On, engine status OK, **not spare**, and **joins
    LabelProfileMap so the printer handles the label's type** (this is the `LabelMap` mapping).
-3. **Load balancing** by `LastPrinted` (round-robin) when enabled; spare printers are failover.
+3. **Load balancing** by `LastPrinted` (round-robin) **scoped per label type**, when enabled; spare
+   printers are failover. **Collision rule:** if one printer is the primary pick for two of the carton's
+   label types, the second falls back to its backup printer so labels spread across distinct printers.
+   **Full algorithm: architecture-log 005.**
 4. **Apply-point math for TOP printers:** height → inches → **encoder pulses** (`EncoderResolution`);
    supports `DynamicPrintPoint` for variable carton sizes; top-vs-side apply chosen per label/geometry.
 5. **Per label:** `sdisp_PA2BP_SendPrinterFirePoints` looks up fire points
@@ -105,7 +108,8 @@ Marked **[P1]** if relevant to our Phase-1 pass-through slice, **[later]** other
 - **[P1]** Reprint interaction (`Printed` + active + `Reprint Labels`) — our don't-reprint-if-printed rule.
 - **[P1]** Orientation/label metadata is **not** a printable label (don't treat every slot as ZPL).
 - **[later]** Wave gating (ACTIVE-only) in lookup.
-- **[P1]** **Load-balanced** printer selection (LastPrinted round-robin) vs first-available.
+- **[P1]** **Load-balanced** printer selection (LastPrinted round-robin, **per label type**) vs
+  first-available, **including the same-carton collision→backup-printer routing** (architecture-log 005).
 - **[P1]** Printer **online/spare** gating before selection (offline/spare excluded).
 - **[P1]** Fire-point error = **skip that label**, not fail whole carton (per-label resilience).
 - **[later]** Bypass override (skips all checks) and One-Time-Use.

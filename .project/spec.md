@@ -53,10 +53,14 @@ Actions are thin; all logic lives in Core services behind ports so the same test
 ### 5.2 Induct scan (MP2)
 - Input: `{ BlindLabel, LineId (or resolved from message point) }`.
 - Lookup active TO by `TuId`. If none / no label set → status `NO_DATA` (logged; no print).
-- For each label in the set, select printer(s): candidates = line printers whose `LabelMap` contains the
-  label's `LabelType`, `Online=true`; choose by **load-balance** (least-recently-used / round-robin) when
-  `LoadBalance=true`, else the first configured. If no printer matches a type → status `NO_PRINTER` for that
-  label (logged; other labels still print).
+- For each label in the set, select printer(s) per the authoritative algorithm (**see architecture-log
+  005**): candidates = line printers whose `LabelMap` contains the label's `LabelType`, `Online=true` and
+  **not spare**; choose the **least-recently-printed** eligible printer **for that label type** (per-type
+  round robin keyed on `LastPrinted`) when `LoadBalance=true`, else the first configured. **Collision rule:**
+  if one printer is the primary pick for more than one of the carton's label types, the colliding type
+  **falls back to its backup (next least-recently-printed) printer** so the carton's labels spread across
+  distinct printers when possible. If no printer matches a type → status `NO_PRINTER` for that label
+  (logged; other labels still print).
 - Emit each label's `Zpl` to its chosen printer via `IPrinterGateway.SendAsync(printer, zpl, lpn, type)`.
 - Mark TO `PRINTED` (and record which printer/type) on success.
 
@@ -80,7 +84,9 @@ Loaded by `IPandaConfigProvider`: Sim reads the JSON file directly; econtroller 
 2. Repeated advice appends or overwrites per the setting; already-printed + reprint-off is rejected.
 3. Induct scan with a matching TO emits **each** label's ZPL to a printer whose `LabelMap` includes that
    label's type; multi-type carton fires multiple printers.
-4. Load-balancing distributes across eligible printers when `LoadBalance=true`.
+4. Load-balancing distributes across eligible printers when `LoadBalance=true`, scoped **per label type** by
+   least-recently-printed; a printer colliding across two of the carton's label types yields the second to
+   its backup printer (per architecture-log 005).
 5. No matching printer / no data / no active TO produce the correct status and **no** erroneous print.
 6. All of the above proven by xUnit tests running against `PandA.Sim` (in-memory store + capturing gateway).
 7. `PandA.Core` + `PandA.Sim` build clean and tests pass here; `PandA.EController` present and written
