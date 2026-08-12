@@ -57,7 +57,7 @@ IDs map back to the cluster spec docs.
 - **D10 (F08):** ✅ RESOLVED (decision-008): no REJECT lane in PandA; reject destinations are a
   CriteriaConfig mapping on the reject reason-code value.
 - **D11 (F23):** ⏸️ TABLED (decision-012): wave subsystem may not be needed this build.
-- **D12 (F18):** ⏸️ TABLED (decision-012): oLPN/xref discussion deferred.
+- **D12 (F18):** ✅ RESOLVED (decision-017): multi-barcode identity = lightweight Core `IBarcodeXRef` resolver (exact match; carton- or label-level; inline + separate-message ingestion, either order). oLPN/wave association (F24) TABLED INDEFINITELY.
 
 ## E. Deployment topology (affects concurrency & counters)
 
