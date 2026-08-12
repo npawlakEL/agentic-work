@@ -169,3 +169,120 @@ explicit map→profile-group container if named maps that own groups of profiles
 user first.
 **Priority:** Medium (happy path covered; switching lands with the UI work)
 
+---
+
+## Gaps from senior source-coverage review (architecture-log 011, 2026-08-12)
+
+The senior diffed all 322 source objects vs implemented + planned work. 18 gap families below
+(functionality neither built nor previously backlogged). Detail + source citations in `011`.
+
+### GAP F08 — Lane routing (status → divert lane)
+**Source:** `sdisp_TOOL_PA_GetFinalLaneFromStatus`, `LaneDef` table, `LastDiverted` column.
+**Description:** Carton status maps to a physical divert lane (round-robin across lanes for a status). No
+`LaneDef` model in C#; `InductResult`/`VerifyOutcome` carry no `DivertLane`. **Coupling:** consumes verify
+status we already produce; completes the fire-point/PLC outbound bundle (arch-log 010).
+**Priority:** High
+
+### GAP F09 — Lane evaluation + spare printer management + dynamic printer state
+**Source:** `sdisp_PA_LaneEval`, `sdisp_PA_Status_Printer`, `sdisp_PA_Status_Zone`, `PandaState`,
+`PandADetails`, `2 Printer Rule` setting.
+**Description:** Dynamic spare-printer promotion/demotion driven by printer/zone status messages; today
+`PrinterState.PlcOnline/EngineOnline` are static bools never updated at runtime. **Coupling:** feeds printer
+selection/load-balancing (arch-log 005). **Under active design discussion 2026-08-12.**
+**Priority:** High
+
+### GAP F10 — Exception label building
+**Source:** `sdisp_TOOL_PA_BuildExceptionLabel`, `LabelTemplates` table, exception block in `sdisp_PA_LookupCarton`.
+**Description:** On NoRead/NoData/NoInfo/etc., print a templated exception label (8 ZPL templates).
+`PrintExceptionLabels` seed default 0 but commonly enabled. No C# path. Depends on scanner-quality detection (F20).
+**Priority:** High
+
+### GAP F15 — PLC event / carton recovery
+**Source:** `sdisp_BP2PA_Event` (codes 2012, 2015, 2016, 2017, 2019).
+**Description:** Tracking events reset `Printed=0`/`ActiveRecord=1` (re-arm a carton) before the verify
+scanner. No `TransportOrder.ResetForTrackingEvent()` equivalent. **Coupling:** interacts with reprint lifecycle (decision-003).
+**Priority:** High
+
+### GAP F16 — Structured event logging
+**Source:** `sdisp_Log_Event`, `sdisp_eLog_LogIt`, `sdisp_eLog_add`, `EventLog`, `uEventLog`, `EventDescriptions`.
+**Description:** Two-tier event/audit log called by nearly every SP. No `IEventLog` abstraction in C#.
+**Coupling:** cross-cutting — cheaper to add the port before more services are built.
+**Priority:** High
+
+### GAP F18 — XRef multi-barcode matching
+**Source:** `PandaDataXRef` table, `sdivw_PandaDataXRef`, xref joins in `sdisp_PA_LookupCarton` + `sdisp_TOOL_PA_VerifyLabel`.
+**Description:** Induct and verify both fan out to alternate barcodes (UPC/GTIN/EAN) via `PandaDataXRef`. C#
+only matches `TuId`/`Label.Lpn` — silent correctness gap on multi-barcode sites. **Coupling:** touches
+`TransportOrder`, induct, and verify together.
+**Priority:** High
+
+### GAP F11 — ZPL vetting (VetLabel)
+**Source:** `sdisp_TOOL_PA_VetLabel`; `FilterLabels` setting (default 1/ON).
+**Description:** Strips 25+ ZPL config commands (`^MCY`, `^MD`, `^PR*`, …) and forces `^LH13,0` before print.
+C# sends raw ZPL.
+**Priority:** Medium
+
+### GAP F13 — PrintEngine status ingestion
+**Source:** `sdisp_PA_Status_PrintEngine`, `PrintEngineStatus` table, `sdiudf_PA_GetPrinterRecIDFromConnections`.
+**Description:** Parses 3 Zebra TCP status messages (11/10/1 comma formats) into 27 health flags. No C#
+equivalent; operator GUI (printer status screen) depends on it. Prereq: printer status suffix (F12).
+**Priority:** Medium
+
+### GAP F14 — MandA manual apply stations
+**Source:** `sdisp_MA_Scan_Induct`, `sdisp_MA_Scan_Verify`, `sdisp_GUI_MandA_*`, `sdisp_GUI_GetMandaList`.
+**Description:** Operator-staffed print-and-apply workflow (`MANDA%` panda prefix; first-printer selection).
+No mode switch in C#.
+**Priority:** Medium
+
+### GAP F19 — ProfileName validation at induct
+**Source:** `@IsValid` block in `sdisp_PA_LookupCarton`, `sdivw_LabelProfiles`.
+**Description:** Missing/unknown ProfileName → `NoProfile` status, carton not printed. No profile-existence
+check in `InductService`. Relates to fire-point profile work (arch-log 010).
+**Priority:** Medium
+
+### GAP F20 — Gap error + scanner read-quality detection
+**Source:** gap check (`@Gap < @MinGap`) and `?`/`!`/`#`/`*` character detection in `sdisp_PA_LookupCarton`.
+**Description:** Detect no-read/no-data/label-conflict/bypass characters and too-close cartons at induct
+before lookup. `MinGap` setting not read in C#. Provides exception types for F10.
+**Priority:** Medium
+
+### GAP F21 — Carton slot number / PLC index
+**Source:** `sdisp_TOOL_GetSlotNumber`, `CartonAssignSeq` SQL SEQUENCE (1–300 cycling).
+**Description:** Cycling index that keys the `vPA.Assign[i]` PLC array. `PrintJob`/`InductResult` have no
+slot index. **Coupling:** part of the fire-point/lane PLC outbound bundle (pairs with F08).
+**Priority:** Medium
+
+### GAP F22 — Reject history audit trail
+**Source:** `sdisp_CUSTOM_RejectHistory_Insert`, `RejectHistory` table (17 numeric verify codes).
+**Description:** Per-failure reject rows never persisted in C#. GUI reject screen + wave reports depend on it.
+**Priority:** Medium
+
+### GAP F23 — Wave auto-complete (hot-path coupling)
+**Source:** `sdisp_TOOL_CUSTOM_CheckWaveCmp` (called inside `sdisp_PA_VerifyCarton`).
+**Description:** Auto-completes a wave on every verify-pass. Must wire into `VerificationService.VerifyAsync`,
+not a later wave phase. Relates to planned Wave lifecycle item.
+**Priority:** Medium
+
+### GAP F24 — oLPN xref association
+**Source:** `sdisp_TOOL_CUSTOM_LPNxRef`, `sdisp_TOOL_CUSTOM_LPNxRef_Disassociate`.
+**Description:** ULW/RF flow associates an outer LPN to PandaData post-advice. Depends on XRef model (F18).
+**Priority:** Medium
+
+### GAP F17 — Purge / data lifecycle
+**Source:** `sdisp_PA_Purge` + `PurgeSetting_*` settings (7–21 day retention).
+**Description:** Nightly cleanup of PandaData, EventLog, PrintEngineStatus, etc. No retention policy or
+scheduled service in C#.
+**Priority:** Medium
+
+### GAP F12 — Printer status suffix (~HS)
+**Source:** `sdisp_TOOL_PA_AppendStatusSuffix`; `PrinterStatusSuffix` setting (default 0).
+**Description:** Appends `~HS` to ZPL to request a Zebra status reply. Prerequisite for PrintEngine status
+ingestion (F13).
+**Priority:** Low
+
+### GAP F25 — SiteBuilder commissioning CRUD
+**Source:** `sdisp_TOOL_SiteBuilder_*` (26 procs).
+**Description:** GUI-driven config authoring (labels, lanes, pandas, printers, fire points). C# uses JSON
+config; admin CRUD path not built. Useful as a reference for entity field specs.
+**Priority:** Low
+
