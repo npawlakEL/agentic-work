@@ -1,0 +1,216 @@
+@page "/manda"
+@layout PandA.UI.Shell.PandaLayout
+@using PandA.UI.Contracts.Common
+@using PandA.UI.Contracts.Manda
+@inject IMandaStationQuery Stations
+@inject IMandaScanCommand ScanCmd
+@inject IMandaPrintCommand PrintCmd
+@inject IMandaVerifyCommand VerifyCmd
+@inject ISnackbar Snackbar
+
+<PageTitle>PandA — MandA Station</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" data-testid="page-heading">MandA Station</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">Manual print-and-apply: pick a station, scan a carton, print the labels you need, then verify each by scan.</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudSelect T="string" @bind-Value="_stationId" Label="Station" data-testid="station-select" Class="mb-3">
+                @foreach (var s in _stations)
+                {
+                    <MudSelectItem T="string" Value="@s.StationId">@s.Name (@s.Ip:@s.Port)</MudSelectItem>
+                }
+            </MudSelect>
+
+            <div data-testid="scan-input" class="mb-2">
+                <MudTextField @bind-Value="_scan" Label="Scan carton barcode"
+                              Immediate="false" Disabled="@string.IsNullOrEmpty(_stationId)" />
+            </div>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="scan-button"
+                       Disabled="@string.IsNullOrEmpty(_stationId)" OnClick="ScanAsync" FullWidth="true">Scan</MudButton>
+
+            @if (_scanMessage is not null)
+            {
+                <MudAlert Severity="@(_result?.Found == true ? Severity.Info : Severity.Warning)" Class="mt-3" data-testid="scan-message">@_scanMessage</MudAlert>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="8">
+        <MudPaper Class="pa-4" Elevation="1">
+            @if (_result?.Found == true)
+            {
+                <MudText Typo="Typo.h6" GutterBottom="true">Carton @_result.CartonId <MudChip T="string" Size="Size.Small" Color="Color.Default">@_result.BlindLabel</MudChip></MudText>
+
+                <MudTable Items="_labels" Dense="true" data-testid="label-table" Elevation="0" T="MandaLabel">
+                    <HeaderContent>
+                        <MudTh>Print</MudTh>
+                        <MudTh>Slot</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>Barcode</MudTh>
+                        <MudTh>State</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        @{ var label = context!; }
+                        <MudTd>
+                            <MudCheckBox T="bool" Value="@IsSelected(label.Slot)"
+                                         ValueChanged="@(v => ToggleSlot(label.Slot, v))"
+                                         data-testid="slot-check" />
+                        </MudTd>
+                        <MudTd>@label.Slot</MudTd>
+                        <MudTd>@label.LabelType</MudTd>
+                        <MudTd>@label.LabelBarcode</MudTd>
+                        <MudTd>
+                            @if (label.Verified)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success">Verified</MudChip>
+                            }
+                            else if (label.Printed)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">Printed</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default">Ready</MudChip>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" data-testid="print-button"
+                           Disabled="@(_selected.Count == 0)" OnClick="PrintAsync">Print selected (@_selected.Count)</MudButton>
+
+                <MudDivider Class="my-4" />
+
+                <MudText Typo="Typo.subtitle1" GutterBottom="true">Verify a printed label</MudText>
+                <div class="d-flex align-center">
+                    <div data-testid="verify-input" class="me-2 flex-grow-1">
+                        <MudTextField @bind-Value="_verifyScan" Label="Scan printed label" Immediate="false" />
+                    </div>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" data-testid="verify-button" OnClick="VerifyAsync">Verify</MudButton>
+                </div>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" data-testid="idle-hint">Scan a carton to see its labels.</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private IReadOnlyList<MandaStation> _stations = [];
+    private string? _stationId;
+
+    private string? _scan;
+    private string? _scanMessage;
+    private MandaScanResult? _result;
+    private List<MandaLabel> _labels = [];
+    private readonly HashSet<int> _selected = [];
+
+    private string? _verifyScan;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _stations = await Stations.GetStationsAsync();
+            _stationId = _stations.Count > 0 ? _stations[0].StationId : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to load stations: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private bool IsSelected(int slot) => _selected.Contains(slot);
+
+    private void ToggleSlot(int slot, bool selected)
+    {
+        if (selected)
+        {
+            _selected.Add(slot);
+        }
+        else
+        {
+            _selected.Remove(slot);
+        }
+    }
+
+    private async Task ScanAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_stationId) || string.IsNullOrWhiteSpace(_scan))
+        {
+            return;
+        }
+
+        try
+        {
+            _result = await ScanCmd.ScanAsync(_stationId, _scan.Trim());
+            _selected.Clear();
+            if (_result.Found)
+            {
+                _labels = [.. _result.Labels];
+                _scanMessage = $"Resolved carton {_result.CartonId}.";
+            }
+            else
+            {
+                _labels = [];
+                _scanMessage = _result.Message;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Scan failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task PrintAsync()
+    {
+        if (_result is null || string.IsNullOrEmpty(_stationId))
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await PrintCmd.PrintAsync(_stationId, _result.CartonId, [.. _selected]);
+            Snackbar.Add(result.Message ?? (result.Success ? "Printed." : "Print failed."),
+                result.Success ? Severity.Success : Severity.Error);
+            if (result.Success)
+            {
+                _labels = _labels.Select(l => _selected.Contains(l.Slot) ? l with { Printed = true } : l).ToList();
+                _selected.Clear();
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Print failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task VerifyAsync()
+    {
+        if (_result is null || string.IsNullOrEmpty(_stationId) || string.IsNullOrWhiteSpace(_verifyScan))
+        {
+            return;
+        }
+
+        try
+        {
+            var v = await VerifyCmd.VerifyAsync(_stationId, _result.CartonId, _verifyScan.Trim());
+            Snackbar.Add(v.Message ?? (v.Passed ? "Verified." : "Verify failed."),
+                v.Passed ? Severity.Success : Severity.Error);
+            if (v.Passed)
+            {
+                _labels = _labels.Select(l => l.Slot == v.Slot ? l with { Verified = true } : l).ToList();
+                _verifyScan = null;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Verify failed: {ex.Message}", Severity.Error);
+        }
+    }
+}
