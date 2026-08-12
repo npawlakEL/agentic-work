@@ -6,12 +6,14 @@ IDs map back to the cluster spec docs.
 
 ## A. Unknown codes / taxonomies (blockers for exact fidelity)
 
-- **A1 (F15):** PLC event codes **217 / 218** are silently ignored in source. What are they?
-- **A2 (F13):** What integer values does msg 283 `PLCStatus` carry (0=offline/1=online? fault states?).
-- **A3 (F13):** Nothing in source writes `PrinterState.EngineStatus` from `PrintEngineStatus`.
-  Is the recommended derivation `EngineOnline = !(PaperOut || HeadUp || RibbonOut)` correct?
-- **A4 (F13):** Should operator-set `FlagPause` force `EngineOnline=false` (and trigger spare
-  promotion), or is pause a "known temporary offline" that should NOT promote spares?
+- **A1 (F15):** 🔖 BOOKMARKED (decision-014): 217/218 meaning needs PLC/BluePaw protocol docs;
+  port preserves source behavior (ignore) but logs at Trace so they're observable.
+- **A2 (F13):** 🔖 BOOKMARKED (decision-014): exact `PLCStatus` integer taxonomy needs protocol
+  docs; modeled as an enum/mapping at the ingestion boundary (not baked into Core).
+- **A3 (F13):** ✅ RESOLVED (decision-014): `EngineOnline = !(PaperOut || HeadUp || RibbonOut ||
+  Paused || …)` derived from the reported status word.
+- **A4 (F13):** ✅ RESOLVED (decision-014): a pause arrives as a printer status message → set
+  offline → normal spare-promotion path (no special-case).
 - **A5 (F16):** ✅ RESOLVED (decision-007): `805` is a typo for `80` (Information).
 
 ## B. Deliberate divergences already flagged (confirm keep/adjust)
