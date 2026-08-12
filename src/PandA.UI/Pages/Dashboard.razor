@@ -1,43 +1,128 @@
 @page "/"
 @layout PandA.UI.Shell.PandaLayout
+@using PandA.UI.Contracts.Status
+@implements IAsyncDisposable
+@inject ILineStatusStream LineStream
+@inject IPrinterStatusStream PrinterStream
 
 <PageTitle>PandA — Dashboard</PageTitle>
 
 <MudText Typo="Typo.h4" GutterBottom="true" data-testid="page-heading">Dashboard</MudText>
-<MudText Typo="Typo.body1" Class="mb-4">
-    Live status of the lines and printers in the system. This is the PandA standalone UI shell,
-    rendered with the Axon design system.
-</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">Live health of every line and printer. Updates in real time.</MudText>
 
-<MudGrid>
-    @foreach (var card in _placeholders)
+<MudText Typo="Typo.h6" Class="mb-2">Lines</MudText>
+<MudGrid Class="mb-6">
+    @foreach (var line in _lines)
     {
         <MudItem xs="12" sm="6" md="4">
-            <MudCard Elevation="2" data-testid="dashboard-card">
+            <MudCard Elevation="2" data-testid="line-card">
                 <MudCardHeader>
                     <CardHeaderContent>
-                        <MudText Typo="Typo.subtitle1">@card.Title</MudText>
+                        <MudText Typo="Typo.subtitle1">@line.Name</MudText>
+                        <MudText Typo="Typo.caption">Map: @line.ActiveMapName</MudText>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <MudChip T="string" Color="@card.Color" Size="Size.Small">@card.Status</MudChip>
+                        <MudChip T="string" Color="@LineColor(line.RunState)" Size="Size.Small">@line.RunState</MudChip>
                     </CardHeaderActions>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudText Typo="Typo.body2">@card.Detail</MudText>
+                    <MudText Typo="Typo.body2">Printers online: @line.OnlinePrinterCount / @line.PrinterCount</MudText>
+                    @if (!string.IsNullOrEmpty(line.Reason))
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Warning">@line.Reason</MudText>
+                    }
                 </MudCardContent>
             </MudCard>
         </MudItem>
     }
 </MudGrid>
 
-@code {
-    private sealed record StatusCard(string Title, string Status, string Detail, MudBlazor.Color Color);
+<MudText Typo="Typo.h6" Class="mb-2">Printers</MudText>
+<MudTable Items="_printers" Dense="true" Hover="true" data-testid="printer-table" Elevation="2">
+    <HeaderContent>
+        <MudTh>Printer</MudTh>
+        <MudTh>Line</MudTh>
+        <MudTh>State</MudTh>
+        <MudTh>Orientation</MudTh>
+        <MudTh>Verify Fails</MudTh>
+        <MudTh>Label Types</MudTh>
+        <MudTh>Last Printed</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Printer">@context.Name</MudTd>
+        <MudTd DataLabel="Line">@context.LineId</MudTd>
+        <MudTd DataLabel="State">
+            <MudChip T="string" Size="Size.Small" Color="@PrinterColor(context)">@PrinterStateText(context)</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Orientation">@context.Orientation</MudTd>
+        <MudTd DataLabel="Verify Fails">@context.VerifyFailCount / @context.VerifyFailThreshold</MudTd>
+        <MudTd DataLabel="Label Types">@string.Join(", ", context.LabelTypes)</MudTd>
+        <MudTd DataLabel="Last Printed">@(context.LastPrintedUtc?.LocalDateTime.ToString("HH:mm:ss") ?? "—")</MudTd>
+    </RowTemplate>
+</MudTable>
 
-    // Wave-0 placeholder content; replaced by the live Status Dashboard (UI-DASH) in Wave 1.
-    private readonly StatusCard[] _placeholders =
-    [
-        new("Line L1", "Running", "3 printers online, 0 spare.", MudBlazor.Color.Success),
-        new("Printer Ship1", "Online", "Last printed just now.", MudBlazor.Color.Success),
-        new("Printer Cont1", "Spare", "Idle reserve.", MudBlazor.Color.Info),
-    ];
+@code {
+    private IReadOnlyList<LineStatus> _lines = [];
+    private IReadOnlyList<PrinterStatus> _printers = [];
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _lines = await LineStream.GetSnapshotAsync(_cts.Token);
+        _printers = await PrinterStream.GetSnapshotAsync(_cts.Token);
+
+        _ = ConsumeLinesAsync();
+        _ = ConsumePrintersAsync();
+    }
+
+    private async Task ConsumeLinesAsync()
+    {
+        try
+        {
+            await foreach (var update in LineStream.SubscribeAsync(_cts.Token))
+            {
+                _lines = _lines.Select(l => string.Equals(l.LineId, update.LineId, StringComparison.Ordinal) ? update : l).ToList();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // shutting down
+        }
+    }
+
+    private async Task ConsumePrintersAsync()
+    {
+        try
+        {
+            await foreach (var update in PrinterStream.SubscribeAsync(_cts.Token))
+            {
+                _printers = _printers.Select(p => string.Equals(p.PrinterId, update.PrinterId, StringComparison.Ordinal) ? update : p).ToList();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // shutting down
+        }
+    }
+
+    private static Color LineColor(LineRunState state) => state switch
+    {
+        LineRunState.Running => Color.Success,
+        LineRunState.Slow => Color.Warning,
+        _ => Color.Error,
+    };
+
+    private static Color PrinterColor(PrinterStatus p) =>
+        !p.Online ? Color.Error : p.IsSpare ? Color.Info : Color.Success;
+
+    private static string PrinterStateText(PrinterStatus p) =>
+        !p.Online ? "Offline" : p.IsSpare ? "Spare" : "Online";
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync();
+        _cts.Dispose();
+    }
 }
