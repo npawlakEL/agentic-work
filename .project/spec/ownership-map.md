@@ -38,7 +38,7 @@ insertion point in a 🔴 file that the foundation already prepared.
 ### Events / recovery / logging cluster
 | Feature | New files |
 |---------|-----------|
-| **F16** logging | `PandA.Core/Logging/IPandaEventSink.cs`, `PandaEvent.cs`, `PandaEventLevel.cs`, `NullPandaEventSink.cs`; `PandA.Sim/InMemoryEventSink.cs` |
+| **F16** logging (see **decision-005**) | Adopt `ILogger<T>` (Microsoft.Extensions.Logging.Abstractions) + structured templates in existing services (🔴 foundation edits); `PandA.Sim/FakeLogger.cs` (🟢). No bespoke sink/event types. |
 | **F20** read-quality | `PandA.Core/Induct/InductQualityClassifier.cs`, `CartonStatus.cs`, `IMinGapProvider.cs`; `PandA.Sim/SimMinGapProvider.cs` |
 | **F-LOG1** run-history | `PandA.Core/History/CartonRunRecord.cs`, `ICartonRunRepository.cs`; `PandA.Sim/InMemoryCartonRunRepository.cs` |
 | **F15** PLC recovery | `PandA.Core/Plc/PlcEventCode.cs`, `PlcEvent.cs`, `PlcEventHandlerService.cs`, `IVerifyDeviceProvider.cs` |

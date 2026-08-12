@@ -1,5 +1,11 @@
 # Source-Coverage Spec: EVENTS, CARTON RECOVERY, STRUCTURED LOGGING, AUDIT TRAILS & SCANNER READ-QUALITY
 
+> ⚠️ **F16 superseded by decision-005:** the bespoke `IPandaEventSink`/`PandaEvent`/`PandaEventLevel`
+> design below is REPLACED by adopting econtroller's `ILogger<T>` + structured message templates
+> (records surface in exol's event-log screen). Wherever this doc says "emit via `IPandaEventSink`",
+> read "log via `ILogger<T>` with structured fields." See
+> `.project/architecture-log/decision-005-event-logging-ilogger.md`.
+
 **Cluster scope:** F15, F16, F22, F-LOG1, F20  
 **Date:** 2026-08-12 | **Status:** Gap (nothing in this cluster is built in C# today)  
 **Cross-ref:** decision-003, decision-004/AD-1, arch-log 006/007/009, backlog README §F15–F22, F-LOG1

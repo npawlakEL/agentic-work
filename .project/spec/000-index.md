@@ -34,6 +34,6 @@ It was produced by four parallel Senior/research passes over the SQL source
 
 - **`CartonStatus`** enum — drives lane routing, exception labels, run-history, GUI display
 - **`VerifyReasonCode`** enum — the 20 DCMS reject codes; persisted in RejectHistory, exposed to GUI
-- **`ISettingsProvider`** — runtime-mutable operator settings (distinct from static JSON commissioning config)
-- **`IPandaEventSink`** / `PandaEvent` / `PandaEventLevel` — structured event logging retrofitted into every service
-- **`TransportOrder` field additions** — `WaveId`, `ProfileName`, `Bypass`, `VerifyEnabled`, `VerifyPassDest`, `VerifyFailDest`
+- **`ISettingsProvider`** — runtime-mutable operator settings (distinct from static JSON commissioning config). Global with optional per-line override (`GetAsync<T>(name, default, lineId = null)`).
+- **`ILogger<T>` logging** (see **decision-005**) — PandA adopts econtroller's `ILogger<T>` + structured message templates (NOT a bespoke sink); records surface in exol's event-log screen via the EController NLog adapter. Source levels 30/40/50/80/100 → `Critical/Error/Warning/Information/Trace`.
+- **`TransportOrder` field additions** — `WaveId`, `ProfileName`, `Bypass`, `VerifyEnabled`, `VerifyPassDest`, `VerifyFailDest` (keyed by `TuId`/TO id — no `CartonListID`).
