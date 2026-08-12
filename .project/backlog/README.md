@@ -28,6 +28,34 @@ Each entry:
 
 ## Items
 
+### eHub `ZebraConnector` — raw-TCP printer connector (ZPL send + `~HS` status)
+**Added:** 2026-08-12
+**Source:** Senior research pass (eHub connector architecture) + User (external-connections discussion)
+**Context:** External-connections design (decision-018). eHub has NO raw-TCP/Zebra connector — all
+existing connectors are HTTP, AT-Protocol (closed), ADS/BluePaw, or NATS. PandA's printer channel
+(direct TCP per printer: ZPL label data out, Zebra `~HS` host-status string in) has no precedent.
+**Description:** Build `PandA.eHub.ZebraConnector` as a new `IPacketTransfer` connector: maintain a
+`TcpClient` per printer; on `FromMfc`/print-job channel packets send raw ZPL bytes; poll `~HS` on a
+cadence, feed the response to Core's `PrintEngineStatusParser`, and publish a status record to the MFC.
+One connector instance per printer (each its own JSON config). Alternative to investigate: Zebra
+Link-OS HTTP API via `DefaultHttpConnector` (no custom socket code) if the site's printers support it.
+This is **adapter-layer, deferred** — Core/Sim build first, neutral. Core already owns the `~HS` parser.
+**Priority:** High (required for the eHub adapter; net-new build)
+
+### eHub adapter site-coordination gaps (PLC tags, ADS structs, transport mode, NuGet feed)
+**Added:** 2026-08-12
+**Source:** Senior research pass (decision-018 gap list)
+**Context:** Binding PandA's Core ports to eHub connectors needs site/PLC-team facts not yet known.
+**Description:** Track and resolve before the eHub adapter is built (none block Core): (G-ADS1) ADS
+transport mode — MQTT vs native vs embedded-router (embedded router is half-built; server components
+commented out → MQTT is the reliable path); (G-TAG1) real TwinCAT tag paths + CSV type codes for
+frames 281–286 (does the PLC use the `vMsg.Msgs_eHub.*` buffer convention? are codes literally
+`281`…?); (G-STRUCT1) blit-able unmanaged struct layouts for outbound fire-point/divert/stop-slow
+commands must match the TwinCAT DUTs exactly; (G-NUGET1) access to the Element-Logic private NuGet
+feed and whether `IBluePawPLCResponseConverter` is overridable from a consumer plugin or needs a
+`BluePawConnector` subclass; (G-WMS1) WMS/DTC transport REST vs NATS/ELWS (pairs with decision-015).
+**Priority:** High (gating for adapter phase)
+
 ### Wave / WaveRange data + wave lifecycle
 **Added:** 2026-08-11
 **Source:** Senior Coder + User (config disposition triage)
