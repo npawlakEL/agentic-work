@@ -28,10 +28,10 @@ IDs map back to the cluster spec docs.
 
 - **C1 (LINECTRL):** ✅ RESOLVED (decision-007): fix the `sdisp_TOOL_PA_ShutZoneDown` `@PandaID`
   alias bug so the intended zone/line ID is populated before `ShutLine`.
-- **C2 (DYNAP):** ⏸️ TABLED (decision-012): DynamicApplyPoint needs a dedicated discussion.
-- **C3 (DYNAP):** ⏸️ TABLED (decision-012).
-- **C4 (DYNAP):** ⏸️ TABLED (decision-012).
-- **C5 (DYNAP):** ⏸️ TABLED (decision-012).
+- **C2 (DYNAP):** ✅ RESOLVED (decision-016): dynamic applies to the APPLY point only; print point stays static (decision-011). Ported into Core as `ApplyPointResolver`.
+- **C3 (DYNAP):** ✅ RESOLVED (decision-016): labelWidth = per-printer config, default 4in (hardcoded 4 was a bug).
+- **C4 (DYNAP):** ✅ RESOLVED (decision-016): EncoderResolution = 0.25 in/pulse (configurable); source divide is correct; CartonLength given in step pulses via PLC inbound scan.
+- **C5 (DYNAP):** ✅ RESOLVED (decision-016): magic 0.113 replaced by a kinematic top-apply model from 3 per-printer params (tampMountHeight, beltSpeed, tampSpeed) + CartonHeight. Top Trailing/Middle now supported.
 - **C6 (F-LOG1):** ✅ RESOLVED (decision-007): treat the `PrinterNumber` one-char trim as a suspected
   source bug — store the untrimmed ID; only replicate the trim if a concrete source char is confirmed.
 
