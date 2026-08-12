@@ -48,10 +48,10 @@ IDs map back to the cluster spec docs.
 - **D3 (SETTINGS-2):** Should the GUI "lock a carton out of reprint" action (`SetPrintedFlag
   @PrintFlag=1`) survive in the new lifecycle model, or is it superseded by wave/lifecycle?
 - **D4 (F-ADV1):** Re-advice of a non-reprintable carton — domain error, silent no-op, or alert?
-- **D5 (PROFSW):** `Active=1` on 35+ profiles simultaneously — confirm `Active` means
-  "selectable by host", not "currently selected".
-- **D6 (PROFSW):** Host sends no ProfileName → fall back to `DefaultProfile`, or force `NoProfile`
-  (require explicit profile per carton)?
+- **D5 (PROFSW):** ✅ RESOLVED (decision-011): `Active` = "selectable in the catalog" (many at
+  once), NOT "currently selected". The in-use selection is the per-line active-Map pointer.
+- **D6 (PROFSW):** ✅ RESOLVED (decision-011): host sends no map/profile name → keep the line's
+  currently-active Map (static clients always have one active); no "force NoProfile".
 - **D7 (F10):** ✅ RESOLVED (decision-007): add `Active=1` filter on template lookup.
 - **D8 (F10):** ✅ RESOLVED (decision-007): wire `DataMismatch`/`ScanError_Conflict` templates
   to their verify reason codes (treat as reachable).

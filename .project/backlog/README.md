@@ -154,20 +154,24 @@ and DynamicApplyPoint.
 **Priority:** Model done; remaining items tracked below.
 
 ### Fire-point profile switching + host-driven ProfileName + DynamicApplyPoint
-**Added:** 2026-08-11
+**Added:** 2026-08-11 · **Updated:** 2026-08-12 (decision-011 locks the Map/Profile model)
 **Source:** User (fire-point design conversation) + sdisp_PA2BP_SendPrinterFirePoints
 **Depends on:** Operator/GUI screens (see "GUI / operator screens" backlog item) — profile switching is a **UI**
 feature and should be built with those Blazor screens, not before.
-**Context:** This slice ships one static generic profile per line (`LineConfig.ActiveProfile`). The source and
-the domain owner describe three ways the active profile can change: (1) the operator/GUI manually switches
-which profile (or profile group / "map") is active on the line — **this is UI**; (2) the host sends
-`PandaData.ProfileName` per carton to pattern-match the profile; (3) `sdisp_TOOL_CUSTOM_DynamicApplyPoint`
-adjusts the resolved `ApplyFirePoint` by carton size / printer orientation before the tags are written.
-**Description:** Add (a) a switchable active-profile mechanism per line (**GUI/operator screen** — bookmark as
-UI), (b) host-driven per-carton ProfileName resolution, and (c) DynamicApplyPoint adjustment. Also consider an
-explicit map→profile-group container if named maps that own groups of profiles are wanted. Design with the
-user first.
-**Priority:** Medium (happy path covered; switching lands with the UI work)
+**Model (decision-011):** two levels — **Profile** = fire points for one (printer × label-type) pair;
+**Map** = a named collection of profiles covering the line; exactly one Map active per line. Switching
+customer/shift = activating a different Map (swaps all fire points at once). Static clients = one Map with one
+static Profile. `Active` = "selectable in catalog", not "in use". Host with no map name → keep the active Map.
+Print point = raw `int` (e.g. 800); apply point = inch+edge string (`1T/1L/.4M/-.4M/5.25L`) — already split in Core.
+**UI tasks (this is UI code, per owner):**
+  - **Map switch screen** — operator selects the active Map per line.
+  - **Map + Profile CRUD** — create/edit Maps and their per-(printer,label) fire points (print device/point,
+    apply device/point). Ports the SiteBuilder FirePoint procs.
+**Non-UI backlog:** (a) host-driven Map/Profile name in the inbound message (PROFSW pattern-match);
+(b) `sdisp_TOOL_CUSTOM_DynamicApplyPoint` size/orientation adjustment of the resolved `ApplyFirePoint`.
+**Core work (not UI, can land earlier):** `FirePointMap` container + per-line active-Map pointer on
+`LineConfig` (replaces single `ActiveProfile`) + resolver picks active Map → (printer,label) Profile.
+**Priority:** Medium (happy path covered; switching + CRUD land with the UI work)
 
 ---
 
