@@ -21,25 +21,24 @@ IDs map back to the cluster spec docs.
 - **B1 (F15 vs decision-003):** ✅ RESOLVED (decision-009): recovery allowed only pre-verify
   (`DeviceId < VerifyDevice`) AND gated by `ReprintLabels` (if 0 → HeldForIntervention).
 - **B2 (F15):** ✅ RESOLVED (decision-009): `PrintCount` stays MONOTONIC on recovery (never zeroed).
-- **B3 (F22):** Gap-error cartons never reach verify and get no RejectHistory row in source.
-  Should the C# port write a `RejectRecord(Code=4, "Gap Error")` at induct so they show on the
-  reject screen?
+- **B3 (F22):** ✅ RESOLVED (decision-007): the C# port writes a `RejectRecord(Code=4, "Gap Error")`
+  at induct so gap-error cartons show on the reject screen (closes a source audit gap).
 
 ## C. Source bugs found (fix in port? confirm intent)
 
-- **C1 (LINECTRL):** `sdisp_TOOL_PA_ShutZoneDown` never assigns `@PandaID`
-  (`SELECT PandaID=@PandaID` alias bug) — calls ShutLine with empty ID. Port will fix.
+- **C1 (LINECTRL):** ✅ RESOLVED (decision-007): fix the `sdisp_TOOL_PA_ShutZoneDown` `@PandaID`
+  alias bug so the intended zone/line ID is populated before `ShutLine`.
 - **C2 (DYNAP):** ⏸️ TABLED (decision-012): DynamicApplyPoint needs a dedicated discussion.
 - **C3 (DYNAP):** ⏸️ TABLED (decision-012).
 - **C4 (DYNAP):** ⏸️ TABLED (decision-012).
 - **C5 (DYNAP):** ⏸️ TABLED (decision-012).
-- **C6 (F-LOG1):** `PrinterNumber` trimmed by one char on update (`LEFT(..,LEN-1)`). What trailing
-  char is stripped — should the port replicate?
+- **C6 (F-LOG1):** ✅ RESOLVED (decision-007): treat the `PrinterNumber` one-char trim as a suspected
+  source bug — store the untrimmed ID; only replicate the trim if a concrete source char is confirmed.
 
 ## D. Behavior / policy decisions
 
-- **D1 (SETTINGS):** Are settings **global** or ever **per-line** (e.g. different `MinGap` per line)?
-  Source is a single global table.
+- **D1 (SETTINGS):** ✅ RESOLVED (grill): global with optional per-line override —
+  `ISettingsProvider.GetAsync<T>(name, default, lineId=null)` with global fallback.
 - **D2 (SETTINGS):** ✅ RESOLVED (decision-013): `Reprint Labels` default = ON (1). Other mismatches
   were purge settings → moot (F17 descoped, decision-012).
 - **D3 (SETTINGS-2):** ✅ RESOLVED (decision-013): manual lock-out (`SetPrintedFlag`) SUPERSEDED by the
@@ -75,7 +74,7 @@ IDs map back to the cluster spec docs.
 - **F1 (INBOUND):** ⏸️ TABLED (decision-012): parsed with the wave subsystem, which may not be
   needed in this build. Revisit when waves are discussed.
 - **F2 (INBOUND):** ✅ RESOLVED (decision-007): per-record ACK/error handling (bad record skipped, not batch).
-- **F3 (F14):** `sdisp_WMS_PandAVerify_Insert` (WMS outbound) — is the MandA WMS integration
-  in-scope now (as an `IWmsVerifyNotifier` port) or deferred with the EController adapter?
+- **F3 (F14):** ⏳ PENDING senior research (outbound-messaging pass over econtroller/exol).
+  Tentative: WMS notify is OUT of scope (rides econtroller host messaging once TO is annotated).
 - **F4 (F16):** ✅ RESOLVED (decision-005): logging via `ILogger<T>` (sync structured logging), no `IPandaEventSink`.
 - **F5 (F20):** ✅ RESOLVED (decision-007): check read-quality sentinels on all 6 label slots.
