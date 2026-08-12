@@ -197,6 +197,82 @@ public sealed class LaneEvalServiceTests
         Assert.Equal(LineControl.ShutLine, result.Control);
     }
 
+    [Fact]
+    public void MultipleSpares_PromotedAcrossPasses_UntilBalanced()
+    {
+        // usable starts at min-2 with two online spares → the re-eval loop must promote twice.
+        var line = Line(
+            [P("A"), P("B"), P("C"), P("D"), P("E")],
+            [(ApplyOrientation.Side, Policy(3, 5))]);
+        var states = States(
+            new PrinterState("A"),                                                   // active
+            new PrinterState("B", plcOnline: false),                                 // offline
+            new PrinterState("C", isSpare: true, lastStatusUpdate: Now.AddHours(-3)),
+            new PrinterState("D", isSpare: true, lastStatusUpdate: Now.AddHours(-2)),
+            new PrinterState("E", isSpare: true, lastStatusUpdate: Now.AddHours(-1)));
+
+        var result = Eval(line, states);
+
+        Assert.Equal(LineControl.Balanced, result.Control);
+        Assert.Equal(2, result.Changes.Count);
+        Assert.All(result.Changes, c => Assert.Equal(SpareChange.PromotedFromSpare, c.Change));
+        // Newest two spares (E then D) promoted; C (oldest) stays spare so usable == min.
+        Assert.False(states["E"].IsSpare);
+        Assert.False(states["D"].IsSpare);
+        Assert.True(states["C"].IsSpare);
+    }
+
+    [Fact]
+    public void PromotesNewestSpare_ByLastStatusUpdate()
+    {
+        var line = Line([P("A"), P("B"), P("C")], [(ApplyOrientation.Side, Policy(2, 3))]);
+        var states = States(
+            new PrinterState("A"),                                                    // 1 usable
+            new PrinterState("B", isSpare: true, lastStatusUpdate: Now.AddHours(-5)),  // older spare
+            new PrinterState("C", isSpare: true, lastStatusUpdate: Now.AddHours(-1))); // newer spare → promote
+
+        var result = Eval(line, states);
+
+        Assert.Equal(LineControl.Balanced, result.Control);
+        var change = Assert.Single(result.Changes);
+        Assert.Equal("C", change.PrinterId);
+        Assert.False(states["C"].IsSpare);
+        Assert.True(states["B"].IsSpare);
+    }
+
+    [Fact]
+    public void SurplusOfTwo_ShedsOnlyOneSparePerEvaluation()
+    {
+        // usable = min + 2; demote has no re-eval (source-faithful) → exactly one shed per signal.
+        var line = Line([P("A"), P("B"), P("C"), P("D")], [(ApplyOrientation.Side, Policy(2, 4))]);
+        var states = States(
+            new PrinterState("A"),
+            new PrinterState("B"),
+            new PrinterState("C"),
+            new PrinterState("D"));
+
+        var result = Eval(line, states);
+
+        var change = Assert.Single(result.Changes);
+        Assert.Equal(SpareChange.DemotedToSpare, change.Change);
+        Assert.Equal(1, states.Values.Count(s => s.IsSpare)); // still one over min after this call
+    }
+
+    [Fact]
+    public void ZoneDown_ShortCircuits_LeavesSpareFlagsUntouched()
+    {
+        var line = Line([P("A"), P("B")], [(ApplyOrientation.Side, Policy(1, 2))]);
+        // Offline printer holding a stale spare flag; zone-down returns before the offline-clear.
+        var offlineSpare = new PrinterState("B", plcOnline: false, isSpare: true, lastStatusUpdate: Now.AddDays(-1));
+        var states = States(new PrinterState("A"), offlineSpare);
+
+        var result = Eval(line, states, zoneOnline: false);
+
+        Assert.Equal(LineControl.ShutZone, result.Control);
+        Assert.True(states["B"].IsSpare);                       // not cleared
+        Assert.Equal(Now.AddDays(-1), states["B"].LastStatusUpdate); // not touched
+    }
+
     // ---- Shut -----------------------------------------------------------------------------------
 
     [Fact]

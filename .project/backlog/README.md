@@ -231,6 +231,11 @@ C# sends raw ZPL.
 **Source:** `sdisp_PA_Status_PrintEngine`, `PrintEngineStatus` table, `sdiudf_PA_GetPrinterRecIDFromConnections`.
 **Description:** Parses 3 Zebra TCP status messages (11/10/1 comma formats) into 27 health flags. No C#
 equivalent; operator GUI (printer status screen) depends on it. Prereq: printer status suffix (F12).
+**Concurrency (from lane-eval review, doc 012 §9):** when this ingestion path lands, it must
+**serialize lane evaluation per line** — `LaneEvalService` mutates shared `PrinterState` objects
+without locking (fine under single-threaded SimHost today). Concurrent printer/engine/zone signals
+on the same line will otherwise race the spare-flag mutations. This is the in-process "per-line guard"
+that doc 012 §9 promises in place of the source `sdisp_PA_Lock 'PA_Status'` mutex.
 **Priority:** Medium
 
 ### GAP F14 — MandA manual apply stations

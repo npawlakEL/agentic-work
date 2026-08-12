@@ -108,6 +108,11 @@ loss pull from spares; when none left, slow (if degraded allowed) or shut.
    `LastStatusUpdate DESC` *without* excluding already-spare printers, so it can pick an
    already-spare printer and no-op (a latent source bug; harmless because it runs once).
    We demote a **non-spare** online printer (the correct intent). Documented here.
+3. **Offline-spare-clear on either signal down** — the source clears `IsSpare` only when
+   `PLCStatus=0 AND EngineStatus=0` (both down); we clear when `!IsOnline` (either down).
+   This is more correct: an engine-only-down spare would otherwise stay counted in
+   `SpareCount` and depress `usable` below reality. The clear is scoped to the line's own
+   printers (matching the source's per-line `PrinterRecID` scoping).
 
 ## 5. Generalized degraded-mode policy (supersedes the source `2 Printer Rule`)
 

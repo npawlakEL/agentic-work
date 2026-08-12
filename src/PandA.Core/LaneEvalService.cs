@@ -54,9 +54,11 @@ public sealed class LaneEvalService
             }
 
             // A printer that is offline cannot be a functional reserve — clear its spare flag first.
-            foreach (var state in states.Values)
+            // Scoped to this line's printers (source scopes the clear to the line's PrinterRecID list),
+            // so a shared/global states dictionary can't let one line clear another's spares.
+            foreach (var printer in line.Printers)
             {
-                if (!state.IsOnline)
+                if (states.TryGetValue(printer.PrinterId, out var state) && !state.IsOnline)
                 {
                     state.IsSpare = false;
                 }
