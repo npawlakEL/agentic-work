@@ -12,8 +12,7 @@ IDs map back to the cluster spec docs.
   Is the recommended derivation `EngineOnline = !(PaperOut || HeadUp || RibbonOut)` correct?
 - **A4 (F13):** Should operator-set `FlagPause` force `EngineOnline=false` (and trigger spare
   promotion), or is pause a "known temporary offline" that should NOT promote spares?
-- **A5 (F16):** Log level **`805`** in `sdisp_PA_Scan_Verify:149` — confirm it's a typo for `80`
-  (Information); port will normalize.
+- **A5 (F16):** ✅ RESOLVED (decision-007): `805` is a typo for `80` (Information).
 
 ## B. Deliberate divergences already flagged (confirm keep/adjust)
 
@@ -55,14 +54,13 @@ IDs map back to the cluster spec docs.
   "selectable by host", not "currently selected".
 - **D6 (PROFSW):** Host sends no ProfileName → fall back to `DefaultProfile`, or force `NoProfile`
   (require explicit profile per carton)?
-- **D7 (F10):** `Active` filter on template lookup — source has none; add `Active=1` filter in port?
-- **D8 (F10):** `DataMismatch` / `ScanError_Conflict` templates appear unreachable from the
-  builder CASE. Dead data, or missing mapping?
-- **D9 (F08):** Who writes `LaneDef.LastDiverted` back? Source only reads it. Without the write,
-  round-robin degrades to a fixed pick. And is the NULL→GETDATE quirk (never-diverted lane loses)
-  intentional?
-- **D10 (F08):** REJECT lane absent from seed — always provisioned at install? Behavior when also
-  missing: return null or throw config error?
+- **D7 (F10):** ✅ RESOLVED (decision-007): add `Active=1` filter on template lookup.
+- **D8 (F10):** ✅ RESOLVED (decision-007): wire `DataMismatch`/`ScanError_Conflict` templates
+  to their verify reason codes (treat as reachable).
+- **D9 (F08):** ✅ RESOLVED (decision-008): lane/place selection is NOT PandA's — delegated to
+  econtroller CriteriaBasedSorting. No LaneDef/round-robin/LastDiverted in the port.
+- **D10 (F08):** ✅ RESOLVED (decision-008): no REJECT lane in PandA; reject destinations are a
+  CriteriaConfig mapping on the reject reason-code value.
 - **D11 (F23):** Only `WaveStatus='ACTIVE'` auto-completes — what about `SUSPENDED`? And is DCMS
   wave notification fire-and-forget or blocking?
 - **D12 (F18):** Allow oLPN association against a `SUSPENDED` wave? Source guard is only
@@ -74,7 +72,7 @@ IDs map back to the cluster spec docs.
   Per-line counter or shared across lines?
 - **E2 (LOCK):** Is PandA ever deployed **multi-process** (multiple C# hosts, one DB)? If yes the
   real lock impl must use `sp_getapplock`; if single-process, in-memory semaphores suffice.
-- **E3 (LOCK):** Lock acquire timeout (60s) — soft failure (log + proceed, as source) or hard error?
+- **E3 (LOCK):** ✅ RESOLVED (decision-007): lock-acquire timeout is a hard error (fail fast).
 - **E4 (F17):** Purge trigger mechanism — hosted-service `PeriodicTimer`, SQL Agent, or Worker?
   And on a mid-purge failure: replicate source's abort-remaining, or continue each step?
 
@@ -82,9 +80,8 @@ IDs map back to the cluster spec docs.
 
 - **F1 (INBOUND):** WaveID is parsed from the inbound **filename** (`...LD{WaveID}_...`). Stable
   across sites or ULW-specific? Should the parser be configurable (regex/format)?
-- **F2 (INBOUND):** Per-record vs per-batch ACK failure handling?
+- **F2 (INBOUND):** ✅ RESOLVED (decision-007): per-record ACK/error handling (bad record skipped, not batch).
 - **F3 (F14):** `sdisp_WMS_PandAVerify_Insert` (WMS outbound) — is the MandA WMS integration
   in-scope now (as an `IWmsVerifyNotifier` port) or deferred with the EController adapter?
-- **F4 (F16):** Should `IPandaEventSink` be sync (`void Emit`) or async (`Task EmitAsync`)?
-  Async helps a future DB-writing adapter; Core services are currently sync.
-- **F5 (F20):** Check quality sentinels on **Label1 only** (source) or all 6 labels?
+- **F4 (F16):** ✅ RESOLVED (decision-005): logging via `ILogger<T>` (sync structured logging), no `IPandaEventSink`.
+- **F5 (F20):** ✅ RESOLVED (decision-007): check read-quality sentinels on all 6 label slots.

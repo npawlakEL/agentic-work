@@ -9,6 +9,16 @@
 
 ## F08 — Lane Routing (Carton Status → Divert Lane Number)
 
+> ⚠️ **SUPERSEDED by decision-008 — LANE/PLACE SELECTION IS OUT OF SCOPE.**
+> Per the domain owner, PandA does **not** pick lanes/places. It appends its verify result
+> (Pass / Fail / reject reason code) onto the transport order; econtroller's
+> `eController.Behavior.CriteriaBasedSorting` maps that criterion (`SortCriteria {Type,Value}`
+> → `PlaceID`, via `CriteriaConfig.json`) and performs the routing. Do **not** build the
+> `LaneDef` / round-robin / `LastDiverted` / REJECT-lane model described below. What remains
+> in scope: ensure the verify/exception outcome (F22 reason codes) is exposed as a clean
+> routing-decision value on the result object for the adapter to project onto
+> `SortCriteriaExtension`. The material below is retained only as source-behavior reference.
+
 ### Source
 - Primary: `sdisp_TOOL_PA_GetFinalLaneFromStatus.sql`
 - Table DDL: `5.0_CreateTables/LaneDef.sql` (L9–19) — `(RecID, PandaRecID, LaneID VARCHAR(32), LaneNumber INT, LastDiverted DATETIME)`
