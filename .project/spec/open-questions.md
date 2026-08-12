@@ -16,11 +16,9 @@ IDs map back to the cluster spec docs.
 
 ## B. Deliberate divergences already flagged (confirm keep/adjust)
 
-- **B1 (F15 vs decision-003):** PLC pre-verify recovery re-arms a carton (`Printed=0`). This is
-  distinct from the verify-fail hole we closed. Confirm: recovery is allowed **only pre-verify**
-  (`DeviceId < VerifyDevice`), and should it be gated by `ReprintLabels=0`?
-- **B2 (F15):** On recovery, should `PrintCount` be **decremented / reset / left monotonic**?
-  (Source zeroes it; decision-003 makes it monotonic — conflict.)
+- **B1 (F15 vs decision-003):** ✅ RESOLVED (decision-009): recovery allowed only pre-verify
+  (`DeviceId < VerifyDevice`) AND gated by `ReprintLabels` (if 0 → HeldForIntervention).
+- **B2 (F15):** ✅ RESOLVED (decision-009): `PrintCount` stays MONOTONIC on recovery (never zeroed).
 - **B3 (F22):** Gap-error cartons never reach verify and get no RejectHistory row in source.
   Should the C# port write a `RejectRecord(Code=4, "Gap Error")` at induct so they show on the
   reject screen?
@@ -68,10 +66,10 @@ IDs map back to the cluster spec docs.
 
 ## E. Deployment topology (affects concurrency & counters)
 
-- **E1 (F21):** Is the PLC assign array strictly **300** slots, or site-specific/configurable?
-  Per-line counter or shared across lines?
-- **E2 (LOCK):** Is PandA ever deployed **multi-process** (multiple C# hosts, one DB)? If yes the
-  real lock impl must use `sp_getapplock`; if single-process, in-memory semaphores suffice.
+- **E1 (F21):** ✅ RESOLVED (decision-010): assign counter is **per-line**, in-memory, thread-safe;
+  array size defaults to 300 but configurable per line (`LineConfig`).
+- **E2 (LOCK):** ✅ RESOLVED (decision-010): single process, multiple lines/PLCs → in-memory
+  thread-safe locks keyed per-line/per-printer (no `sp_getapplock`); behind `IPandaLock`.
 - **E3 (LOCK):** ✅ RESOLVED (decision-007): lock-acquire timeout is a hard error (fail fast).
 - **E4 (F17):** Purge trigger mechanism — hosted-service `PeriodicTimer`, SQL Agent, or Worker?
   And on a mid-purge failure: replicate source's abort-remaining, or continue each step?
