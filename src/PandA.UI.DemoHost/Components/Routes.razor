@@ -1,0 +1,13 @@
+<Router AppAssembly="typeof(Program).Assembly"
+        AdditionalAssemblies="new[] { typeof(PandA.UI.UiAssemblyMarker).Assembly }">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(PandA.UI.Shell.PandaLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(PandA.UI.Shell.PandaLayout)">
+            <MudText Typo="Typo.h5">Page not found</MudText>
+            <MudText>Sorry, there's nothing at this address.</MudText>
+        </LayoutView>
+    </NotFound>
+</Router>

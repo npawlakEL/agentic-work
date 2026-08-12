@@ -1,0 +1,53 @@
+@inherits LayoutComponentBase
+
+@* Design-system providers (Axon wraps MudBlazor). Order matters: theme first. *@
+<MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<ElDialogProvider />
+<ElSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
+                       data-testid="nav-toggle"
+                       OnClick="ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-2">PandA — Print &amp; Apply</MudText>
+        <MudSpacer />
+        <MudTooltip Text="@(_isDarkMode ? "Switch to light theme" : "Switch to dark theme")">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                           Color="Color.Inherit"
+                           data-testid="theme-toggle"
+                           OnClick="ToggleTheme" />
+        </MudTooltip>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always" Variant="DrawerVariant.Responsive">
+        <MudNavMenu>
+            @foreach (var entry in NavModel.Entries)
+            {
+                <MudNavLink Href="@entry.Href"
+                            Match="@(entry.Href == "/" ? NavLinkMatch.All : NavLinkMatch.Prefix)"
+                            Icon="@entry.Icon">
+                    @entry.Label
+                </MudNavLink>
+            }
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.False" Class="pa-6" data-testid="page-content">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode;
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private void ToggleTheme() => _isDarkMode = !_isDarkMode;
+}

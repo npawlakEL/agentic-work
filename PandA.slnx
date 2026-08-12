@@ -3,8 +3,13 @@
     <Project Path="src/PandA.Core/PandA.Core.csproj" />
     <Project Path="src/PandA.Sim/PandA.Sim.csproj" />
     <Project Path="src/PandA.Harness/PandA.Harness.csproj" />
+    <Project Path="src/PandA.UI.Contracts/PandA.UI.Contracts.csproj" />
+    <Project Path="src/PandA.UI.DemoHost/PandA.UI.DemoHost.csproj" />
+    <Project Path="src/PandA.UI/PandA.UI.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PandA.E2E.Tests/PandA.E2E.Tests.csproj" />
     <Project Path="tests/PandA.Tests/PandA.Tests.csproj" />
+    <Project Path="tests/PandA.UI.Tests/PandA.UI.Tests.csproj" />
   </Folder>
 </Solution>

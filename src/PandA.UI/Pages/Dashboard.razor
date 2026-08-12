@@ -1,0 +1,43 @@
+@page "/"
+@layout PandA.UI.Shell.PandaLayout
+
+<PageTitle>PandA — Dashboard</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" data-testid="page-heading">Dashboard</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">
+    Live status of the lines and printers in the system. This is the PandA standalone UI shell,
+    rendered with the Axon design system.
+</MudText>
+
+<MudGrid>
+    @foreach (var card in _placeholders)
+    {
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="2" data-testid="dashboard-card">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.subtitle1">@card.Title</MudText>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudChip T="string" Color="@card.Color" Size="Size.Small">@card.Status</MudChip>
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2">@card.Detail</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    private sealed record StatusCard(string Title, string Status, string Detail, MudBlazor.Color Color);
+
+    // Wave-0 placeholder content; replaced by the live Status Dashboard (UI-DASH) in Wave 1.
+    private readonly StatusCard[] _placeholders =
+    [
+        new("Line L1", "Running", "3 printers online, 0 spare.", MudBlazor.Color.Success),
+        new("Printer Ship1", "Online", "Last printed just now.", MudBlazor.Color.Success),
+        new("Printer Cont1", "Spare", "Idle reserve.", MudBlazor.Color.Info),
+    ];
+}

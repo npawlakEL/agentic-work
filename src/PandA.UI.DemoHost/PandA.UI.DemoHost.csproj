@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\PandA.UI\PandA.UI.csproj" />
+    <ProjectReference Include="..\PandA.UI.Contracts\PandA.UI.Contracts.csproj" />
+    <ProjectReference Include="..\PandA.Sim\PandA.Sim.csproj" />
+    <ProjectReference Include="..\PandA.Core\PandA.Core.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>
