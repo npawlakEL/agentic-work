@@ -1,0 +1,18 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+
+# Meziantou.Analyzer flows in transitively via the Axon design-system package and only
+# affects the UI-facing projects. These particular rules are stylistic/structural and are
+# not part of our intended compile gate (real compiler + nullability warnings stay errors).
+[*.cs]
+dotnet_diagnostic.MA0004.severity = none  # ConfigureAwait(false) — undesirable in Blazor UI code
+dotnet_diagnostic.MA0006.severity = none  # prefer string.Equals over ==
+dotnet_diagnostic.MA0016.severity = none  # prefer collection abstraction over concrete type
+dotnet_diagnostic.MA0048.severity = none  # file name must match single top-level type
+dotnet_diagnostic.MA0051.severity = none  # method length

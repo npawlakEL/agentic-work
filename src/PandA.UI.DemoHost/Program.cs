@@ -1,6 +1,7 @@
 using Axon.Utility.Service;
 using PandA.UI;
 using PandA.UI.DemoHost.Components;
+using PandA.UI.DemoHost.Sim;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.UseAxonDesignSystem();
+
+// Sim-backed implementations of the UI view-model contracts (no real backend).
+builder.Services.AddPandaDemoBackend();
 
 var app = builder.Build();
 
