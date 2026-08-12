@@ -12,6 +12,7 @@ public sealed class ScreenLoadTests(DemoHostFixture fixture)
     public static TheoryData<string, string> Routes => new()
     {
         { "/", "Dashboard" },
+        { "/lookup", "Label Data Lookup" },
     };
 
     [Theory]

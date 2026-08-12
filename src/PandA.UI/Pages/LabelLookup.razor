@@ -1,0 +1,175 @@
+@page "/lookup"
+@layout PandA.UI.Shell.PandaLayout
+@using PandA.UI.Contracts.Common
+@using PandA.UI.Contracts.Lookup
+@using PandA.UI.Contracts.Reprint
+@inject ITransportOrderQuery Query
+@inject ICartonLabelDetailQuery DetailQuery
+@inject IReprintAuthorizationCommand Reprint
+@inject ISnackbar Snackbar
+
+<PageTitle>PandA — Label Data Lookup</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" data-testid="page-heading">Label Data Lookup</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">Transport orders and their PandA label data. Expand a row for the label slots.</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="1">
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="_fuzzy" Label="Search (blind / UPC / GTIN / EAN / barcode)"
+                          data-testid="fuzzy-search" Immediate="false" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudSelect T="string" @bind-Value="_status" Label="Carton status" Clearable="true" data-testid="status-filter">
+                @foreach (var s in _options.CartonStatuses)
+                {
+                    <MudSelectItem T="string" Value="@s">@s</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudSelect T="VerifyStateFilter" @bind-Value="_verify" Label="Verify state" data-testid="verify-filter">
+                @foreach (var v in Enum.GetValues<VerifyStateFilter>())
+                {
+                    <MudSelectItem T="VerifyStateFilter" Value="@v">@v</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="apply-filters" OnClick="ReloadAsync">Apply</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudTable Items="_rows" Dense="true" Hover="true" data-testid="lookup-table" Elevation="2"
+          @bind-SelectedItem="_selected">
+    <HeaderContent>
+        <MudTh>Carton</MudTh>
+        <MudTh>Blind Label</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Verify</MudTh>
+        <MudTh>Printed</MudTh>
+        <MudTh>Profile</MudTh>
+        <MudTh>Wave</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        @{ var row = context!; }
+        <MudTd DataLabel="Carton">
+            <MudIconButton Size="Size.Small"
+                           Icon="@(IsExpanded(row) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                           data-testid="expand-row"
+                           OnClick="@(() => ToggleAsync(row))" />
+            @row.CartonId
+        </MudTd>
+        <MudTd DataLabel="Blind Label">@row.BlindLabel</MudTd>
+        <MudTd DataLabel="Status">@row.CartonStatus</MudTd>
+        <MudTd DataLabel="Verify">@(string.IsNullOrEmpty(row.VerifyResult) ? "—" : row.VerifyResult)</MudTd>
+        <MudTd DataLabel="Printed">@row.PrintedCount</MudTd>
+        <MudTd DataLabel="Profile">@row.ProfileName</MudTd>
+        <MudTd DataLabel="Wave">@row.WaveId</MudTd>
+        <MudTd DataLabel="Actions">
+            @if (row.IsHeld)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                           data-testid="authorize-reprint"
+                           OnClick="@(() => AuthorizeAsync(row))">Authorize Reprint</MudButton>
+            }
+        </MudTd>
+    </RowTemplate>
+    <ChildRowContent>
+        @{ var row = context!; }
+        @if (IsExpanded(row))
+        {
+            <MudTr>
+                <td colspan="8">
+                    <MudCard Elevation="0" Class="pa-2">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Label slots — @row.CartonId</MudText>
+                        <MudTable Items="_slots" Dense="true" data-testid="slot-table" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>Slot</MudTh>
+                                <MudTh>Type</MudTh>
+                                <MudTh>Barcode</MudTh>
+                                <MudTh>LPN</MudTh>
+                                <MudTh>Printed</MudTh>
+                                <MudTh>ZPL</MudTh>
+                            </HeaderContent>
+                            <RowTemplate Context="slot">
+                                @{ var s = slot!; }
+                                <MudTd>@s.Slot</MudTd>
+                                <MudTd>@s.LabelType</MudTd>
+                                <MudTd>@s.LabelBarcode</MudTd>
+                                <MudTd>@s.Lpn</MudTd>
+                                <MudTd>@(s.Printed ? "Yes" : "No")</MudTd>
+                                <MudTd>
+                                    <MudExpansionPanels Elevation="0">
+                                        <MudExpansionPanel Text="Raw ZPL">
+                                            <pre style="white-space:pre-wrap;margin:0">@s.Zpl</pre>
+                                        </MudExpansionPanel>
+                                    </MudExpansionPanels>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </MudCard>
+                </td>
+            </MudTr>
+        }
+    </ChildRowContent>
+</MudTable>
+
+<MudText Typo="Typo.caption" Class="mt-2">@_rows.Count of @_total shown</MudText>
+
+@code {
+    private IReadOnlyList<TransportOrderRow> _rows = [];
+    private IReadOnlyList<CartonLabelSlot> _slots = [];
+    private LookupFilterOptions _options = new([], [], [], [], []);
+    private TransportOrderRow? _selected;
+    private string? _expandedCartonId;
+    private int _total;
+
+    private string? _fuzzy;
+    private string? _status;
+    private VerifyStateFilter _verify = VerifyStateFilter.Any;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _options = await Query.GetFilterOptionsAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        var filter = new TransportOrderFilter(
+            FuzzyText: _fuzzy,
+            CartonStatus: _status,
+            VerifyState: _verify,
+            PageSize: 200);
+        var page = await Query.QueryAsync(filter);
+        _rows = page.Items;
+        _total = page.TotalCount;
+    }
+
+    private bool IsExpanded(TransportOrderRow row) =>
+        string.Equals(_expandedCartonId, row.CartonId, StringComparison.Ordinal);
+
+    private async Task ToggleAsync(TransportOrderRow row)
+    {
+        if (IsExpanded(row))
+        {
+            _expandedCartonId = null;
+            _slots = [];
+            return;
+        }
+
+        _expandedCartonId = row.CartonId;
+        _slots = await DetailQuery.GetLabelSlotsAsync(row.CartonId);
+    }
+
+    private async Task AuthorizeAsync(TransportOrderRow row)
+    {
+        var result = await Reprint.AuthorizeReprintAsync(row.CartonId, "operator", CancellationToken.None);
+        Snackbar.Add(result.Message ?? (result.Success ? "Authorized." : "Failed."),
+            result.Success ? Severity.Success : Severity.Error);
+        await ReloadAsync();
+    }
+}
