@@ -24,9 +24,26 @@ public sealed class VerificationService : IVerificationService
         // Disabled verify: bypassed cartons are ignored (VerifyPass=3); otherwise a hard fail (reject).
         if (!options.VerifyEnabled)
         {
-            return new VerifyResult(
-                options.Bypass ? VerifyOutcome.Ignore : VerifyOutcome.Fail,
-                []);
+            if (!options.Bypass)
+            {
+                return new VerifyResult(VerifyOutcome.Fail, []);
+            }
+
+            // Bypass proceeds without comparing to the expected set — EXCEPT a scanner no-read / no-data
+            // is not a valid bypass (a glitched read), so it still fails and counts toward the fail streak
+            // (decision-004 / VF-3).
+            foreach (var scan in scanned)
+            {
+                var glitch = Classify(scan.ScannedValue);
+                if (glitch is VerifyLabelReason.NoRead or VerifyLabelReason.NoData)
+                {
+                    return Fail(
+                        [new VerifyLabelDetail(scan.LabelType, null, scan.ScannedValue, glitch)],
+                        ToOutcome(glitch));
+                }
+            }
+
+            return new VerifyResult(VerifyOutcome.Ignore, []);
         }
 
         var acceptable = BuildXrefLookup(xref);

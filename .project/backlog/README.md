@@ -296,3 +296,34 @@ ingestion (F13).
 config; admin CRUD path not built. Useful as a reference for entity field specs.
 **Priority:** Low
 
+
+### F-ADV1 — Reprint-rules-gated re-advice (AD-1)
+**Added:** 2026-08-12
+**Source:** User (retro-review of the advice path; decision-004 / reviewer-log 003)
+**Context:** `CartonAdviceService.AdviseAsync` currently wipes lifecycle and re-arms `CanPrint` for ANY
+re-advice of an existing carton — a back-door around the decision-003 reprint protection.
+**Description:** Gate the re-advice reset on whether the carton is **reprintable** per the reprint-rules
+policy ("Reprint Labels" setting, source RecID 17): if reprintable, reset to printable (event log records the
+re-run); if not reprintable, do NOT re-arm — the operator must intervene. Requires porting the reprint-rules
+setting first. Until then the current always-reset behavior is retained (assumes reprint-allowed).
+**Priority:** Medium
+
+### F-LOG1 — Carton run-history event logging (AD-1 bookmark)
+**Added:** 2026-08-12
+**Source:** User ("bookmark the conversation about logging")
+**Context:** Discussing AD-1 re-advice — the operator relies on event logs to see a carton barcode's full
+history (how many times it ran, each outcome) as the audit trail behind re-runs/reprints.
+**Description:** Emit structured lifecycle events keyed by carton barcode (advise, print run N, verify
+pass/fail/bypass, hold, authorize-reprint) so the run history of a barcode is queryable. Ports the source
+event-log writes (`sdisp_*Event*` / PandaEvent) into the C# model. Lands with the operator-GUI/observability
+work.
+**Priority:** Medium
+
+### F-VF4CFG — Expose VF-4 post-trip reset policy in line config
+**Added:** 2026-08-12
+**Source:** Senior Coder (decision-004 VF-4)
+**Context:** `VerifyThresholdTracker(resetOnTrip)` is configurable in code but not yet surfaced as a
+per-line/global setting.
+**Description:** Surface the post-trip reset policy as configuration (line or global setting) once the
+config/settings port lands, so operators can choose refresh-on-trip vs. stay-tripped per line.
+**Priority:** Low

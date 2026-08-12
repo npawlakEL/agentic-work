@@ -7,7 +7,8 @@
 
 ## Verdict
 **Reprint / print-count lifecycle (decision-003): confirmed faithful & well-tested — CLEAN.**
-**Verify-core comparison DIVERGES from source ground truth in 4 places; the current green tests enshrine the divergent behavior.** No changes made yet — all four are behavioral/domain calls escalated to the user, because they change which cartons PASS vs FAIL and contradict approved doc 006 + existing tests.
+**Verify-core comparison DIVERGES from source in 4 places; all four were adjudicated by the domain owner
+(decision-004).** VF-1/VF-2 are deliberate divergences (kept strict — no change); VF-3/VF-4 were implemented.
 
 ## Confirmed clean (no action)
 - decision-003 reprint hole correctly avoided: `MarkVerifyFailed → HeldForIntervention` (no auto re-arm), monotonic `PrintCount`, `CanPrint` gate, `AuthorizeReprint` consumed on next `CompletePrintRun`, partial runs don't count. Well covered.
@@ -25,12 +26,22 @@
 | 3 | Medium | Bypass (`VerifyPass=3`) is folded into `proceed` and registered as `pass:true`, which **resets** the consecutive-fail streak. | `sdisp_PA_VerifyCarton.sql:297-301` calls threshold update unconditionally; `_Update.sql:87` `IF @VerifyPass<>1 ⇒ increment`. So bypass **increments** the streak. Doc 006 §D: only `VerifyPass=1` resets. | Either register bypass as non-pass (`pass: Outcome==Pass`) to match source/doc, OR record an explicit decision that bypass intentionally clears the streak (may be a deliberate improvement). |
 | 4 | Low | Threshold tracker never resets after tripping the pause; returns `PausePrinter:true` on every subsequent fail (pinned by `StaysPaused_WhileFailsContinue`). After un-pause, the next single fail immediately re-pauses. | `sdisp_PA_VerifyThreshold_Update.sql:173` calls `_Refresh` (→ count=0) when the threshold fires. Doc 006 §D: "force-pause … then refresh/reset." | Reset the line's count to 0 when `Register` returns `PausePrinter:true`, OR doc-log that post-trip reset is deferred to the pause-egress connector. |
 
-## Open decisions surfaced to user
-- **VF-1 (Finding 1):** ignore-unexpected-scan (match source, cartons pass) vs. keep strict fail. *Reviewer recommends match source — it is a real correctness gap that also spuriously pauses lines.*
-- **VF-2 (Finding 2):** same-type expected rows as xref alternates (union) vs. ordered slots.
-- **VF-3 (Finding 3):** bypass increments vs. resets the fail streak.
-- **VF-4 (Finding 4):** reset threshold counter on trip vs. defer to pause-egress connector.
+## Open decisions surfaced to user — RESOLVED (decision-004)
+- **VF-1 (Finding 1):** **KEEP strict fail** (deliberate divergence, like decision-003). A scanned label
+  outside the carton's required barcode array (extra/unexpected read, or duplicate read of a matched label)
+  is a verify FAIL. Domain owner: a label with no barcode to verify against can't be verified; anything
+  outside the required set isn't a valid pass. **No code change.**
+- **VF-2 (Finding 2):** **KEEP ordered slots.** Slot numbering matters — a repeated LPN is expected scanned
+  twice in slot order. True alternate-value xref goes through the `LabelXref` param (already handled).
+  **No code change.**
+- **VF-3 (Finding 3):** **Bypass does not count UNLESS no-read/no-data.** A clean bypass proceeds and clears
+  the streak; a bypass that read `?`/`!`/`~`/`0` fails, holds, and counts. **Implemented** in
+  `VerificationService` + tests.
+- **VF-4 (Finding 4):** **Configurable.** `VerifyThresholdTracker(resetOnTrip)` — `true` refreshes to 0 on
+  trip (source), `false` (default) stays tripped. **Implemented** + test. Surfacing as a setting → backlog
+  F-VF4CFG.
 
 ## Post-fix state
-- No code/test changes landed. Suite unchanged at 225 green (still enshrining current behavior).
-- Awaiting user decisions VF-1..VF-4 before touching verify semantics.
+- Code changed: VF-3 (bypass glitch fails+counts), VF-4 (configurable post-trip reset). VF-1/VF-2 confirmed
+  correct-as-intended (no change).
+- Tests: 231 green (added bypass-glitch + reset-on-trip coverage).

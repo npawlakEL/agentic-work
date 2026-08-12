@@ -171,6 +171,31 @@ public sealed class VerificationServiceTests
     }
 
     [Fact]
+    public void Disabled_WithBypass_NoReadStillFails()
+    {
+        var result = _sut.Verify(
+            Expected(("Shipping", "SHIP1")),
+            Scanned(("Shipping", "??")),
+            new VerifyOptions(VerifyEnabled: false, Bypass: true));
+
+        Assert.Equal(VerifyOutcome.NoRead, result.Outcome);
+    }
+
+    [Theory]
+    [InlineData("!")]
+    [InlineData("~")]
+    [InlineData("0")]
+    public void Disabled_WithBypass_NoDataStillFails(string value)
+    {
+        var result = _sut.Verify(
+            Expected(("Shipping", "SHIP1")),
+            Scanned(("Shipping", value)),
+            new VerifyOptions(VerifyEnabled: false, Bypass: true));
+
+        Assert.Equal(VerifyOutcome.NoData, result.Outcome);
+    }
+
+    [Fact]
     public void Disabled_WithoutBypass_Fails()
     {
         var result = _sut.Verify(

@@ -187,4 +187,20 @@ public sealed class LifecyclePermutationTests
         Assert.Equal(VerifyOutcome.Ignore, verify.Verify!.Outcome);
         Assert.Equal(0, verify.ConsecutiveFailures);
     }
+
+    [Fact]
+    public async Task Station_Bypass_NoRead_HoldsAndCountsTowardThreshold()
+    {
+        _lines.Add(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "B1", Labels(("Shipping", "SHIP")));
+        await _induct.InductAsync("L1", "B1");
+
+        var verify = await _verify.VerifyAsync(
+            "B1", Scan(("Shipping", "?")),
+            new VerifyOptions(VerifyEnabled: false, Bypass: true), failThreshold: 2);
+
+        Assert.Equal(VerifyStationStatus.HeldForIntervention, verify.Status);
+        Assert.Equal(VerifyOutcome.NoRead, verify.Verify!.Outcome);
+        Assert.Equal(1, verify.ConsecutiveFailures);
+    }
 }

@@ -58,7 +58,8 @@ public sealed class VerifyStationService : IVerifyStationService
 
         var verify = _verification.Verify(order.Labels, scanned, options, xref);
 
-        // Pass and Ignore (bypass) both let the carton proceed and clear the fail streak.
+        // Pass and Ignore (clean bypass) let the carton proceed and clear the fail streak. A bypass that
+        // read no-read/no-data comes back as a Fail outcome, so it holds the carton and counts (VF-3).
         var proceed = verify.Outcome is VerifyOutcome.Pass or VerifyOutcome.Ignore;
         var threshold = _threshold.Register(order.LineId, pass: proceed, failThreshold);
 

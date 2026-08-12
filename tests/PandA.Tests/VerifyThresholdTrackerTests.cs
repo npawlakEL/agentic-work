@@ -84,4 +84,19 @@ public sealed class VerifyThresholdTrackerTests
 
         Assert.Equal(0, _sut.CurrentCount(Line));
     }
+
+    [Fact]
+    public void ResetOnTrip_RefreshesCounterToZeroWhenPausing()
+    {
+        var tracker = new VerifyThresholdTracker(resetOnTrip: true);
+
+        Assert.False(tracker.Register(Line, pass: false, failThreshold: 2).PausePrinter); // count 1
+        var trip = tracker.Register(Line, pass: false, failThreshold: 2);                 // count 2 → pause + refresh
+
+        Assert.True(trip.PausePrinter);
+        Assert.Equal(2, trip.ConsecutiveFailures);   // reported streak that tripped it
+        Assert.Equal(0, tracker.CurrentCount(Line));  // internal counter refreshed
+        // Next single fail starts a fresh window and does NOT immediately re-pause.
+        Assert.False(tracker.Register(Line, pass: false, failThreshold: 2).PausePrinter);
+    }
 }
