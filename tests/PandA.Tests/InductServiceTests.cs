@@ -165,4 +165,35 @@ public sealed class InductServiceTests
         Assert.Equal(2, stored!.PrintCount);
         Assert.Equal(2, _gateway.Jobs.Count);
     }
+
+    [Fact]
+    public async Task Induct_WithActiveProfile_ResolvesFirePointOntoPrintJob()
+    {
+        var profile = new FirePointProfile("Generic",
+        [
+            (("Ship1", "Shipping"), new FirePoint(2, 800, 3, ApplyPoint.Parse("1T"))),
+        ]);
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: profile));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        await _induct.InductAsync("L1", "BLIND1");
+
+        var job = _gateway.Jobs.Single(j => j.LabelType == "Shipping");
+        Assert.NotNull(job.FirePoint);
+        Assert.Equal(2, job.FirePoint!.PrintTrackingDevice);
+        Assert.Equal(800, job.FirePoint.PrintFirePoint);
+        Assert.Equal(3, job.FirePoint.ApplyTrackingDevice);
+        Assert.Equal(ApplyPoint.Parse("1T"), job.FirePoint.ApplyFirePoint);
+    }
+
+    [Fact]
+    public async Task Induct_NoActiveProfile_LeavesFirePointNull()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        await _induct.InductAsync("L1", "BLIND1");
+
+        Assert.Null(_gateway.Jobs.Single(j => j.LabelType == "Shipping").FirePoint);
+    }
 }

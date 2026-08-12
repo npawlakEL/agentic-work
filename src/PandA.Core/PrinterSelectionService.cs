@@ -63,6 +63,10 @@ public sealed class PrinterSelectionService : IPrinterSelectionService
         return new PrinterSelectionResult(assignments);
     }
 
+    // A printer with no supplied state is treated as available (fail-open). Invariant: the line provider
+    // is responsible for supplying a PrinterState for every configured printer whose health can vary;
+    // a missing entry means "no health signal known", not "offline". Lane-eval/health drivers keep the
+    // state map populated (architecture-log 012).
     private static bool IsAvailable(IReadOnlyDictionary<string, PrinterState> states, string printerId) =>
         !states.TryGetValue(printerId, out var state) || state.IsAvailable;
 

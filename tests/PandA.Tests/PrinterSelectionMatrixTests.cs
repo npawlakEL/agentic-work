@@ -175,6 +175,25 @@ public sealed class PrinterSelectionMatrixTests
     }
 
     [Fact]
+    public void Collision_TwoTypes_ConvergeOnSingleSharedBackup()
+    {
+        // 008 §B1: both types share primary A; the only other printer that can emit both types is C
+        // (B can't emit either), so both colliding types converge on the single shared backup C.
+        var line = new LineConfig("L1",
+        [
+            P("A", ["Shipping", "Content"], 0),
+            P("B", ["Parcel"], 1),
+            P("C", ["Shipping", "Content"], 2),
+        ], loadBalance: true);
+        var states = States(new PrinterState("A"), new PrinterState("B"), new PrinterState("C"));
+
+        var result = _sut.Select(line, states, Labels(("Shipping", "S1"), ("Content", "C1")));
+
+        Assert.Equal("C", Chosen(result, "Shipping"));
+        Assert.Equal("C", Chosen(result, "Content"));
+    }
+
+    [Fact]
     public void NoCollision_DistinctPrimaries_EachTypeGetsItsOwn()
     {
         var line = new LineConfig("L1",
