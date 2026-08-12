@@ -27,15 +27,10 @@ IDs map back to the cluster spec docs.
 
 - **C1 (LINECTRL):** `sdisp_TOOL_PA_ShutZoneDown` never assigns `@PandaID`
   (`SELECT PandaID=@PandaID` alias bug) — calls ShutLine with empty ID. Port will fix.
-- **C2 (DYNAP):** `DynamicPrintPoint` gate is commented out — dynamic apply always runs. Restore
-  the gate (default ON) or always compute?
-- **C3 (DYNAP):** `LabelWidth` hardcoded to `4` at the call site despite being fetched from
-  `LabelTypes`. Use the real per-label width, or keep 4?
-- **C4 (DYNAP):** `EncoderResolution` default differs: `0.25` in DynamicApplyPoint vs `0.2` in
-  PickPrinter, and the unit is inverted vs its description ("steppulses/inch" but algebra is
-  inches/pulse). Canonical default? One setting or two?
-- **C5 (DYNAP):** Magic constant **`0.113`** in the top-apply formula — universal or
-  site-calibrated? Per-printer config or global?
+- **C2 (DYNAP):** ⏸️ TABLED (decision-012): DynamicApplyPoint needs a dedicated discussion.
+- **C3 (DYNAP):** ⏸️ TABLED (decision-012).
+- **C4 (DYNAP):** ⏸️ TABLED (decision-012).
+- **C5 (DYNAP):** ⏸️ TABLED (decision-012).
 - **C6 (F-LOG1):** `PrinterNumber` trimmed by one char on update (`LEFT(..,LEN-1)`). What trailing
   char is stripped — should the port replicate?
 
@@ -59,10 +54,8 @@ IDs map back to the cluster spec docs.
   econtroller CriteriaBasedSorting. No LaneDef/round-robin/LastDiverted in the port.
 - **D10 (F08):** ✅ RESOLVED (decision-008): no REJECT lane in PandA; reject destinations are a
   CriteriaConfig mapping on the reject reason-code value.
-- **D11 (F23):** Only `WaveStatus='ACTIVE'` auto-completes — what about `SUSPENDED`? And is DCMS
-  wave notification fire-and-forget or blocking?
-- **D12 (F18):** Allow oLPN association against a `SUSPENDED` wave? Source guard is only
-  `<> 'COMPLETED'`.
+- **D11 (F23):** ⏸️ TABLED (decision-012): wave subsystem may not be needed this build.
+- **D12 (F18):** ⏸️ TABLED (decision-012): oLPN/xref discussion deferred.
 
 ## E. Deployment topology (affects concurrency & counters)
 
@@ -71,13 +64,13 @@ IDs map back to the cluster spec docs.
 - **E2 (LOCK):** ✅ RESOLVED (decision-010): single process, multiple lines/PLCs → in-memory
   thread-safe locks keyed per-line/per-printer (no `sp_getapplock`); behind `IPandaLock`.
 - **E3 (LOCK):** ✅ RESOLVED (decision-007): lock-acquire timeout is a hard error (fail fast).
-- **E4 (F17):** Purge trigger mechanism — hosted-service `PeriodicTimer`, SQL Agent, or Worker?
-  And on a mid-purge failure: replicate source's abort-remaining, or continue each step?
+- **E4 (F17):** ✅ RESOLVED (decision-012): general purge dropped (TO=econtroller's, logs=MfcLog/DBA,
+  status=in-memory). Only orphaned/never-used label-advice cleanup is a candidate — bookmarked (Quartz).
 
 ## F. Ingestion / integration boundaries
 
-- **F1 (INBOUND):** WaveID is parsed from the inbound **filename** (`...LD{WaveID}_...`). Stable
-  across sites or ULW-specific? Should the parser be configurable (regex/format)?
+- **F1 (INBOUND):** ⏸️ TABLED (decision-012): parsed with the wave subsystem, which may not be
+  needed in this build. Revisit when waves are discussed.
 - **F2 (INBOUND):** ✅ RESOLVED (decision-007): per-record ACK/error handling (bad record skipped, not batch).
 - **F3 (F14):** `sdisp_WMS_PandAVerify_Insert` (WMS outbound) — is the MandA WMS integration
   in-scope now (as an `IWmsVerifyNotifier` port) or deferred with the EController adapter?
