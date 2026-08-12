@@ -38,11 +38,12 @@ IDs map back to the cluster spec docs.
 
 - **D1 (SETTINGS):** Are settings **global** or ever **per-line** (e.g. different `MinGap` per line)?
   Source is a single global table.
-- **D2 (SETTINGS):** Seed vs proc-default mismatches (`Reprint Labels` 0 vs 1;
-  `PurgeSetting_UsedData` 7 vs 21; `PurgeSetting_InactiveData` 21 vs 14). Align proc defaults to seed?
-- **D3 (SETTINGS-2):** Should the GUI "lock a carton out of reprint" action (`SetPrintedFlag
-  @PrintFlag=1`) survive in the new lifecycle model, or is it superseded by wave/lifecycle?
-- **D4 (F-ADV1):** Re-advice of a non-reprintable carton — domain error, silent no-op, or alert?
+- **D2 (SETTINGS):** ✅ RESOLVED (decision-013): `Reprint Labels` default = ON (1). Other mismatches
+  were purge settings → moot (F17 descoped, decision-012).
+- **D3 (SETTINGS-2):** ✅ RESOLVED (decision-013): manual lock-out (`SetPrintedFlag`) SUPERSEDED by the
+  lifecycle; `AuthorizeReprint` is the only re-open path. Dropped.
+- **D4 (F-ADV1):** ✅ RESOLVED (decision-013): re-advice of a non-reprintable carton OVERWRITES the
+  stored label data but stays LOCKED (no re-arm) until operator `AuthorizeReprint`.
 - **D5 (PROFSW):** ✅ RESOLVED (decision-011): `Active` = "selectable in the catalog" (many at
   once), NOT "currently selected". The in-use selection is the per-line active-Map pointer.
 - **D6 (PROFSW):** ✅ RESOLVED (decision-011): host sends no map/profile name → keep the line's
