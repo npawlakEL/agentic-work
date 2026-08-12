@@ -48,6 +48,44 @@ backend services exist. User has flagged this as **essential** to the overall pr
 is deferred, not dropped. Schedule as a dedicated phase after the backend engine slices land.
 **Priority:** High (essential; deferred)
 
+#### GUI screen inventory (33 `sdisp_GUI_*` source procs, catalogued 2026-08-12)
+For the dedicated UI phase, map each source screen group to a Blazor page:
+
+| Screen group | Source procs | Notes |
+|---|---|---|
+| **Label profile / Map CRUD** | GetLabelData, GetLabelDefList, GetLabelOrientations, GetLabelPrintPositions, GetLabelProfile{Details,Header,List}, LabelProfile_{Insert,Update,Delete} | Fire points / orientations / print positions CRUD. Overlaps the fire-point Map/Profile switching + CRUD item below (decision-011). |
+| **Live monitoring** | GetPandaData, GetPandaEvents, GetPandAList, GetPandaScanLog_{In,Verify}, GetPrintEngineStatus, GetPrinterList, GetPrinterStatus | Carton/event/scan-log/printer dashboards. Read-mostly. |
+| **Reject cartons** | GetPandARejectCartons | Rejected-carton screen. |
+| **MandA** | GetMandaList, MandA_Scan, MandA_Verify, MandA_Screen_Update | Manual scan/induct/verify station — see dedicated item below. |
+| **Waves** | GetPandAWave{Cartons,Control,History}, GetPandaWaves, PandaWaveAction_{Start,Suspend,Complete} | Wave control. TABLED (waves out of initial scope). |
+| **Data export** | GetTableExports, QueueTableExport | Table export / reporting. |
+| **Reprint lockout** | SetPrintedFlag | Superseded by lifecycle (decision-013) — do NOT reimplement as-is. |
+
+### UI — Label data lookup screen (GetLabelData)
+**Added:** 2026-08-12
+**Source:** User ("for UI, add these topics: label data lookup").
+**Context:** `sdisp_GUI_GetLabelData` returns the label-slot data (LabelData1..6 / LabelBarcode1..6 /
+LabelType1..6) for a carton so an operator can inspect/preview what will print. Backend already models the
+six label slots on the transport order (decision-007 F5).
+**Description:** A read-only lookup screen: operator enters a carton / blind-label id and sees the resolved
+label slots (data, barcode, type per slot), current fire-point/profile, and print/verify state. Also the
+place to surface the multi-barcode xref identifiers (BL/UPC/GTIN/EAN/ItemID/oLPN) once xref lands.
+**Priority:** Medium (UI phase)
+
+### UI — MandA manual scan/verify station (MandA_Scan / MandA_Verify / MandA_Screen_Update / GetMandaList)
+**Added:** 2026-08-12
+**Source:** User ("for UI, add these topics: ... MandA").
+**Context:** MandA is a **manual** print/apply + verify mode: instead of the automated PLC line driving
+induct→print→verify via 281–286 frames, an operator drives it from a GUI screen — `MandA_Scan` (manual
+induct), `MandA_Verify` (manual verify), `MandA_Screen_Update` (live screen refresh), `GetMandaList` (work
+list). This is the manual fallback / low-volume station path parallel to the automated lifecycle.
+**Description:** Investigate the MandA procs to determine how much is a *new backend path* (a manual
+induct/verify entry point into the same lifecycle services) vs. purely a screen over existing services.
+Likely a thin GUI over `VerifyStationService` + the induct/print services, but confirm against source
+whether MandA bypasses any automated gates (e.g. fire-point resolution, threshold pausing). Then build the
+Blazor screen. **Open:** confirm what "MandA" stands for and its exact relationship to the automated line.
+**Priority:** Medium (UI phase); backend-investigation task first
+
 ### Dynamic height→orientation apply-point transfer (Side↔Top)
 **Added:** 2026-08-11
 **Source:** User (during load-balancing grill)
