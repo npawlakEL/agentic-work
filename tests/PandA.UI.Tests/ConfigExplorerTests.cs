@@ -53,6 +53,11 @@ public sealed class ConfigExplorerTests : TestContext
         cut.Find("[data-testid=save-button]").Click();
 
         Assert.Equal(1, _config.SettingsSaves);
+        // Round-trip integrity: the draft->DTO mapping must carry the loaded values through Save.
+        Assert.NotNull(_config.LastSavedSettings);
+        Assert.Equal(3, _config.LastSavedSettings!.VerifyFailThreshold);
+        Assert.Equal(0.25, _config.LastSavedSettings!.EncoderResolutionInchesPerPulse);
+        Assert.True(_config.LastSavedSettings!.ReprintLabelsEnabled);
     }
 
     private sealed class FakeConfig
@@ -60,6 +65,7 @@ public sealed class ConfigExplorerTests : TestContext
           ILineEditor, IPrinterEditor, IFirePointEditor, IMapEditor
     {
         public int SettingsSaves { get; private set; }
+        public SettingsDto? LastSavedSettings { get; private set; }
 
         public Task<ConfigTreeNode> GetTreeAsync(CancellationToken ct = default)
         {
@@ -81,6 +87,7 @@ public sealed class ConfigExplorerTests : TestContext
         public Task<CommandResult> SaveAsync(SettingsDto settings, CancellationToken ct = default)
         {
             SettingsSaves++;
+            LastSavedSettings = settings;
             return Task.FromResult(CommandResult.Ok("saved"));
         }
 

@@ -54,9 +54,10 @@
                     <RowTemplate>
                         @{ var label = context!; }
                         <MudTd>
-                            <MudCheckBox T="bool" Value="@IsSelected(label.Slot)"
-                                         ValueChanged="@(v => ToggleSlot(label.Slot, v))"
-                                         data-testid="slot-check" />
+                            <div data-testid="slot-check">
+                                <MudCheckBox T="bool" Value="@IsSelected(label.Slot)"
+                                             ValueChanged="@(v => ToggleSlot(label.Slot, v))" />
+                            </div>
                         </MudTd>
                         <MudTd>@label.Slot</MudTd>
                         <MudTd>@label.LabelType</MudTd>
