@@ -139,14 +139,35 @@
 
     private async Task ReloadAsync()
     {
-        var filter = new TransportOrderFilter(
-            FuzzyText: _fuzzy,
-            CartonStatus: _status,
-            VerifyState: _verify,
-            PageSize: 200);
-        var page = await Query.QueryAsync(filter);
-        _rows = page.Items;
-        _total = page.TotalCount;
+        try
+        {
+            var filter = new TransportOrderFilter(
+                FuzzyText: _fuzzy,
+                CartonStatus: _status,
+                VerifyState: _verify,
+                PageSize: 200);
+            var page = await Query.QueryAsync(filter);
+            _rows = page.Items;
+            _total = page.TotalCount;
+
+            // Reconcile the expanded row: refresh its slots, or collapse if it fell out of the result set.
+            if (_expandedCartonId is not null)
+            {
+                if (_rows.Any(r => string.Equals(r.CartonId, _expandedCartonId, StringComparison.Ordinal)))
+                {
+                    _slots = await DetailQuery.GetLabelSlotsAsync(_expandedCartonId);
+                }
+                else
+                {
+                    _expandedCartonId = null;
+                    _slots = [];
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to load transport orders: {ex.Message}", Severity.Error);
+        }
     }
 
     private bool IsExpanded(TransportOrderRow row) =>
@@ -161,15 +182,31 @@
             return;
         }
 
-        _expandedCartonId = row.CartonId;
-        _slots = await DetailQuery.GetLabelSlotsAsync(row.CartonId);
+        try
+        {
+            _expandedCartonId = row.CartonId;
+            _slots = await DetailQuery.GetLabelSlotsAsync(row.CartonId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _expandedCartonId = null;
+            _slots = [];
+            Snackbar.Add($"Failed to load label slots: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task AuthorizeAsync(TransportOrderRow row)
     {
-        var result = await Reprint.AuthorizeReprintAsync(row.CartonId, "operator", CancellationToken.None);
-        Snackbar.Add(result.Message ?? (result.Success ? "Authorized." : "Failed."),
-            result.Success ? Severity.Success : Severity.Error);
-        await ReloadAsync();
+        try
+        {
+            var result = await Reprint.AuthorizeReprintAsync(row.CartonId, "operator", CancellationToken.None);
+            Snackbar.Add(result.Message ?? (result.Success ? "Authorized." : "Failed."),
+                result.Success ? Severity.Success : Severity.Error);
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Reprint authorization failed: {ex.Message}", Severity.Error);
+        }
     }
 }

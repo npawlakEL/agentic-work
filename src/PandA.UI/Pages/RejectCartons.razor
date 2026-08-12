@@ -1,0 +1,113 @@
+@page "/rejects"
+@layout PandA.UI.Shell.PandaLayout
+@using PandA.UI.Contracts.Common
+@using PandA.UI.Contracts.Rejects
+@using PandA.UI.Contracts.Reprint
+@inject IRejectCartonQuery Query
+@inject IReprintAuthorizationCommand Reprint
+@inject ISnackbar Snackbar
+
+<PageTitle>PandA — Reject Cartons</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" data-testid="page-heading">Reject Cartons</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">Cartons rejected at verify. Authorize a reprint to release one for re-printing.</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="1">
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudTextField @bind-Value="_reason" Label="Reason contains"
+                          data-testid="reason-filter" Immediate="false" />
+        </MudItem>
+        <MudItem xs="8" md="4">
+            <MudSelect T="string" @bind-Value="_lineId" Label="Line" Clearable="true" data-testid="line-filter">
+                @foreach (var l in _lines)
+                {
+                    <MudSelectItem T="string" Value="@l">@l</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="4" md="2" Class="d-flex align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="apply-filters" OnClick="ReloadAsync">Apply</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudTable Items="_rows" Dense="true" Hover="true" data-testid="rejects-table" Elevation="2">
+    <HeaderContent>
+        <MudTh>Carton</MudTh>
+        <MudTh>Blind Label</MudTh>
+        <MudTh>Reason</MudTh>
+        <MudTh>Rejected</MudTh>
+        <MudTh>Line</MudTh>
+        <MudTh>Profile</MudTh>
+        <MudTh>Printed</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        @{ var row = context!; }
+        <MudTd DataLabel="Carton">@row.CartonId</MudTd>
+        <MudTd DataLabel="Blind Label">@row.BlindLabel</MudTd>
+        <MudTd DataLabel="Reason">@row.RejectReason</MudTd>
+        <MudTd DataLabel="Rejected">@row.RejectedUtc.LocalDateTime.ToString("g")</MudTd>
+        <MudTd DataLabel="Line">@row.LineId</MudTd>
+        <MudTd DataLabel="Profile">@row.ProfileName</MudTd>
+        <MudTd DataLabel="Printed">@row.PrintedCount</MudTd>
+        <MudTd DataLabel="Actions">
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                       data-testid="authorize-reprint"
+                       OnClick="@(() => AuthorizeAsync(row))">Authorize Reprint</MudButton>
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+<MudText Typo="Typo.caption" Class="mt-2">@_rows.Count of @_total shown</MudText>
+
+@if (_rows.Count == 0)
+{
+    <MudAlert Severity="Severity.Success" Class="mt-4" data-testid="empty-state">No rejected cartons match the filter.</MudAlert>
+}
+
+@code {
+    private IReadOnlyList<RejectCartonRow> _rows = [];
+    private IReadOnlyList<string> _lines = [];
+    private int _total;
+
+    private string? _reason;
+    private string? _lineId;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            var filter = new RejectCartonFilter(
+                LineId: _lineId,
+                ReasonContains: _reason,
+                PageSize: 200);
+            var page = await Query.QueryAsync(filter);
+            _rows = page.Items;
+            _total = page.TotalCount;
+            _lines = _rows.Select(r => r.LineId).Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to load reject cartons: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task AuthorizeAsync(RejectCartonRow row)
+    {
+        try
+        {
+            var result = await Reprint.AuthorizeReprintAsync(row.CartonId, "operator", CancellationToken.None);
+            Snackbar.Add(result.Message ?? (result.Success ? "Authorized." : "Failed."),
+                result.Success ? Severity.Success : Severity.Error);
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Reprint authorization failed: {ex.Message}", Severity.Error);
+        }
+    }
+}
