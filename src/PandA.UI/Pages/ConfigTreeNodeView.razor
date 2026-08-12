@@ -1,0 +1,19 @@
+@using PandA.UI.Contracts.Config
+
+<div style="padding-left:@(Depth * 16)px">
+    <MudButton Variant="Variant.Text" Size="Size.Small" data-testid="tree-node"
+               Disabled="@IsDisabled"
+               OnClick="@(() => OnSelect.InvokeAsync(Node))">@Node.Label</MudButton>
+</div>
+@foreach (var child in Node.Children)
+{
+    <ConfigTreeNodeView Node="child" Depth="Depth + 1" OnSelect="OnSelect" />
+}
+
+@code {
+    [Parameter, EditorRequired] public ConfigTreeNode Node { get; set; } = default!;
+    [Parameter] public int Depth { get; set; }
+    [Parameter] public EventCallback<ConfigTreeNode> OnSelect { get; set; }
+
+    private bool IsDisabled => Node.EntityId is null && Node.Kind is not ConfigNodeKind.SettingsGroup;
+}

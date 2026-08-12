@@ -15,6 +15,7 @@ public sealed class ScreenLoadTests(DemoHostFixture fixture)
         { "/lookup", "Label Data Lookup" },
         { "/rejects", "Reject Cartons" },
         { "/manda", "MandA Station" },
+        { "/config", "Config Explorer" },
     };
 
     [Theory]

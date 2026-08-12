@@ -1,0 +1,421 @@
+@page "/config"
+@layout PandA.UI.Shell.PandaLayout
+@using System.Globalization
+@using PandA.UI.Contracts.Common
+@using PandA.UI.Contracts.Config
+@inject IConfigTreeQuery Tree
+@inject ISettingsEditor SettingsEditor
+@inject ILabelDefEditor LabelEditor
+@inject IMandaStationEditor StationEditor
+@inject ILineEditor LineEditor
+@inject IPrinterEditor PrinterEditor
+@inject IFirePointEditor FirePointEditor
+@inject IMapEditor MapEditor
+@inject ISnackbar Snackbar
+
+<PageTitle>PandA — Config Explorer</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" data-testid="page-heading">Config Explorer</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">Browse the PandA configuration tree and edit an entity on the right. Changes save through the pluggable editors.</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-3" Elevation="1" data-testid="config-tree">
+            @if (_root is not null)
+            {
+                <ConfigTreeNodeView Node="_root" Depth="0" OnSelect="SelectAsync" />
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="8">
+        <MudPaper Class="pa-4" Elevation="1" data-testid="detail-panel">
+            @if (_selected is null)
+            {
+                <MudText Typo="Typo.body2" data-testid="detail-empty">Select an entity in the tree to edit it.</MudText>
+            }
+            else
+            {
+                <div class="d-flex align-center mb-3">
+                    <MudText Typo="Typo.h6" data-testid="detail-title">@_selected.Label</MudText>
+                    <MudSpacer />
+                    @if (_canDelete)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" data-testid="delete-button"
+                                   OnClick="DeleteAsync" Class="me-2">Delete</MudButton>
+                    }
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="save-button" OnClick="SaveAsync">Save</MudButton>
+                </div>
+
+                @switch (_selected.Kind)
+                {
+                    case ConfigNodeKind.SettingsGroup when _settings is not null:
+                        <MudNumericField T="double" @bind-Value="_settings.EncoderResolutionInchesPerPulse" Label="Encoder resolution (in/pulse)" />
+                        <MudNumericField T="int" @bind-Value="_settings.VerifyFailThreshold" Label="Verify fail threshold" />
+                        <MudNumericField T="int" @bind-Value="_settings.PostTripResetCount" Label="Post-trip reset count" />
+                        <MudCheckBox T="bool" @bind-Value="_settings.ReprintLabelsEnabled" Label="Reprint labels enabled" />
+                        <MudCheckBox T="bool" @bind-Value="_settings.LoadBalanceEnabled" Label="Load balancing" />
+                        <MudCheckBox T="bool" @bind-Value="_settings.TwoPrinterRuleEnabled" Label="Two-printer rule" />
+                        break;
+
+                    case ConfigNodeKind.LabelDefinition when _label is not null:
+                        <MudTextField @bind-Value="_label.Name" Label="Name" />
+                        <MudSelect T="string" @bind-Value="_label.Orientation" Label="Orientation">
+                            <MudSelectItem T="string" Value="@("Side")">Side</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Top")">Top</MudSelectItem>
+                        </MudSelect>
+                        <MudNumericField T="int" @bind-Value="_label.PrintPosition" Label="Print position" />
+                        break;
+
+                    case ConfigNodeKind.MandaStation when _station is not null:
+                        <MudTextField @bind-Value="_station.Name" Label="Name" />
+                        <MudTextField @bind-Value="_station.Ip" Label="IP" />
+                        <MudNumericField T="int" @bind-Value="_station.Port" Label="Port" />
+                        break;
+
+                    case ConfigNodeKind.Line when _line is not null:
+                        <MudTextField @bind-Value="_line.Name" Label="Name" />
+                        <MudTextField @bind-Value="_line.Zones" Label="Zones (comma-separated)" />
+                        <MudTextField @bind-Value="_line.TrackingDevices" Label="Tracking devices (comma-separated)" />
+                        <MudTextField @bind-Value="_line.BufferOrder" Label="Buffer order (comma-separated)" />
+                        <MudTextField @bind-Value="_line.ActiveMapId" Label="Active map id" />
+                        <MudSelect T="LineControlPolicy" @bind-Value="_line.ControlPolicy" Label="Control policy">
+                            @foreach (var p in Enum.GetValues<LineControlPolicy>())
+                            {
+                                <MudSelectItem T="LineControlPolicy" Value="@p">@p</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudNumericField T="int" @bind-Value="_line.OnlineMinimum" Label="Online minimum" />
+                        break;
+
+                    case ConfigNodeKind.Printer when _printer is not null:
+                        <MudTextField @bind-Value="_printer.Name" Label="Name" />
+                        <MudTextField @bind-Value="_printer.LineId" Label="Line id" />
+                        <MudTextField @bind-Value="_printer.Ip" Label="IP" />
+                        <MudNumericField T="int" @bind-Value="_printer.Port" Label="Port" />
+                        <MudSelect T="string" @bind-Value="_printer.Orientation" Label="Orientation">
+                            <MudSelectItem T="string" Value="@("Side")">Side</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Top")">Top</MudSelectItem>
+                        </MudSelect>
+                        <MudTextField @bind-Value="_printer.LabelTypes" Label="Label types (comma-separated)" />
+                        <MudNumericField T="int" @bind-Value="_printer.ConfigOrder" Label="Config order" />
+                        <MudNumericField T="double" @bind-Value="_printer.EncoderResolutionInchesPerPulse" Label="Encoder resolution (in/pulse)" />
+                        <MudNumericField T="double" @bind-Value="_printer.LabelWidthInches" Label="Label width (in)" />
+                        <MudCheckBox T="bool" @bind-Value="_printer.SpareEligible" Label="Spare eligible" />
+                        <MudNumericField T="double" @bind-Value="_printer.TampMountHeightInches" Label="Tamp mount height (in)" />
+                        <MudNumericField T="double" @bind-Value="_printer.BeltSpeedInchesPerSecond" Label="Belt speed (in/s)" />
+                        <MudNumericField T="double" @bind-Value="_printer.TampSpeedInchesPerSecond" Label="Tamp speed (in/s)" />
+                        break;
+
+                    case ConfigNodeKind.FirePoint when _firePoint is not null:
+                        <MudTextField @bind-Value="_firePoint.LabelType" Label="Label type" />
+                        <MudTextField @bind-Value="_firePoint.PrintTrackingDevice" Label="Print tracking device" />
+                        <MudNumericField T="int" @bind-Value="_firePoint.PrintPoint" Label="Print point" />
+                        <MudTextField @bind-Value="_firePoint.ApplyTrackingDevice" Label="Apply tracking device" />
+                        <MudTextField @bind-Value="_firePoint.ApplyPointNotation" Label="Apply point (e.g. 1T, 1L, 0M)" />
+                        <MudCheckBox T="bool" @bind-Value="_firePoint.DynamicApply" Label="Dynamic apply" />
+                        break;
+
+                    case ConfigNodeKind.Map when _map is not null:
+                        <MudTextField @bind-Value="_map.Name" Label="Name" />
+                        <MudTextField @bind-Value="_map.LineId" Label="Line id" />
+                        <MudTextField @bind-Value="_map.FirePointIds" Label="Fire point ids (comma-separated)" />
+                        break;
+
+                    default:
+                        <MudText Typo="Typo.body2" data-testid="detail-readonly">This node is a grouping category. Select a child entity to edit.</MudText>
+                        break;
+                }
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private ConfigTreeNode? _root;
+    private ConfigTreeNode? _selected;
+    private bool _canDelete;
+
+    private SettingsDraft? _settings;
+    private LabelDraft? _label;
+    private StationDraft? _station;
+    private LineDraft? _line;
+    private PrinterDraft? _printer;
+    private FirePointDraft? _firePoint;
+    private MapDraft? _map;
+
+    protected override async Task OnInitializedAsync() => await ReloadTreeAsync();
+
+    private async Task ReloadTreeAsync()
+    {
+        try
+        {
+            _root = await Tree.GetTreeAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to load config tree: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SelectAsync(ConfigTreeNode node)
+    {
+        _selected = node;
+        _canDelete = false;
+        _settings = null; _label = null; _station = null; _line = null; _printer = null; _firePoint = null; _map = null;
+
+        try
+        {
+            switch (node.Kind)
+            {
+                case ConfigNodeKind.SettingsGroup:
+                    _settings = SettingsDraft.From(await SettingsEditor.GetAsync());
+                    break;
+                case ConfigNodeKind.LabelDefinition when node.EntityId is { } id:
+                    if (await LabelEditor.GetAsync(id) is { } l) { _label = LabelDraft.From(l); _canDelete = true; }
+                    break;
+                case ConfigNodeKind.MandaStation when node.EntityId is { } id:
+                    if (await StationEditor.GetAsync(id) is { } s) { _station = StationDraft.From(s); _canDelete = true; }
+                    break;
+                case ConfigNodeKind.Line when node.EntityId is { } id:
+                    if (await LineEditor.GetAsync(id) is { } ln) { _line = LineDraft.From(ln); _canDelete = true; }
+                    break;
+                case ConfigNodeKind.Printer when node.EntityId is { } id:
+                    if (await PrinterEditor.GetAsync(id) is { } pr) { _printer = PrinterDraft.From(pr); _canDelete = true; }
+                    break;
+                case ConfigNodeKind.FirePoint when node.EntityId is { } id:
+                    if (await FirePointEditor.GetAsync(id) is { } fp) { _firePoint = FirePointDraft.From(fp); _canDelete = true; }
+                    break;
+                case ConfigNodeKind.Map when node.EntityId is { } id:
+                    if (await MapEditor.GetAsync(id) is { } mp) { _map = MapDraft.From(mp); _canDelete = true; }
+                    break;
+                default:
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to load entity: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        try
+        {
+            CommandResult result = _selected.Kind switch
+            {
+                ConfigNodeKind.SettingsGroup when _settings is not null => await SettingsEditor.SaveAsync(_settings.ToDto()),
+                ConfigNodeKind.LabelDefinition when _label is not null => await LabelEditor.SaveAsync(_label.ToDto()),
+                ConfigNodeKind.MandaStation when _station is not null => await StationEditor.SaveAsync(_station.ToDto()),
+                ConfigNodeKind.Line when _line is not null => await LineEditor.SaveAsync(_line.ToDto()),
+                ConfigNodeKind.Printer when _printer is not null => await PrinterEditor.SaveAsync(_printer.ToDto()),
+                ConfigNodeKind.FirePoint when _firePoint is not null => await FirePointEditor.SaveAsync(_firePoint.ToDto()),
+                ConfigNodeKind.Map when _map is not null => await MapEditor.SaveAsync(_map.ToDto()),
+                _ => CommandResult.Fail("Nothing to save for this node."),
+            };
+
+            Snackbar.Add(result.Message ?? (result.Success ? "Saved." : "Save failed."),
+                result.Success ? Severity.Success : Severity.Error);
+            if (result.Success)
+            {
+                await ReloadTreeAsync();
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Save failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_selected?.EntityId is not { } id)
+        {
+            return;
+        }
+
+        try
+        {
+            CommandResult result = _selected.Kind switch
+            {
+                ConfigNodeKind.LabelDefinition => await LabelEditor.DeleteAsync(id),
+                ConfigNodeKind.MandaStation => await StationEditor.DeleteAsync(id),
+                ConfigNodeKind.Line => await LineEditor.DeleteAsync(id),
+                ConfigNodeKind.Printer => await PrinterEditor.DeleteAsync(id),
+                ConfigNodeKind.FirePoint => await FirePointEditor.DeleteAsync(id),
+                ConfigNodeKind.Map => await MapEditor.DeleteAsync(id),
+                _ => CommandResult.Fail("This node cannot be deleted."),
+            };
+
+            Snackbar.Add(result.Message ?? (result.Success ? "Deleted." : "Delete failed."),
+                result.Success ? Severity.Success : Severity.Error);
+            if (result.Success)
+            {
+                _selected = null;
+                await ReloadTreeAsync();
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string Join(IReadOnlyList<string> items) => string.Join(", ", items);
+
+    private static IReadOnlyList<string> Split(string? csv) =>
+        string.IsNullOrWhiteSpace(csv)
+            ? []
+            : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private sealed class SettingsDraft
+    {
+        public double EncoderResolutionInchesPerPulse { get; set; }
+        public bool ReprintLabelsEnabled { get; set; }
+        public bool LoadBalanceEnabled { get; set; }
+        public bool TwoPrinterRuleEnabled { get; set; }
+        public int VerifyFailThreshold { get; set; }
+        public int PostTripResetCount { get; set; }
+
+        public static SettingsDraft From(SettingsDto d) => new()
+        {
+            EncoderResolutionInchesPerPulse = d.EncoderResolutionInchesPerPulse,
+            ReprintLabelsEnabled = d.ReprintLabelsEnabled,
+            LoadBalanceEnabled = d.LoadBalanceEnabled,
+            TwoPrinterRuleEnabled = d.TwoPrinterRuleEnabled,
+            VerifyFailThreshold = d.VerifyFailThreshold,
+            PostTripResetCount = d.PostTripResetCount,
+        };
+
+        public SettingsDto ToDto() => new(
+            EncoderResolutionInchesPerPulse, ReprintLabelsEnabled, LoadBalanceEnabled,
+            TwoPrinterRuleEnabled, VerifyFailThreshold, PostTripResetCount);
+    }
+
+    private sealed class LabelDraft
+    {
+        public string? Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Orientation { get; set; } = "Side";
+        public int PrintPosition { get; set; }
+
+        public static LabelDraft From(LabelDefDto d) => new()
+        {
+            Id = d.LabelDefId, Name = d.Name, Orientation = d.Orientation, PrintPosition = d.PrintPosition,
+        };
+
+        public LabelDefDto ToDto() => new(Id, Name, Orientation, PrintPosition);
+    }
+
+    private sealed class StationDraft
+    {
+        public string? Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Ip { get; set; } = "";
+        public int Port { get; set; }
+
+        public static StationDraft From(MandaStationDto d) => new()
+        {
+            Id = d.StationId, Name = d.Name, Ip = d.Ip, Port = d.Port,
+        };
+
+        public MandaStationDto ToDto() => new(Id, Name, Ip, Port);
+    }
+
+    private sealed class LineDraft
+    {
+        public string? Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Zones { get; set; } = "";
+        public string TrackingDevices { get; set; } = "";
+        public string BufferOrder { get; set; } = "";
+        public string? ActiveMapId { get; set; }
+        public LineControlPolicy ControlPolicy { get; set; }
+        public int OnlineMinimum { get; set; }
+
+        public static LineDraft From(LineDto d) => new()
+        {
+            Id = d.LineId, Name = d.Name, Zones = Join(d.Zones), TrackingDevices = Join(d.TrackingDevices),
+            BufferOrder = Join(d.BufferOrder), ActiveMapId = d.ActiveMapId, ControlPolicy = d.ControlPolicy,
+            OnlineMinimum = d.OnlineMinimum,
+        };
+
+        public LineDto ToDto() => new(Id, Name, Split(Zones), Split(TrackingDevices), Split(BufferOrder),
+            string.IsNullOrWhiteSpace(ActiveMapId) ? null : ActiveMapId, ControlPolicy, OnlineMinimum);
+    }
+
+    private sealed class PrinterDraft
+    {
+        public string? Id { get; set; }
+        public string LineId { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Ip { get; set; } = "";
+        public int Port { get; set; }
+        public string Orientation { get; set; } = "Side";
+        public string LabelTypes { get; set; } = "";
+        public int ConfigOrder { get; set; }
+        public double EncoderResolutionInchesPerPulse { get; set; }
+        public double LabelWidthInches { get; set; }
+        public bool SpareEligible { get; set; }
+        public double TampMountHeightInches { get; set; }
+        public double BeltSpeedInchesPerSecond { get; set; }
+        public double TampSpeedInchesPerSecond { get; set; }
+
+        public static PrinterDraft From(PrinterDto d) => new()
+        {
+            Id = d.PrinterId, LineId = d.LineId, Name = d.Name, Ip = d.Ip, Port = d.Port,
+            Orientation = d.Orientation, LabelTypes = Join(d.LabelTypes), ConfigOrder = d.ConfigOrder,
+            EncoderResolutionInchesPerPulse = d.EncoderResolutionInchesPerPulse, LabelWidthInches = d.LabelWidthInches,
+            SpareEligible = d.SpareEligible, TampMountHeightInches = d.TampMountHeightInches,
+            BeltSpeedInchesPerSecond = d.BeltSpeedInchesPerSecond, TampSpeedInchesPerSecond = d.TampSpeedInchesPerSecond,
+        };
+
+        public PrinterDto ToDto() => new(Id, LineId, Name, Ip, Port, Orientation, Split(LabelTypes), ConfigOrder,
+            EncoderResolutionInchesPerPulse, LabelWidthInches, SpareEligible, TampMountHeightInches,
+            BeltSpeedInchesPerSecond, TampSpeedInchesPerSecond);
+    }
+
+    private sealed class FirePointDraft
+    {
+        public string? Id { get; set; }
+        public string PrinterId { get; set; } = "";
+        public string LabelType { get; set; } = "";
+        public string PrintTrackingDevice { get; set; } = "";
+        public int PrintPoint { get; set; }
+        public string ApplyTrackingDevice { get; set; } = "";
+        public string ApplyPointNotation { get; set; } = "0M";
+        public bool DynamicApply { get; set; }
+
+        public static FirePointDraft From(FirePointDto d) => new()
+        {
+            Id = d.FirePointId, PrinterId = d.PrinterId, LabelType = d.LabelType,
+            PrintTrackingDevice = d.PrintTrackingDevice, PrintPoint = d.PrintPoint,
+            ApplyTrackingDevice = d.ApplyTrackingDevice, ApplyPointNotation = d.ApplyPointNotation,
+            DynamicApply = d.DynamicApply,
+        };
+
+        public FirePointDto ToDto() => new(Id, PrinterId, LabelType, PrintTrackingDevice, PrintPoint,
+            ApplyTrackingDevice, ApplyPointNotation, DynamicApply);
+    }
+
+    private sealed class MapDraft
+    {
+        public string? Id { get; set; }
+        public string LineId { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string FirePointIds { get; set; } = "";
+
+        public static MapDraft From(MapDto d) => new()
+        {
+            Id = d.MapId, LineId = d.LineId, Name = d.Name, FirePointIds = Join(d.FirePointIds),
+        };
+
+        public MapDto ToDto() => new(Id, LineId, Name, Split(FirePointIds));
+    }
+}
