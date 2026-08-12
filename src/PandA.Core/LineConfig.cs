@@ -12,7 +12,8 @@ public sealed class LineConfig
         bool loadBalance = true,
         string? placeId = null,
         LabelBufferOrder? bufferOrder = null,
-        FirePointProfile? activeProfile = null)
+        FirePointProfile? activeProfile = null,
+        IReadOnlyDictionary<ApplyOrientation, PrinterGroupPolicy>? printerPolicies = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentNullException.ThrowIfNull(printers);
@@ -23,6 +24,7 @@ public sealed class LineConfig
         PlaceId = placeId;
         BufferOrder = bufferOrder ?? LabelBufferOrder.Default;
         ActiveProfile = activeProfile;
+        PrinterPolicies = printerPolicies ?? new Dictionary<ApplyOrientation, PrinterGroupPolicy>();
     }
 
     public string LineId { get; }
@@ -43,4 +45,10 @@ public sealed class LineConfig
     public FirePointProfile? ActiveProfile { get; }
 
     public IReadOnlyList<PrinterConfig> Printers { get; }
+
+    /// <summary>
+    /// Per-orientation printer thresholds (source <c>PandADetails</c> OnlinePrinterMin/PrinterCount).
+    /// Consumed by lane evaluation to maintain spares and slow/shut the line. Empty when unconfigured.
+    /// </summary>
+    public IReadOnlyDictionary<ApplyOrientation, PrinterGroupPolicy> PrinterPolicies { get; }
 }

@@ -33,6 +33,8 @@ public sealed class SimHost
     private readonly CapturingPrinterGateway _gateway = new();
     private readonly VerifyThresholdTracker _threshold = new();
     private readonly TestClock _clock = new(SeedTime);
+    private readonly LaneEvalService _laneEval = new();
+    private readonly ZoneState _zone = new(zoneOnline: true);
     private readonly CartonAdviceService _advice;
     private readonly InductService _induct;
     private readonly VerifyStationService _verify;
@@ -155,6 +157,85 @@ public sealed class SimHost
         return buffer;
     }
 
+    /// <summary>Configured printer IDs on the seeded line, in config order.</summary>
+    public IReadOnlyList<string> PrinterIds =>
+        _lines.GetLineAsync(SourceLine).GetAwaiter().GetResult()!.Config.Printers
+            .Select(p => p.PrinterId).ToList();
+
+    /// <summary>
+    /// Apply an inbound printer-status signal (bookmarked: real message parse). Sets the printer online or
+    /// offline (both PLC + engine for this slice), runs lane evaluation, and returns a transcript of the
+    /// resulting spare changes + line-control decision.
+    /// </summary>
+    public IReadOnlyList<string> SetPrinterStatus(string printerId, bool online)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(printerId);
+        var ctx = _lines.GetLineAsync(SourceLine).GetAwaiter().GetResult()!;
+        if (!ctx.States.TryGetValue(printerId, out var state))
+        {
+            return [$"  ?? unknown printer '{printerId}'."];
+        }
+
+        state.PlcOnline = online;
+        state.EngineOnline = online;
+        state.LastStatusUpdate = _clock.UtcNow;
+
+        var log = new List<string>
+        {
+            $"  >> IN  printer-status  {printerId} → {(online ? "ONLINE" : "OFFLINE")}",
+        };
+        log.AddRange(RunLaneEval(ctx));
+        return log;
+    }
+
+    /// <summary>Apply an inbound zone-status signal (bookmarked: real message parse) and run lane evaluation.</summary>
+    public IReadOnlyList<string> SetZoneStatus(bool online)
+    {
+        var ctx = _lines.GetLineAsync(SourceLine).GetAwaiter().GetResult()!;
+        _zone.ZoneOnline = online;
+        var log = new List<string>
+        {
+            $"  >> IN  zone-status  → {(online ? "ONLINE" : "OFFLINE")}",
+        };
+        log.AddRange(RunLaneEval(ctx));
+        return log;
+    }
+
+    /// <summary>Current printer health/rotation snapshot for the seeded line.</summary>
+    public string PrinterStatusReport()
+    {
+        var ctx = _lines.GetLineAsync(SourceLine).GetAwaiter().GetResult()!;
+        var sb = new StringBuilder();
+        sb.AppendLine($"Line {SourceLine}  zone={(_zone.ZoneOnline ? "online" : "OFFLINE")}");
+        foreach (var p in ctx.Config.Printers)
+        {
+            var s = ctx.States[p.PrinterId];
+            var role = !s.IsOnline ? "offline" : s.IsSpare ? "spare" : "active";
+            sb.AppendLine($"  {p.PrinterId,-6} {p.PrinterType,-4} plc={(s.PlcOnline ? 1 : 0)} eng={(s.EngineOnline ? 1 : 0)}  {role}");
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private IEnumerable<string> RunLaneEval(LineContext ctx)
+    {
+        var result = _laneEval.Evaluate(ctx.Config, ctx.States, _zone, _clock.UtcNow);
+        var log = new List<string>();
+        foreach (var change in result.Changes)
+        {
+            var verb = change.Change == SpareChange.PromotedFromSpare ? "promoted (spare→active)" : "demoted (active→spare)";
+            log.Add($"     {change.PrinterId} {verb}");
+        }
+
+        log.Add($"     lane-eval ⇒ {result.Control}  ({result.Reason})");
+        if (result.Control is LineControl.SlowLine or LineControl.ShutLine or LineControl.ShutZone)
+        {
+            log.Add($"  << OUT bluepaw  [stubbed egress: {result.Control}]");
+        }
+
+        return log;
+    }
+
     private void Seed()
     {
         var printers = new[]
@@ -174,7 +255,17 @@ public sealed class SimHost
             (("Par1", "Parcel"), new FirePoint(2, 800, 5, ApplyPoint.Parse("0M"))),
         ]);
 
-        _lines.Add(new LineConfig(SourceLine, printers, activeProfile: profile));
+        _lines.Add(new LineConfig(
+            SourceLine,
+            printers,
+            activeProfile: profile,
+            printerPolicies: new Dictionary<ApplyOrientation, PrinterGroupPolicy>
+            {
+                // 3 Side printers, keep 2 usable in rotation, park the surplus as a spare, and run slow
+                // (degraded) rather than shut if we drop below 2 with no spare left. See architecture-log 012.
+                [ApplyOrientation.Side] = new PrinterGroupPolicy(
+                    onlineMin: 2, printerCount: 3, slowLineFloor: 1, allowDegraded: true),
+            }));
 
         Advise("0154006001", ("Shipping", "SHIP-0154006001"), ("Content", "CONT-0154006001"));
         Advise("0154006002", ("Shipping", "SHIP-0154006002"), ("Parcel", "PARC-0154006002"));

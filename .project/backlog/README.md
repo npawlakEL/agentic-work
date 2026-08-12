@@ -183,12 +183,17 @@ The senior diffed all 322 source objects vs implemented + planned work. 18 gap f
 status we already produce; completes the fire-point/PLC outbound bundle (arch-log 010).
 **Priority:** High
 
-### GAP F09 — Lane evaluation + spare printer management + dynamic printer state
+### GAP F09 — Lane evaluation + spare printer management + dynamic printer state ✅ DELIVERED (arch-log 012)
 **Source:** `sdisp_PA_LaneEval`, `sdisp_PA_Status_Printer`, `sdisp_PA_Status_Zone`, `PandaState`,
 `PandADetails`, `2 Printer Rule` setting.
 **Description:** Dynamic spare-printer promotion/demotion driven by printer/zone status messages; today
 `PrinterState.PlcOnline/EngineOnline` are static bools never updated at runtime. **Coupling:** feeds printer
-selection/load-balancing (arch-log 005). **Under active design discussion 2026-08-12.**
+selection/load-balancing (arch-log 005).
+**Status (2026-08-12):** Built. `PrinterState` now dynamic (LastStatusUpdate/VerifyFailCount, IsOnline);
+`PrinterGroupPolicy` (per-orientation min/count + generalized degraded policy superseding the 2-Printer Rule);
+`ZoneState`; `LaneEvalService` (promote/demote/slow/shut/zone) returning `LaneEvalResult`; wired into SimHost
++ harness (`p <id> up|down`, `z up|down`, `s`). **Remaining (bookmarked):** engine-status message ingestion
+(F13), real BluePaw slow/shut/zone egress tags + codes, cross-process status lock.
 **Priority:** High
 
 ### GAP F10 — Exception label building

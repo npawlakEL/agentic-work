@@ -5,7 +5,7 @@ using PandA.Sim;
 var host = new SimHost();
 
 Console.WriteLine("PandA message sim — bare-bones slice (281 induct → print → 286 verify)");
-Console.WriteLine("Commands: [l]ist  [v]iew <n>  [r]un <n>  [q]uit");
+Console.WriteLine("Commands: [l]ist  [v]iew <n>  [r]un <n>  [s]tatus  [p]rinter <id> up|down  [z]one up|down  [q]uit");
 Console.WriteLine();
 PrintList(host);
 
@@ -60,7 +60,48 @@ while (true)
         continue;
     }
 
-    Console.WriteLine("  unknown command. try: l, v <n>, r <n>, q");
+    if (cmd is "s" or "status")
+    {
+        Console.WriteLine(host.PrinterStatusReport());
+        Console.WriteLine();
+        continue;
+    }
+
+    if (cmd is "p" or "printer")
+    {
+        if (parts.Length < 3 || parts[2].ToLowerInvariant() is not ("up" or "down"))
+        {
+            Console.WriteLine("  usage: p <printerId> up|down");
+            continue;
+        }
+
+        foreach (var line in host.SetPrinterStatus(parts[1], online: parts[2].ToLowerInvariant() == "up"))
+        {
+            Console.WriteLine(line);
+        }
+
+        Console.WriteLine();
+        continue;
+    }
+
+    if (cmd is "z" or "zone")
+    {
+        if (parts.Length < 2 || parts[1].ToLowerInvariant() is not ("up" or "down"))
+        {
+            Console.WriteLine("  usage: z up|down");
+            continue;
+        }
+
+        foreach (var line in host.SetZoneStatus(online: parts[1].ToLowerInvariant() == "up"))
+        {
+            Console.WriteLine(line);
+        }
+
+        Console.WriteLine();
+        continue;
+    }
+
+    Console.WriteLine("  unknown command. try: l, v <n>, r <n>, s, p <id> up|down, z up|down, q");
 }
 
 static void PrintList(SimHost host)
