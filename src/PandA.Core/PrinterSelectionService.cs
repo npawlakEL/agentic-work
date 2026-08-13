@@ -3,8 +3,11 @@ namespace PandA.Core;
 /// <summary>
 /// Authoritative printer selection (architecture-log 005), ported from <c>sdisp_PA_PickPrinter</c>.
 /// <para>
-/// Per label type, choose among eligible printers (online + not spare + LabelMap contains the type +
-/// matching orientation) the least-recently-printed one (PID1), with the next as backup (PID2).
+/// Per label type, choose among eligible printers (online + not spare + LabelMap contains the type) the
+/// least-recently-printed one (PID1), with the next as backup (PID2). Eligibility is driven purely by the
+/// label-type → printer mapping: a printer's physical apply orientation (Side/Top) is <em>not</em> a filter,
+/// so a single carton scan routes each label to whatever printer is mapped to that type — a top-apply
+/// Content label and a side-apply Shipping label on the same carton each go to their own printer.
 /// If one printer is the primary (PID1) for more than one of the carton's label types, the colliding
 /// types fall back to their backup so the carton's labels spread across distinct printers when possible.
 /// Ties on LastPrinted resolve by configured order (lowest <see cref="PrinterConfig.ConfigOrder"/>).
@@ -15,8 +18,7 @@ public sealed class PrinterSelectionService : IPrinterSelectionService
     public PrinterSelectionResult Select(
         LineConfig line,
         IReadOnlyDictionary<string, PrinterState> states,
-        PandaLabelSet labels,
-        ApplyOrientation orientation = ApplyOrientation.Side)
+        PandaLabelSet labels)
     {
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(states);
@@ -27,7 +29,7 @@ public sealed class PrinterSelectionService : IPrinterSelectionService
         foreach (var type in labels.DistinctLabelTypes())
         {
             var candidates = line.Printers
-                .Where(p => p.PrinterType == orientation && p.CanPrint(type) && IsAvailable(states, p.PrinterId))
+                .Where(p => p.CanPrint(type) && IsAvailable(states, p.PrinterId))
                 .OrderBy(p => SortKey(line.LoadBalance, states, p.PrinterId))
                 .ThenBy(p => p.ConfigOrder)
                 .Select(p => p.PrinterId)

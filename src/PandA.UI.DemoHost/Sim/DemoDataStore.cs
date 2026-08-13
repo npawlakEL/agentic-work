@@ -88,6 +88,22 @@ public sealed class DemoDataStore
             var printerId = NextId("printer");
             printerIds.Add(printerId);
 
+            // Spare eligibility is redundancy within an orientation group: a printer may be held as a
+            // spare only when an earlier printer of the SAME orientation already covers its label types.
+            // The sole printer of an orientation (e.g. the one Top/Content printer) is never a spare, so
+            // top-apply labels always have a live printer to route to.
+            var hasSameOrientationPeerEarlier = false;
+            for (var j = 0; j < i; j++)
+            {
+                var peerOrientation = printerNames[j].StartsWith("Cont", StringComparison.OrdinalIgnoreCase) ? "Top" : "Side";
+                if (peerOrientation == orientation)
+                {
+                    hasSameOrientationPeerEarlier = true;
+                    break;
+                }
+            }
+            var isSpare = hasSameOrientationPeerEarlier;
+
             Printers[printerId] = new PrinterDto(
                 PrinterId: printerId,
                 LineId: lineId,
@@ -99,7 +115,7 @@ public sealed class DemoDataStore
                 ConfigOrder: i,
                 EncoderResolutionInchesPerPulse: 0.25,
                 LabelWidthInches: 4,
-                SpareEligible: i == printerNames.Length - 1,
+                SpareEligible: isSpare,
                 TampMountHeightInches: 12,
                 BeltSpeedInchesPerSecond: 24,
                 TampSpeedInchesPerSecond: 30);
@@ -120,7 +136,7 @@ public sealed class DemoDataStore
             PrinterRuntime[printerId] = new DemoPrinterRuntime
             {
                 Online = true,
-                IsSpare = i == printerNames.Length - 1,
+                IsSpare = isSpare,
                 VerifyFailCount = 0,
                 LastPrintedUtc = DateTimeOffset.UtcNow.AddMinutes(-i),
             };
@@ -156,7 +172,7 @@ public sealed class DemoDataStore
             var slots = new List<CartonLabelSlot>
             {
                 new(1, "Shipping", $"SHIP{9000 + i}", $"LPN{5000 + i}", $"^XA^FO50,50^A0N,40,40^FDShipping {i}^FS^XZ", i % 5 != 0),
-                new(2, "Content", $"CONT{9000 + i}", $"LPN{5000 + i}", $"^XA^FO50,50^A0N,40,40^FDContent {i}^FS^XZ", i % 5 != 0),
+                new(2, "Content", $"CONT{9000 + i}", $"LPN{5100 + i}", $"^XA^FO50,50^A0N,40,40^FDContent {i}^FS^XZ", i % 5 != 0),
             };
 
             Cartons[id] = new DemoCarton
@@ -183,8 +199,8 @@ public sealed class DemoDataStore
         }
 
         // Two Side-only cartons (Shipping + Return): every label maps to a Side printer, so they fully
-        // print and verify clean — the console's green end-to-end sample alongside the Top-label cartons
-        // above, which print partially (Content is a Top apply the Phase-1 induct path can't print yet).
+        // print and verify clean. The Top-label (Content) cartons above ALSO print fully now — the Content
+        // label routes to the line's Top printer — so both sets are green end-to-end samples.
         for (var j = 0; j < 2; j++)
         {
             var id = $"CTN{2000 + j}";

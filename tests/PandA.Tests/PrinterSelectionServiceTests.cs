@@ -185,30 +185,31 @@ public sealed class PrinterSelectionServiceTests
         Assert.Equal(2, result.Assignments.Count);
     }
 
-    // ---- orientation (provisioned dimension) ---------------------------------------------------
+    // ---- orientation (physical attribute, NOT an eligibility filter) ----------------------------
 
     [Fact]
-    public void Orientation_PrinterTypeMustMatchRequiredOrientation()
+    public void Orientation_DoesNotGateEligibility_TypeMappingWins()
     {
+        // Both printers map Shipping; orientation is not a filter, so the least-config-order printer
+        // wins regardless of whether it is Top or Side. A Top printer is fully eligible for the type.
         var line = new LineConfig("L1",
         [
             Printer("Top1", ["Shipping"], 0, ApplyOrientation.Top),
             Printer("Side1", ["Shipping"], 1, ApplyOrientation.Side),
         ]);
 
-        var side = _sut.Select(line, States(), Labels("Shipping"), ApplyOrientation.Side);
-        var top = _sut.Select(line, States(), Labels("Shipping"), ApplyOrientation.Top);
+        var result = _sut.Select(line, States(), Labels("Shipping"));
 
-        Assert.Equal("Side1", Assigned(side, "Shipping"));
-        Assert.Equal("Top1", Assigned(top, "Shipping"));
+        Assert.Equal("Top1", Assigned(result, "Shipping")); // ConfigOrder 0, orientation irrelevant
     }
 
     [Fact]
-    public void Orientation_NoPrinterOfRequiredOrientation_YieldsNoPrinter()
+    public void Orientation_SoleTopPrinter_StillPrintsItsMappedType()
     {
-        var line = new LineConfig("L1", [Printer("Side1", ["Shipping"], 0, ApplyOrientation.Side)]);
-        var result = _sut.Select(line, States(), Labels("Shipping"), ApplyOrientation.Top);
+        // Only a Top printer covers Shipping — it is still selected (orientation never excludes it).
+        var line = new LineConfig("L1", [Printer("Top1", ["Shipping"], 0, ApplyOrientation.Top)]);
+        var result = _sut.Select(line, States(), Labels("Shipping"));
 
-        Assert.Equal(LabelSelectionStatus.NoPrinter, result.Assignments.Single().Status);
+        Assert.Equal("Top1", Assigned(result, "Shipping"));
     }
 }

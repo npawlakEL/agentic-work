@@ -194,10 +194,10 @@ public sealed class MessageConsoleService
 
         if (inductResult.Status == InductStatus.PartiallyPrinted)
         {
-            // Phase-1 induct only prints Side-oriented labels (architecture-log 005); a Top label (e.g.
-            // Content) has no printer yet, so the carton prints partially. The verify scan below reads only
-            // what physically printed, so the missing label makes verify fail — the honest outcome.
-            entries.Add(new ConsoleEntry(ConsoleEntryKind.Info, "Note: some labels had no eligible printer (Phase-1 induct prints Side labels only); the verify scan will read only what printed."));
+            // A label had no eligible printer (e.g. its only printer is offline or held as a spare), so the
+            // carton prints partially. The verify scan below reads only what physically printed, so the
+            // missing label makes verify fail — the honest outcome.
+            entries.Add(new ConsoleEntry(ConsoleEntryKind.Info, "Note: some labels had no eligible printer (offline/unavailable); the verify scan will read only what printed."));
         }
 
         // 2) Inbound 286 verify scan — the scanner reads only the labels that were physically printed.

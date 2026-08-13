@@ -188,7 +188,8 @@ public sealed class InductService : IInductService
             return InductResult.NoProfile();
         }
 
-        // Orientation is a provisioned dimension; Phase 1 uses the default (Side). See architecture-log 005.
+        // Selection is orientation-agnostic: each label routes to whatever printer maps to its type,
+        // so a carton's side (Shipping) and top (Content) labels each reach their own printer.
         var selection = _selection.Select(context.Config, context.States, order.Labels);
 
         var now = _clock.UtcNow;

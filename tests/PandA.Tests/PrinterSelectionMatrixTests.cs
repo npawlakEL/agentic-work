@@ -55,18 +55,34 @@ public sealed class PrinterSelectionMatrixTests
     }
 
     [Fact]
-    public void Eligibility_WrongOrientation_IsNotSelected()
+    public void Eligibility_OrientationDoesNotGate_TypeMappingDrivesSelection()
     {
+        // A Top printer that maps the requested type IS eligible: apply orientation is a physical
+        // attribute (used later for apply kinematics), not a selection filter. Routing is driven purely
+        // by the label-type → printer mapping, so a single carton can reach side and top printers at once.
         var line = new LineConfig("L1", [P("Top1", ["Shipping"], 0, ApplyOrientation.Top)]);
         var states = States(new PrinterState("Top1"));
 
-        // Default request is Side; a Top printer is ineligible.
-        var side = _sut.Select(line, states, Labels(("Shipping", "S1")));
-        Assert.Equal(LabelSelectionStatus.NoPrinter, side.Assignments.Single().Status);
+        var result = _sut.Select(line, states, Labels(("Shipping", "S1")));
+        Assert.Equal("Top1", Chosen(result, "Shipping"));
+    }
 
-        // Direct Top request → eligible (the one place Top is exercised; excluded from Induct e2e).
-        var top = _sut.Select(line, states, Labels(("Shipping", "S1")), ApplyOrientation.Top);
-        Assert.Equal("Top1", Chosen(top, "Shipping"));
+    [Fact]
+    public void Eligibility_MixedOrientations_EachTypeRoutesToItsMappedPrinter()
+    {
+        // The core scenario: one carton needs a side Shipping label and a top Content label.
+        // Both route in a single selection pass to their respectively-mapped printers.
+        var line = new LineConfig("L1",
+        [
+            P("Ship1", ["Shipping"], 0, ApplyOrientation.Side),
+            P("Cont1", ["Content"], 1, ApplyOrientation.Top),
+        ]);
+        var states = States(new PrinterState("Ship1"), new PrinterState("Cont1"));
+
+        var result = _sut.Select(line, states, Labels(("Shipping", "S1"), ("Content", "C1")));
+
+        Assert.Equal("Ship1", Chosen(result, "Shipping"));
+        Assert.Equal("Cont1", Chosen(result, "Content"));
     }
 
     [Fact]
