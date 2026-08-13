@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using PandA.Core.Induct;
+using PandA.Core.Ports;
 using PandA.Core.Settings;
 
 namespace PandA.Core;
@@ -41,6 +42,7 @@ public sealed class InductService : IInductService
     private readonly ISettingsProvider _settings;
     private readonly IMinGapProvider? _minGap;
     private readonly ICartonRunRepository? _runs;
+    private readonly IXRefStore? _xref;
     private readonly ILogger<InductService> _logger;
     private readonly FirePointResolver _firePoints = new();
 
@@ -53,6 +55,7 @@ public sealed class InductService : IInductService
         ISettingsProvider settings,
         IMinGapProvider? minGap = null,
         ICartonRunRepository? runs = null,
+        IXRefStore? xref = null,
         ILogger<InductService>? logger = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -63,6 +66,7 @@ public sealed class InductService : IInductService
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _minGap = minGap;
         _runs = runs;
+        _xref = xref;
         _logger = logger ?? NullLogger<InductService>.Instance;
     }
 
@@ -85,6 +89,13 @@ public sealed class InductService : IInductService
         _ = _settings;
 
         var order = await _store.FindActiveByTuIdAsync(blindLabel, cancellationToken).ConfigureAwait(false);
+        if (order is null)
+        {
+            // F18: a non-BL scan (oLPN/UPC/…) doesn't match a blind label directly; resolve it through the
+            // barcode cross-reference populated at advice time.
+            order = await ResolveByBarcodeAsync(scan, cancellationToken).ConfigureAwait(false);
+        }
+
         if (order is null)
         {
             _logger.LogWarning("No active transport order for induct scan {TuId} on line {LineId}.", blindLabel, lineId);
@@ -238,6 +249,59 @@ public sealed class InductService : IInductService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// F18 — resolve a non-blind-label induct scan to its transport order via the barcode cross-reference.
+    /// Considers the scanned blind label plus any additional scanned barcodes, collects the cross-referenced
+    /// TuIds, and elects the best active order: lowest <see cref="TransportOrder.PrintCount"/> first, then the
+    /// earliest advised (source election order PrintCount ASC → ActiveRecord DESC → wave StatusTime ASC,
+    /// approximated by PrintCount then CreatedAt). Returns null when the xref store is absent or no match.
+    /// </summary>
+    private async ValueTask<TransportOrder?> ResolveByBarcodeAsync(InductScan scan, CancellationToken ct)
+    {
+        if (_xref is not { } xref)
+        {
+            return null;
+        }
+
+        var barcodes = new List<string> { scan.BlindLabel };
+        barcodes.AddRange(scan.ScannedLabels);
+
+        var tuIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var barcode in barcodes.Distinct(StringComparer.Ordinal))
+        {
+            foreach (var tuId in await xref.FindTuIdsByBarcodeAsync(barcode, ct).ConfigureAwait(false))
+            {
+                tuIds.Add(tuId);
+            }
+        }
+
+        TransportOrder? best = null;
+        foreach (var tuId in tuIds)
+        {
+            var candidate = await _store.FindActiveByTuIdAsync(tuId, ct).ConfigureAwait(false);
+            if (candidate is null)
+            {
+                continue;
+            }
+
+            if (best is null
+                || candidate.PrintCount < best.PrintCount
+                || (candidate.PrintCount == best.PrintCount && candidate.CreatedAt < best.CreatedAt))
+            {
+                best = candidate;
+            }
+        }
+
+        if (best is not null)
+        {
+            _logger.LogInformation(
+                "Induct scan {TuId} resolved to transport order {ResolvedTuId} via barcode cross-reference.",
+                scan.BlindLabel, best.TuId);
+        }
+
+        return best;
     }
 
     /// <summary>

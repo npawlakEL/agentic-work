@@ -11,4 +11,5 @@ public sealed record AdviceMessage(
     string? VerifyPassDest = null,
     string? VerifyFailDest = null,
     long? RecId = null,
-    int? OrderPriority = null);
+    int? OrderPriority = null,
+    IReadOnlyList<AdviceBarcode>? Barcodes = null);

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using PandA.Core.Advice;
+using PandA.Core.Services;
 using PandA.Core.Settings;
 
 namespace PandA.Core;
@@ -27,17 +28,20 @@ public sealed class CartonAdviceService : ICartonAdviceService
     private readonly ITransportOrderStore _store;
     private readonly IClock _clock;
     private readonly ISettingsProvider _settings;
+    private readonly XRefService? _xref;
     private readonly ILogger<CartonAdviceService> _logger;
 
     public CartonAdviceService(
         ITransportOrderStore store,
         IClock clock,
         ISettingsProvider settings,
+        XRefService? xref = null,
         ILogger<CartonAdviceService>? logger = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _xref = xref;
         _logger = logger ?? NullLogger<CartonAdviceService>.Instance;
     }
 
@@ -97,7 +101,16 @@ public sealed class CartonAdviceService : ICartonAdviceService
                 advice.BlindLabel, advice.LineId, advice.Labels.Labels.Count, advice.WaveId, advice.ProfileName);
         }
 
-        // F18/F24: xref population here.
+        // F18: populate the barcode cross-reference so a later non-BL induct scan (oLPN/UPC/…) resolves
+        // back to this carton's blind label.
+        if (_xref is { } xref && advice.Barcodes is { Count: > 0 } barcodes)
+        {
+            foreach (var bc in barcodes)
+            {
+                await xref.AssociateAsync(advice.BlindLabel, bc.Barcode, bc.Type, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         // F23: wave create/update here.
         await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
         return order;
