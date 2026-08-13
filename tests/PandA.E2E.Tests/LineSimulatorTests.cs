@@ -34,5 +34,13 @@ public sealed class LineSimulatorTests(DemoHostFixture fixture)
         await Assertions.Expect(page.Locator("[data-testid=sim-carton-count]"))
             .ToContainTextAsync("Cartons: 1", new() { Timeout = 10_000 });
         Assert.False(await page.Locator("#blazor-error-ui").IsVisibleAsync());
+
+        // The 3D renderer must actually initialise (Three.js bundled locally) — a <canvas> is
+        // present and it is NOT the 2D fallback canvas. Guards against silently dropping to 2D.
+        await page.Locator("[data-testid=sim-scene-container] canvas").First
+            .WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
+        var fallbackCanvases = await page
+            .Locator("[data-testid=sim-scene-container] canvas[data-renderer='2d-fallback']").CountAsync();
+        Assert.Equal(0, fallbackCanvases);
     }
 }
