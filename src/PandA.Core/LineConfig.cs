@@ -23,7 +23,8 @@ public sealed class LineConfig
         bool dynamicPrintPoint = true,
         IReadOnlyDictionary<string, FirePointProfile>? profileRegistry = null,
         string? defaultProfile = null,
-        bool filterLabels = true)
+        bool filterLabels = true,
+        bool? printExceptionLabels = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentNullException.ThrowIfNull(printers);
@@ -45,6 +46,7 @@ public sealed class LineConfig
         ProfileRegistry = profileRegistry ?? new Dictionary<string, FirePointProfile>(StringComparer.OrdinalIgnoreCase);
         DefaultProfile = defaultProfile;
         FilterLabels = filterLabels;
+        PrintExceptionLabels = printExceptionLabels;
     }
 
     public string LineId { get; }
@@ -91,4 +93,10 @@ public sealed class LineConfig
     public string? DefaultProfile { get; }
 
     public bool FilterLabels { get; }
+
+    /// <summary>
+    /// F10 per-line exception-label switch (decision-021). <c>null</c> = unset (fall back to the global
+    /// <c>PrintExceptionLabels</c> or, if that is also unset, off). A defined global always wins over this.
+    /// </summary>
+    public bool? PrintExceptionLabels { get; }
 }

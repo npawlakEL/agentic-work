@@ -1,5 +1,7 @@
 using PandA.Core;
 using PandA.Core.Induct;
+using PandA.Core.Labels;
+using PandA.Core.Settings;
 using PandA.Sim;
 
 namespace PandA.Tests;
@@ -378,6 +380,72 @@ public sealed class InductServiceTests
         await _induct.InductAsync("L1", "BLIND1"); // bare identity induct: Length 0
 
         Assert.Null(_gateway.Jobs.Single(j => j.LabelType == "Shipping").ApplyPulse);
+    }
+
+    // ---- F10 exception labels (decision-021) ----
+
+    private InductService ExceptionInduct(ISettingsProvider settings, ICartonRunRepository? runs = null) =>
+        new(_store, _lines, new PrinterSelectionService(), _gateway, _clock, settings,
+            exceptionLabels: new LocalTemplateSource(new InMemoryLabelTemplateRepository()), runs: runs);
+
+    [Fact]
+    public async Task Induct_NoRead_WithExceptionsEnabled_EmitsExceptionLabel_AndRoutesToReject()
+    {
+        // Global unset (unseeded provider) so the per-line flag applies.
+        var induct = ExceptionInduct(new InMemorySettingsProvider(seedKnownSettings: false));
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+
+        var result = await induct.InductAsync(new InductScan("L1", "???", SeqNum: 481));
+
+        Assert.Equal(InductStatus.ExceptionLabel, result.Status);
+        Assert.Equal("NoRead-000481", result.ExceptionCartonId);
+        Assert.Equal("Fail", result.Routing!.Value);
+
+        var job = Assert.Single(_gateway.Jobs);
+        Assert.Equal("Exception", job.LabelType);
+        Assert.Equal("Ship1", job.PrinterId);
+        Assert.Contains("NoRead-000481", job.Zpl, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Induct_ExceptionsDisabled_ReturnsNoActiveOrder_AndPrintsNothing()
+    {
+        // Global unset and per-line unset => off.
+        var induct = ExceptionInduct(new InMemorySettingsProvider(seedKnownSettings: false));
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+
+        var result = await induct.InductAsync(new InductScan("L1", "???", SeqNum: 5));
+
+        Assert.Equal(InductStatus.NoActiveOrder, result.Status);
+        Assert.Empty(_gateway.Jobs);
+    }
+
+    [Fact]
+    public async Task Induct_DefinedGlobalFalse_OverridesPerLineTrue_NoExceptionLabel()
+    {
+        // Seeded provider defines PrintExceptionLabels = false globally; it must override the per-line true.
+        var induct = ExceptionInduct(new InMemorySettingsProvider());
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+
+        var result = await induct.InductAsync(new InductScan("L1", "???", SeqNum: 9));
+
+        Assert.Equal(InductStatus.NoActiveOrder, result.Status);
+        Assert.Empty(_gateway.Jobs);
+    }
+
+    [Fact]
+    public async Task Induct_ExceptionLabel_IsRecordedAsPrintedRun()
+    {
+        var runs = new InMemoryCartonRunRepository();
+        var induct = ExceptionInduct(new InMemorySettingsProvider(seedKnownSettings: false), runs);
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+
+        await induct.InductAsync(new InductScan("L1", "!!!", SeqNum: 7));
+
+        var record = Assert.Single(runs.Records);
+        Assert.Equal("NoData-000007", record.TuId);
+        Assert.Equal("Ship1", record.AssignedPrinter);
+        Assert.Equal(CartonStatus.NoData, record.StatusAtInduct);
     }
 }
 

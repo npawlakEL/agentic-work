@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using PandA.Core.Induct;
+using PandA.Core.Labels;
 using PandA.Core.Ports;
 using PandA.Core.Settings;
+using PandA.Core.Verification;
 
 namespace PandA.Core;
 
@@ -43,6 +45,7 @@ public sealed class InductService : IInductService
     private readonly IMinGapProvider? _minGap;
     private readonly ICartonRunRepository? _runs;
     private readonly IXRefStore? _xref;
+    private readonly IExceptionLabelSource? _exceptionLabels;
     private readonly ILogger<InductService> _logger;
     private readonly FirePointResolver _firePoints = new();
     private readonly ApplyPointResolver _applyPoints = new();
@@ -57,6 +60,7 @@ public sealed class InductService : IInductService
         IMinGapProvider? minGap = null,
         ICartonRunRepository? runs = null,
         IXRefStore? xref = null,
+        IExceptionLabelSource? exceptionLabels = null,
         ILogger<InductService>? logger = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -68,6 +72,7 @@ public sealed class InductService : IInductService
         _minGap = minGap;
         _runs = runs;
         _xref = xref;
+        _exceptionLabels = exceptionLabels;
         _logger = logger ?? NullLogger<InductService>.Instance;
     }
 
@@ -99,6 +104,14 @@ public sealed class InductService : IInductService
 
         if (order is null)
         {
+            // F10 (decision-021): an unmatched carton with exceptions enabled gets a locally-generated
+            // exception label against a synthesized identity, then routes to reject at verify.
+            var exception = await TryEmitExceptionLabelAsync(scan, cancellationToken).ConfigureAwait(false);
+            if (exception is not null)
+            {
+                return exception;
+            }
+
             _logger.LogWarning("No active transport order for induct scan {TuId} on line {LineId}.", blindLabel, lineId);
             return InductResult.NoActiveOrder();
         }
@@ -316,6 +329,109 @@ public sealed class InductService : IInductService
         }
 
         return best;
+    }
+
+    /// <summary>
+    /// F10 (decision-021) — emit a locally-generated exception label for an unmatched carton. Gated by the
+    /// effective <c>PrintExceptionLabels</c> flag (a defined global overrides per-line) and a non-Bypass read
+    /// that maps to an exception reason. Synthesizes a
+    /// human-readable id (<c>{Reason}-{seq}</c>), builds the ZPL from the injected
+    /// <see cref="IExceptionLabelSource"/> (LocalTemplate by default; DCMS/eHub via the adapter), prints it to
+    /// a printer of the line's apply orientation (Side if any side printer, else Top), records the synthetic
+    /// carton as printed (F-LOG1), and returns a verify-then-reject routing criterion (F08). Returns
+    /// <c>null</c> when exceptions are disabled, no source is wired, or the read yields no exception reason.
+    /// </summary>
+    private async ValueTask<InductResult?> TryEmitExceptionLabelAsync(InductScan scan, CancellationToken ct)
+    {
+        if (_exceptionLabels is not { } source)
+        {
+            return null;
+        }
+
+        var context = await _lines.GetLineAsync(scan.LineId, ct).ConfigureAwait(false);
+        if (context is null)
+        {
+            return null;
+        }
+
+        // Effective flag: a defined global PrintExceptionLabels overrides the per-line value.
+        var global = await _settings
+            .GetAsync<bool?>(KnownSettings.PrintExceptionLabels.Name, null, ct)
+            .ConfigureAwait(false);
+        if (!ExceptionLabelPolicy.Effective(global, context.Config.PrintExceptionLabels))
+        {
+            return null;
+        }
+
+        var status = InductQualityClassifier.Classify(scan.BlindLabel, scan.FrontGap, _minGap?.GetMinGap() ?? 0);
+        if (status == CartonStatus.Bypass || ExceptionLabelPolicy.Classify(status) is not { } exceptionType)
+        {
+            return null;
+        }
+
+        // Orientation: side if the line has any side-apply printer, otherwise top.
+        var orientation = context.Config.Printers.Any(p => p.PrinterType == ApplyOrientation.Side)
+            ? ApplyOrientation.Side
+            : ApplyOrientation.Top;
+
+        var printer = context.Config.Printers.FirstOrDefault(p => p.PrinterType == orientation);
+        if (printer is null)
+        {
+            _logger.LogWarning(
+                "Exception carton on line {LineId} has no {Orientation} printer; label not emitted.",
+                scan.LineId, orientation);
+            return null;
+        }
+
+        var cartonId = ExceptionLabelPolicy.MintCartonId(exceptionType, scan.SeqNum);
+        var lpn = ExceptionLabelPolicy.UsesLpn(exceptionType) ? scan.BlindLabel : null;
+
+        var build = await source.BuildAsync(exceptionType, cartonId, lpn, ct).ConfigureAwait(false);
+        if (!build.HasLabel || build.Zpl is null)
+        {
+            _logger.LogWarning(
+                "No active exception template for {Reason}; carton {CartonId} on line {LineId} not labeled.",
+                exceptionType, cartonId, scan.LineId);
+            return null;
+        }
+
+        await _gateway.SendAsync(
+            new PrintJob(printer.PrinterId, printer.Ip, printer.Port, build.LabelType, build.Lpn, build.Zpl, null, null),
+            ct).ConfigureAwait(false);
+
+        // F-LOG1: record the synthetic exception carton as an audited run, marked with its induct status.
+        if (_runs is { } runs)
+        {
+            var record = CartonRunRecord.Create(
+                tuId: cartonId,
+                pandaDataId: StableOrderId(cartonId),
+                lineId: scan.LineId,
+                sorterNumber: scan.SorterNumber,
+                sorterMode: scan.SorterMode,
+                deviceId: scan.DeviceId,
+                seqNum: scan.SeqNum,
+                labelStatus: 0,
+                scannedLabels: [.. scan.ScannedLabels],
+                length: scan.Length,
+                width: scan.Width,
+                height: scan.Height,
+                weight: scan.Weight,
+                frontGap: scan.FrontGap,
+                statusAtInduct: status,
+                assignedPrinter: printer.PrinterId,
+                destinationLane: null,
+                createdAt: _clock.UtcNow);
+            await runs.CreateRunAsync(record, ct).ConfigureAwait(false);
+        }
+
+        // Verify-then-reject (decision-021): the exception carton is treated as a verify Fail and routed to
+        // reject via the F08 routing criterion the adapter projects onto the carton.
+        var routing = new RoutingCriterion(RoutingCriterion.PandaVerifyType, "Fail");
+        _logger.LogWarning(
+            "Emitted {Reason} exception label {CartonId} to printer {PrinterId} on line {LineId}; carton routed to reject.",
+            exceptionType, cartonId, printer.PrinterId, scan.LineId);
+
+        return InductResult.Exception(cartonId, routing);
     }
 
     /// <summary>
