@@ -25,8 +25,8 @@ public sealed class LifecycleEndToEndTests
 
     public LifecycleEndToEndTests()
     {
-        _advice = new CartonAdviceService(_store, _clock);
-        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock);
+        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
+        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider());
         _verify = new VerifyStationService(_store, new VerificationService(), _threshold, _clock);
     }
 
@@ -194,3 +194,4 @@ public sealed class LifecycleEndToEndTests
         Assert.Equal(VerifyStationStatus.Verified, verify.Status);
     }
 }
+

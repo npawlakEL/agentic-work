@@ -1,3 +1,7 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using PandA.Core.Settings;
+
 namespace PandA.Core;
 
 /// <summary>
@@ -19,6 +23,8 @@ public sealed class InductService : IInductService
     private readonly IPrinterSelectionService _selection;
     private readonly IPrinterGateway _gateway;
     private readonly IClock _clock;
+    private readonly ISettingsProvider _settings;
+    private readonly ILogger<InductService> _logger;
     private readonly FirePointResolver _firePoints = new();
 
     public InductService(
@@ -26,13 +32,17 @@ public sealed class InductService : IInductService
         ILineProvider lines,
         IPrinterSelectionService selection,
         IPrinterGateway gateway,
-        IClock clock)
+        IClock clock,
+        ISettingsProvider settings,
+        ILogger<InductService>? logger = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _lines = lines ?? throw new ArgumentNullException(nameof(lines));
         _selection = selection ?? throw new ArgumentNullException(nameof(selection));
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _logger = logger ?? NullLogger<InductService>.Instance;
     }
 
     public async ValueTask<InductResult> InductAsync(
@@ -43,21 +53,29 @@ public sealed class InductService : IInductService
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentException.ThrowIfNullOrWhiteSpace(blindLabel);
 
+        _ = _settings;
+
         var order = await _store.FindActiveByTuIdAsync(blindLabel, cancellationToken).ConfigureAwait(false);
         if (order is null)
         {
+            _logger.LogWarning("No active transport order for induct scan {TuId} on line {LineId}.", blindLabel, lineId);
             return InductResult.NoActiveOrder();
         }
 
         if (order.Labels.Labels.Count == 0)
         {
+            _logger.LogWarning("Transport order {TuId} on line {LineId} has no label data.", order.TuId, lineId);
             return InductResult.NoData();
         }
 
+        // F20: read-quality classification here.
         // Reprint policy (decision-003): an already-printed carton may only reprint when an operator has
         // authorized it. Otherwise nothing is printed.
         if (!order.CanPrint)
         {
+            _logger.LogInformation(
+                "Transport order {TuId} on line {LineId} is not eligible for reprint. Status {Status}, print count {PrintCount}.",
+                order.TuId, lineId, order.Status, order.PrintCount);
             return InductResult.NoReprint();
         }
 
@@ -66,6 +84,7 @@ public sealed class InductService : IInductService
 
         // Orientation is a provisioned dimension; Phase 1 uses the default (Side). See architecture-log 005.
         var selection = _selection.Select(context.Config, context.States, order.Labels);
+        // PROFSW: profile select here.
 
         var now = _clock.UtcNow;
         var printersById = context.Config.Printers.ToDictionary(p => p.PrinterId, StringComparer.OrdinalIgnoreCase);
@@ -91,6 +110,9 @@ public sealed class InductService : IInductService
             await _gateway.SendAsync(
                 new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, label.Zpl, firePoint),
                 cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "Dispatched label {LabelType} for transport order {TuId} to printer {PrinterId} on line {LineId}.",
+                label.LabelType, order.TuId, printer.PrinterId, lineId);
 
             // Stamp LastPrinted so the next carton rotates (round-robin state).
             if (context.States.TryGetValue(printer.PrinterId, out var state))
@@ -103,17 +125,25 @@ public sealed class InductService : IInductService
         }
 
         var result = InductResult.FromAssignments(selection.Assignments);
+        // DYNAP: dynamic apply-point calculation here.
+        // F08: routing here.
 
         // Only a FULL run counts as a print run and increments the monotonic counter (decision-003).
         if (result.Status == InductStatus.Printed)
         {
             order.CompletePrintRun(now);
             await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "Completed print run for transport order {TuId} on line {LineId}; print count is {PrintCount}.",
+                order.TuId, lineId, order.PrintCount);
         }
         else if (result.Status == InductStatus.PartiallyPrinted)
         {
             // Persist per-label print state, but do not count the run or advance status.
             await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
+            _logger.LogWarning(
+                "Partially printed transport order {TuId} on line {LineId}.",
+                order.TuId, lineId);
         }
 
         return result;

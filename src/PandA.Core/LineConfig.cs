@@ -13,7 +13,17 @@ public sealed class LineConfig
         string? placeId = null,
         LabelBufferOrder? bufferOrder = null,
         FirePointProfile? activeProfile = null,
-        IReadOnlyDictionary<ApplyOrientation, PrinterGroupPolicy>? printerPolicies = null)
+        IReadOnlyDictionary<ApplyOrientation, PrinterGroupPolicy>? printerPolicies = null,
+        IEnumerable<LaneDef>? lanes = null,
+        bool printerStatusSuffix = false,
+        string? plcZone = null,
+        int? sorterPlcRecId = null,
+        string? plcDbName = null,
+        decimal encoderResolution = 0.2m,
+        bool dynamicPrintPoint = true,
+        IReadOnlyDictionary<string, FirePointProfile>? profileRegistry = null,
+        string? defaultProfile = null,
+        bool filterLabels = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentNullException.ThrowIfNull(printers);
@@ -25,6 +35,16 @@ public sealed class LineConfig
         BufferOrder = bufferOrder ?? LabelBufferOrder.Default;
         ActiveProfile = activeProfile;
         PrinterPolicies = printerPolicies ?? new Dictionary<ApplyOrientation, PrinterGroupPolicy>();
+        Lanes = lanes is null ? [] : [.. lanes];
+        PrinterStatusSuffix = printerStatusSuffix;
+        PlcZone = plcZone;
+        SorterPlcRecId = sorterPlcRecId;
+        PlcDbName = plcDbName;
+        EncoderResolution = encoderResolution;
+        DynamicPrintPoint = dynamicPrintPoint;
+        ProfileRegistry = profileRegistry ?? new Dictionary<string, FirePointProfile>(StringComparer.OrdinalIgnoreCase);
+        DefaultProfile = defaultProfile;
+        FilterLabels = filterLabels;
     }
 
     public string LineId { get; }
@@ -51,4 +71,24 @@ public sealed class LineConfig
     /// Consumed by lane evaluation to maintain spares and slow/shut the line. Empty when unconfigured.
     /// </summary>
     public IReadOnlyDictionary<ApplyOrientation, PrinterGroupPolicy> PrinterPolicies { get; }
+
+    public IReadOnlyList<LaneDef> Lanes { get; }
+
+    public bool PrinterStatusSuffix { get; }
+
+    public string? PlcZone { get; }
+
+    public int? SorterPlcRecId { get; }
+
+    public string? PlcDbName { get; }
+
+    public decimal EncoderResolution { get; }
+
+    public bool DynamicPrintPoint { get; }
+
+    public IReadOnlyDictionary<string, FirePointProfile> ProfileRegistry { get; }
+
+    public string? DefaultProfile { get; }
+
+    public bool FilterLabels { get; }
 }

@@ -11,7 +11,7 @@ public sealed class CartonAdviceServiceTests
     private readonly TestClock _clock = new(T0);
     private readonly CartonAdviceService _sut;
 
-    public CartonAdviceServiceTests() => _sut = new CartonAdviceService(_store, _clock);
+    public CartonAdviceServiceTests() => _sut = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
 
     private static PandaLabelSet Labels(params string[] types) =>
         new(types.Select(t => new Label(t, $"LPN-{t}", $"^XA{t}^XZ")));
@@ -44,3 +44,4 @@ public sealed class CartonAdviceServiceTests
         Assert.Equal(TransportOrderStatus.Advised, second.Status);
     }
 }
+

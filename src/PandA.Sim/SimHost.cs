@@ -42,8 +42,8 @@ public sealed class SimHost
 
     public SimHost()
     {
-        _advice = new CartonAdviceService(_store, _clock);
-        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock);
+        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
+        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider());
         _verify = new VerifyStationService(_store, new VerificationService(), _threshold, _clock);
         Seed();
     }
@@ -280,3 +280,4 @@ public sealed class SimHost
         _blindLabels.Add(blindLabel);
     }
 }
+

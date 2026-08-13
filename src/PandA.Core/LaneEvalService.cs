@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace PandA.Core;
 
 /// <summary>
@@ -14,6 +17,13 @@ namespace PandA.Core;
 /// </summary>
 public sealed class LaneEvalService
 {
+    private readonly ILogger<LaneEvalService> _logger;
+
+    public LaneEvalService(ILogger<LaneEvalService>? logger = null)
+    {
+        _logger = logger ?? NullLogger<LaneEvalService>.Instance;
+    }
+
     /// <summary>
     /// Evaluate one line. <paramref name="now"/> stamps <see cref="PrinterState.LastStatusUpdate"/>
     /// on any promote/demote so the newest change is preferred next time.
@@ -31,6 +41,7 @@ public sealed class LaneEvalService
         // Zone down => the whole line is shut regardless of printer health (source sdisp_PA_Status_Zone).
         if (!zone.ZoneOnline)
         {
+            _logger.LogWarning("Lane evaluation shut zone for line {LineId}: conveyor zone is down.", line.LineId);
             return new LaneEvalResult(LineControl.ShutZone, [], "Conveyor zone is down.");
         }
 
@@ -91,6 +102,9 @@ public sealed class LaneEvalService
                     if (promotedState is not null)
                     {
                         changes.Add(new PrinterChange(promotedState.PrinterId, SpareChange.PromotedFromSpare));
+                        _logger.LogInformation(
+                            "Promoted spare printer {PrinterId} on line {LineId} for orientation {Orientation}.",
+                            promotedState.PrinterId, line.LineId, orientation);
                         promoted = true;
                         break; // restart the whole evaluation with the promoted printer in rotation
                     }
@@ -113,6 +127,9 @@ public sealed class LaneEvalService
                     if (demoted is not null)
                     {
                         changes.Add(new PrinterChange(demoted.PrinterId, SpareChange.DemotedToSpare));
+                        _logger.LogInformation(
+                            "Demoted printer {PrinterId} to spare on line {LineId} for orientation {Orientation}.",
+                            demoted.PrinterId, line.LineId, orientation);
                     }
                 }
             }
@@ -124,6 +141,9 @@ public sealed class LaneEvalService
         }
 
         var reason = reasons.Count > 0 ? string.Join(" ", reasons) : "All printer groups balanced.";
+        _logger.LogInformation(
+            "Lane evaluation completed for line {LineId} with control {Control}: {Reason}.",
+            line.LineId, control, reason);
         return new LaneEvalResult(control, changes, reason);
     }
 

@@ -46,6 +46,7 @@ public sealed class TransportOrder
         Labels = labels;
         CreatedAt = createdAt;
         Status = TransportOrderStatus.Advised;
+        VerifyEnabled = true;
         _printStates = BuildPrintStates(labels);
     }
 
@@ -59,6 +60,18 @@ public sealed class TransportOrder
     public TransportOrderStatus Status { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
+
+    public string? WaveId { get; private set; }
+
+    public string? ProfileName { get; private set; }
+
+    public bool Bypass { get; private set; }
+
+    public bool VerifyEnabled { get; private set; }
+
+    public string? VerifyPassDest { get; private set; }
+
+    public string? VerifyFailDest { get; private set; }
 
     /// <summary>Number of completed (full) print runs this carton has been through (source Printed, monotonic).</summary>
     public int PrintCount { get; private set; }
@@ -92,7 +105,16 @@ public sealed class TransportOrder
         || Status == TransportOrderStatus.ReprintAuthorized;
 
     /// <summary>Replace the advised label set (Phase-1 duplicate-advice = overwrite / last-wins; spec §6a).</summary>
-    public void OverwriteAdvice(string lineId, PandaLabelSet labels, DateTimeOffset advisedAt)
+    public void OverwriteAdvice(
+        string lineId,
+        PandaLabelSet labels,
+        DateTimeOffset advisedAt,
+        string? waveId = null,
+        string? profileName = null,
+        bool bypass = false,
+        bool verifyEnabled = true,
+        string? verifyPassDest = null,
+        string? verifyFailDest = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentNullException.ThrowIfNull(labels);
@@ -107,7 +129,49 @@ public sealed class TransportOrder
         VerifiedAt = null;
         VerifyFailedAt = null;
         ReprintAuthorizationReason = null;
+        SetAdviceMetadata(waveId, profileName, bypass, verifyEnabled, verifyPassDest, verifyFailDest);
         _printStates = BuildPrintStates(labels);
+    }
+
+    public void SetAdviceMetadata(
+        string? waveId = null,
+        string? profileName = null,
+        bool bypass = false,
+        bool verifyEnabled = true,
+        string? verifyPassDest = null,
+        string? verifyFailDest = null)
+    {
+        WaveId = string.IsNullOrWhiteSpace(waveId) ? null : waveId;
+        ProfileName = string.IsNullOrWhiteSpace(profileName) ? null : profileName;
+        Bypass = bypass;
+        VerifyEnabled = verifyEnabled;
+        VerifyPassDest = string.IsNullOrWhiteSpace(verifyPassDest) ? null : verifyPassDest;
+        VerifyFailDest = string.IsNullOrWhiteSpace(verifyFailDest) ? null : verifyFailDest;
+    }
+
+    public void ResetForTrackingEvent()
+    {
+        Status = TransportOrderStatus.Advised;
+        VerifiedAt = null;
+        VerifyFailedAt = null;
+        ReprintAuthorizationReason = null;
+        foreach (var state in _printStates.Values)
+        {
+            state.Reset();
+        }
+    }
+
+    public void ForceMarkPrinted(DateTimeOffset at)
+    {
+        foreach (var state in _printStates.Values)
+        {
+            if (!state.Printed)
+            {
+                state.MarkPrinted("forced", at);
+            }
+        }
+
+        CompletePrintRun(at);
     }
 
     /// <summary>Record that a single label type was dispatched to a printer (partial-safe, no counter change).</summary>

@@ -16,8 +16,8 @@ public sealed class InductServiceTests
 
     public InductServiceTests()
     {
-        _advice = new CartonAdviceService(_store, _clock);
-        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock);
+        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
+        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider());
     }
 
     private static PrinterConfig Printer(string id, string[] map, int order) =>
@@ -197,3 +197,4 @@ public sealed class InductServiceTests
         Assert.Null(_gateway.Jobs.Single(j => j.LabelType == "Shipping").FirePoint);
     }
 }
+

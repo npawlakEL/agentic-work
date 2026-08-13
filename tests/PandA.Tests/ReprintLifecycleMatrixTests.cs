@@ -103,7 +103,7 @@ public sealed class ReprintLifecycleMatrixTests
         var store = new CountingTransportOrderStore();
         var lines = new InMemoryLineProvider().Add(line, states);
         var gw = new CapturingPrinterGateway();
-        var svc = new InductService(store, lines, new PrinterSelectionService(), gw, new TestClock(T0));
+        var svc = new InductService(store, lines, new PrinterSelectionService(), gw, new TestClock(T0), new InMemorySettingsProvider());
         return (svc, store, gw);
     }
 
@@ -241,8 +241,7 @@ public sealed class ReprintLifecycleMatrixTests
     {
         var store = new CountingTransportOrderStore();
         var lines = new InMemoryLineProvider(); // no line registered
-        var svc = new InductService(store, lines, new PrinterSelectionService(),
-            new CapturingPrinterGateway(), new TestClock(T0));
+        var svc = new InductService(store, lines, new PrinterSelectionService(), new CapturingPrinterGateway(), new TestClock(T0), new InMemorySettingsProvider());
         store.Seed(new TransportOrder("BLIND1", "L1", Labels(("Shipping", "S1")), T0));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.InductAsync("L1", "BLIND1").AsTask());
@@ -256,3 +255,4 @@ public sealed class ReprintLifecycleMatrixTests
         Assert.Equal(InductStatus.Printed, result.Status);
     }
 }
+
