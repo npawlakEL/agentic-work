@@ -117,8 +117,11 @@ public sealed class InductService : IInductService
                 firePoint = resolution.FirePoint;
             }
 
+            // F12 (decision-014): request Zebra host status by appending ~HS when the line opts in.
+            var zpl = context.Config.PrinterStatusSuffix ? ZplStatusSuffix.Append(label.Zpl) : label.Zpl;
+
             await _gateway.SendAsync(
-                new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, label.Zpl, firePoint),
+                new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, zpl, firePoint),
                 cancellationToken).ConfigureAwait(false);
             _logger.LogInformation(
                 "Dispatched label {LabelType} for transport order {TuId} to printer {PrinterId} on line {LineId}.",

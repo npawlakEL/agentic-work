@@ -196,5 +196,27 @@ public sealed class InductServiceTests
 
         Assert.Null(_gateway.Jobs.Single(j => j.LabelType == "Shipping").FirePoint);
     }
+
+    [Fact]
+    public async Task Induct_WithPrinterStatusSuffix_AppendsHsToZpl()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printerStatusSuffix: true));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        await _induct.InductAsync("L1", "BLIND1");
+
+        Assert.Equal("^XAShipping^XZ~HS", _gateway.Jobs.Single(j => j.LabelType == "Shipping").Zpl);
+    }
+
+    [Fact]
+    public async Task Induct_WithoutPrinterStatusSuffix_LeavesZplUnchanged()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)])); // default: no suffix
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        await _induct.InductAsync("L1", "BLIND1");
+
+        Assert.Equal("^XAShipping^XZ", _gateway.Jobs.Single(j => j.LabelType == "Shipping").Zpl);
+    }
 }
 
