@@ -16,6 +16,7 @@ public sealed class LineSimulation
     private readonly CapturingPrinterGateway _printerGateway;
     private readonly SimClock _clock;
     private readonly List<SimCarton> _cartons = [];
+    private readonly IReadOnlyList<SimPrinterStation> _printers;
     private readonly Dictionary<string, int> _seenPrintJobsByCarton = new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset _lastStepUtc = DateTimeOffset.UtcNow;
     private LineSimulationSettings _settings;
@@ -31,7 +32,8 @@ public sealed class LineSimulation
         CapturingPrinterGateway printerGateway,
         SimClock clock,
         int verifyFailThreshold,
-        LineSimulationSettings? settings = null)
+        LineSimulationSettings? settings = null,
+        IReadOnlyList<SimPrinterStation>? printers = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentException.ThrowIfNullOrWhiteSpace(lineName);
@@ -44,6 +46,7 @@ public sealed class LineSimulation
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         VerifyFailThreshold = Math.Max(1, verifyFailThreshold);
         _settings = (settings ?? new LineSimulationSettings()).Normalize();
+        _printers = printers ?? [];
     }
 
     public string LineId { get; }
@@ -166,6 +169,22 @@ public sealed class LineSimulation
         }
     }
 
+    public async ValueTask<LineSimulationSnapshot> ClearCartonsAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            _cartons.Clear();
+            _seenPrintJobsByCarton.Clear();
+            _lastEvent = "Line cleared";
+            return BuildSnapshot();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async ValueTask<LineSimulationSnapshot> GetSnapshotAsync()
     {
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -269,9 +288,9 @@ public sealed class LineSimulation
     {
         var printX = ResolvePrintPosition(job.FirePoint);
         var (applyX, cartonOffset) = ResolveApplyPosition(carton, job.FirePoint);
-        var y = string.Equals(job.LabelType, "Content", StringComparison.OrdinalIgnoreCase)
-            ? carton.HeightInches + 0.08
-            : carton.WidthInches / 2 + 0.08;
+        var orientation = OrientationFor(job.PrinterId);
+        var top = string.Equals(orientation, "Top", StringComparison.OrdinalIgnoreCase);
+        var y = top ? carton.HeightInches + 0.08 : carton.WidthInches / 2 + 0.08;
 
         return new LabelPlacementSnapshot(
             job.LabelType,
@@ -281,7 +300,36 @@ public sealed class LineSimulation
             new SimPoint(applyX, y, 0),
             cartonOffset,
             job.FirePoint?.ApplyFirePoint.ToString() ?? "n/a",
+            top ? "Top" : "Side",
             Applied: false);
+    }
+
+    private string OrientationFor(string printerId) =>
+        _printers.FirstOrDefault(p => string.Equals(p.PrinterId, printerId, StringComparison.OrdinalIgnoreCase))?.Orientation
+        ?? "Side";
+
+    /// <summary>Maps configured printers onto the middle (apply) tracking-eye positions, in order.</summary>
+    private List<SimPrinterSnapshot> PrinterStations()
+    {
+        var eyes = BuildEyes();
+        var middle = eyes.Skip(1).Take(Math.Max(0, eyes.Count - 2)).ToList();
+        if (middle.Count == 0)
+        {
+            middle = [eyes[Math.Min(1, eyes.Count - 1)]];
+        }
+
+        var stations = _printers.Count > 0
+            ? _printers
+            : Enumerable.Range(0, Math.Max(1, _settings.PrinterCount))
+                .Select(i => new SimPrinterStation($"printer-{i + 1}", "Side"))
+                .ToList();
+
+        return stations
+            .Select((p, i) => new SimPrinterSnapshot(
+                p.PrinterId,
+                middle[Math.Min(i, middle.Count - 1)].PositionInches,
+                string.Equals(p.Orientation, "Top", StringComparison.OrdinalIgnoreCase) ? "Top" : "Side"))
+            .ToList();
     }
 
     private double ResolvePrintPosition(FirePoint? firePoint)
@@ -349,7 +397,7 @@ public sealed class LineSimulation
                 c.Labels))
             .ToList();
 
-        return new LineSimulationSnapshot(Running, BeltSpeedInchesPerSecond, ConveyorLengthInches, LineId, LineName, _settings, eyes, cartons, _lastEvent);
+        return new LineSimulationSnapshot(Running, BeltSpeedInchesPerSecond, ConveyorLengthInches, LineId, LineName, _settings, eyes, PrinterStations(), cartons, _lastEvent);
     }
 
     private List<TrackingEye> BuildEyes()

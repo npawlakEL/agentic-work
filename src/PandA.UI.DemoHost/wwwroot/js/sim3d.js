@@ -10,16 +10,15 @@ let root;
 let controls;
 let defaultCamera;
 let beltMesh;
-let printerAssembly;
-let tampArm;
-let applicatorSceneX = 0;
+let printers = new Map();
 let cartons = new Map();
 let eyes = new Map();
 let fallbackCanvas;
 let fallbackContext;
 
-const REST_TAMP_Y = 42;   // arm parked high above the belt
-const ARM_HALF = 10;      // half-height of the tamp arm mesh
+const REST_TAMP_Y = 42;   // top arm parked high above the belt
+const REST_SIDE_Z = 30;   // side arm parked out toward its printer body
+const ARM_HALF = 10;      // half-length of the tamp arm mesh
 const BELT_TOP_Y = 3.2;   // top surface of the belt (carton sits here)
 
 export async function start(element, dotnetReference) {
@@ -47,6 +46,7 @@ export function stop() {
     animationId = 0;
     cartons.clear();
     eyes.clear();
+    printers.clear();
     if (renderer) {
         renderer.dispose();
     }
@@ -110,7 +110,6 @@ function initThree(OrbitControls) {
     root = new three.Group();
     scene.add(root);
     buildLine();
-    buildPrinter();
     window.addEventListener("resize", resize);
 }
 
@@ -146,44 +145,116 @@ function buildLine() {
     root.add(floor);
 }
 
-// A print-and-apply top applicator: a printer body beside the belt, an overhead gantry,
-// and a vertical tamp arm that extends DOWN to stamp the label onto the passing carton.
-function buildPrinter() {
-    printerAssembly = new three.Group();
-    root.add(printerAssembly);
+// Build a print-and-apply station. A TOP station has an overhead gantry with a tamp arm that
+// extends DOWN onto the carton top; a SIDE station has a horizontal arm that extends IN toward
+// the carton's near (+z) face. Each station is placed statically at its printer-eye X.
+function buildStation(printer) {
+    const top = String(printer.orientation).toLowerCase() === "top";
+    const group = new three.Group();
 
-    const bodyMat = new three.MeshStandardMaterial({ color: 0x0f766e, roughness: 0.5, metalness: 0.2 });
+    const bodyMat = new three.MeshStandardMaterial({ color: top ? 0x0f766e : 0x9333ea, roughness: 0.5, metalness: 0.2 });
     const frameMat = new three.MeshStandardMaterial({ color: 0x334155, roughness: 0.6, metalness: 0.4 });
     const tampMat = new three.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35, metalness: 0.2 });
+    const slotMat = new three.MeshStandardMaterial({ color: 0xfef3c7 });
 
-    // Printer body to the side of the belt.
-    const body = new three.Mesh(new three.BoxGeometry(22, 26, 14), bodyMat);
-    body.position.set(0, 16, -24);
-    printerAssembly.add(body);
+    const tamp = new three.Group();
 
-    // Label-feed slot on the printer face.
-    const slot = new three.Mesh(new three.BoxGeometry(10, 2, 1), new three.MeshStandardMaterial({ color: 0xfef3c7 }));
-    slot.position.set(0, 12, -16.6);
-    printerAssembly.add(slot);
+    if (top) {
+        // Body beside the belt at -z, gantry over the belt centre, vertical tamp arm.
+        const body = new three.Mesh(new three.BoxGeometry(22, 26, 14), bodyMat);
+        body.position.set(0, 16, -24);
+        group.add(body);
+        const slot = new three.Mesh(new three.BoxGeometry(10, 2, 1), slotMat);
+        slot.position.set(0, 12, -16.6);
+        group.add(slot);
+        const gantry = new three.Mesh(new three.BoxGeometry(3.5, 3.5, 34), frameMat);
+        gantry.position.set(0, 34, -8);
+        group.add(gantry);
+        const column = new three.Mesh(new three.BoxGeometry(4, 40, 4), frameMat);
+        column.position.set(0, 20, -24);
+        group.add(column);
 
-    // Overhead gantry spanning to above the belt centre.
-    const gantry = new three.Mesh(new three.BoxGeometry(3.5, 3.5, 34), frameMat);
-    gantry.position.set(0, 34, -8);
-    printerAssembly.add(gantry);
-    const column = new three.Mesh(new three.BoxGeometry(4, 40, 4), frameMat);
-    column.position.set(0, 20, -24);
-    printerAssembly.add(column);
+        const arm = new three.Mesh(new three.BoxGeometry(3, ARM_HALF * 2, 3), frameMat);
+        tamp.add(arm);
+        const pad = new three.Mesh(new three.BoxGeometry(9, 1.4, 6), tampMat);
+        pad.position.set(0, -ARM_HALF, 0);
+        tamp.add(pad);
+        tamp.position.set(0, REST_TAMP_Y, 0);
+    } else {
+        // Body beside the belt at +z (camera-facing), horizontal arm extending in -z onto the side face.
+        const body = new three.Mesh(new three.BoxGeometry(22, 24, 14), bodyMat);
+        body.position.set(0, 14, 26);
+        group.add(body);
+        const slot = new three.Mesh(new three.BoxGeometry(10, 2, 1), slotMat);
+        slot.position.set(0, 12, 18.6);
+        group.add(slot);
+        const column = new three.Mesh(new three.BoxGeometry(4, 30, 4), frameMat);
+        column.position.set(0, 15, 26);
+        group.add(column);
 
-    // The tamp arm (extends down onto the carton) with a pad at its tip.
-    tampArm = new three.Group();
-    const arm = new three.Mesh(new three.BoxGeometry(3, ARM_HALF * 2, 3), frameMat);
-    arm.position.set(0, 0, 0);
-    tampArm.add(arm);
-    const pad = new three.Mesh(new three.BoxGeometry(9, 1.4, 6), tampMat);
-    pad.position.set(0, -ARM_HALF, 0);
-    tampArm.add(pad);
-    tampArm.position.set(0, REST_TAMP_Y, 0);
-    printerAssembly.add(tampArm);
+        const arm = new three.Mesh(new three.BoxGeometry(3, 3, ARM_HALF * 2), frameMat);
+        tamp.add(arm);
+        const pad = new three.Mesh(new three.BoxGeometry(6, 9, 1.4), tampMat);
+        pad.position.set(0, 0, -ARM_HALF);
+        tamp.add(pad);
+        tamp.position.set(0, BELT_TOP_Y + 8, REST_SIDE_Z);
+    }
+
+    group.add(tamp);
+    group.userData.tamp = tamp;
+    group.userData.top = top;
+    return group;
+}
+
+// Create/update/remove the printer stations to match the snapshot, positioned statically at X.
+function syncPrinters(printerList, cartonList) {
+    const seen = new Set();
+    for (const printer of printerList ?? []) {
+        seen.add(printer.printerId);
+        let group = printers.get(printer.printerId);
+        if (!group) {
+            group = buildStation(printer);
+            printers.set(printer.printerId, group);
+            root.add(group);
+        }
+        group.position.x = toSceneX(printer.positionInches);
+        animateStation(group, cartonList);
+    }
+    for (const [id, group] of printers) {
+        if (!seen.has(id)) {
+            root.remove(group);
+            printers.delete(id);
+        }
+    }
+}
+
+// Extend a station's tamp onto the carton when one is beneath it and being applied; retract otherwise.
+function animateStation(group, cartonList) {
+    const tamp = group.userData.tamp;
+    if (!tamp) {
+        return;
+    }
+
+    const top = group.userData.top;
+    let under = null;
+    for (const carton of cartonList ?? []) {
+        const centerX = toSceneX(carton.positionInches + carton.lengthInches / 2);
+        const applying = carton.state === "Applied" || carton.state === "Printed";
+        if (applying && Math.abs(centerX - group.position.x) < carton.lengthInches / 2 + 3) {
+            under = carton;
+            break;
+        }
+    }
+
+    if (top) {
+        const targetY = under ? BELT_TOP_Y + under.heightInches + ARM_HALF + 0.6 : REST_TAMP_Y;
+        tamp.position.y += (targetY - tamp.position.y) * 0.25;
+    } else {
+        const targetZ = under ? under.widthInches / 2 + ARM_HALF + 0.6 : REST_SIDE_Z;
+        const targetY = under ? BELT_TOP_Y + under.heightInches / 2 : BELT_TOP_Y + 8;
+        tamp.position.z += (targetZ - tamp.position.z) * 0.25;
+        tamp.position.y += (targetY - tamp.position.y) * 0.25;
+    }
 }
 
 async function loop() {
@@ -205,12 +276,12 @@ function renderSnapshot(snapshot) {
     const settings = snapshot.settings ?? {};
     const eyeList = snapshot.eyes ?? [];
     const cartonList = snapshot.cartons ?? [];
+    const printerList = snapshot.printers ?? [];
 
     resizeBelt(settings);
-    positionPrinter(eyeList, cartonList);
+    syncPrinters(printerList, cartonList);
     syncEyes(eyeList);
     syncCartons(cartonList);
-    animateTamp(cartonList);
 
     controls?.update();
     renderer.render(scene, camera);
@@ -356,9 +427,13 @@ function syncLabels(group, carton) {
             group.userData.labels.set(key, mesh);
             group.add(mesh);
         }
-        const onTop = label.labelType === "Content";
+        const onTop = String(label.orientation).toLowerCase() === "top";
         // cartonOffsetInches encodes the real fire point (leading/trailing/middle) along the box.
-        const offsetX = (label.cartonOffsetInches ?? carton.lengthInches / 2) - carton.lengthInches / 2;
+        // Clamp so the label plane always stays fully on the carton face rather than hanging off.
+        const halfLabel = 3.5;
+        const rawOffset = (label.cartonOffsetInches ?? carton.lengthInches / 2) - carton.lengthInches / 2;
+        const limit = Math.max(0, carton.lengthInches / 2 - halfLabel);
+        const offsetX = Math.max(-limit, Math.min(limit, rawOffset));
         if (onTop) {
             mesh.rotation.set(-Math.PI / 2, 0, 0);
             mesh.position.set(offsetX, BELT_TOP_Y + carton.heightInches + 0.06, 0);

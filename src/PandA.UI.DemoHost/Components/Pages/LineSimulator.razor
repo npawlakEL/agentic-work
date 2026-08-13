@@ -1,9 +1,10 @@
 @page "/sim"
 @layout PandA.UI.Shell.PandaLayout
 @using PandA.Sim.Line
+@using PandA.UI.DemoHost.Sim
 @implements IAsyncDisposable
 @inject IJSRuntime JS
-@inject LineSimulation Simulation
+@inject SimLineCatalog Catalog
 
 <PageTitle>PandA — Line Simulator</PageTitle>
 
@@ -14,9 +15,16 @@
 
 <MudPaper Elevation="2" Class="sim-toolbar pa-4 mb-4">
     <div class="sim-toolbar__actions">
+        <MudSelect T="string" Value="_lineId" ValueChanged="ChangeLine" Label="PandA line" Dense="true" Variant="MudBlazor.Variant.Outlined" Class="sim-line-select" data-testid="sim-line-select">
+            @foreach (var line in Catalog.Lines)
+            {
+                <MudSelectItem T="string" Value="@line.Id">@line.Name</MudSelectItem>
+            }
+        </MudSelect>
         <MudButton Variant="MudBlazor.Variant.Filled" Color="Color.Success" OnClick="StartLine" data-testid="sim-start">Start line</MudButton>
         <MudButton Variant="MudBlazor.Variant.Outlined" Color="Color.Default" OnClick="StopLine" data-testid="sim-stop">Stop line</MudButton>
         <MudButton Variant="MudBlazor.Variant.Filled" Color="Color.Primary" OnClick="SpawnCarton" data-testid="sim-spawn">Spawn carton</MudButton>
+        <MudButton Variant="MudBlazor.Variant.Outlined" Color="Color.Error" OnClick="ClearLine" data-testid="sim-clear">Clear line</MudButton>
     </div>
     <div class="sim-toolbar__speed">
         <MudText Typo="Typo.caption">Belt speed: @_snapshot.BeltSpeedInchesPerSecond.ToString("0.#") in/s</MudText>
@@ -125,12 +133,16 @@
     private ElementReference _sceneHost;
     private IJSObjectReference? _module;
     private DotNetObjectReference<LineSimulator>? _self;
-    private LineSimulationSnapshot _snapshot = new(false, 24, 260, "", "", new LineSimulationSettings(), [], [], "Loading");
+    private LineSimulationSnapshot _snapshot = new(false, 24, 260, "", "", new LineSimulationSettings(), [], [], [], "Loading");
     private SimSettingsEditModel _settings = new();
     private double _speed = 24;
+    private string _lineId = "";
+
+    private LineSimulation Simulation => Catalog.Get(_lineId);
 
     protected override async Task OnInitializedAsync()
     {
+        _lineId = Catalog.DefaultLineId;
         _snapshot = await Simulation.GetSnapshotAsync();
         _speed = _snapshot.BeltSpeedInchesPerSecond;
         _settings = SimSettingsEditModel.From(_snapshot.Settings);
@@ -170,6 +182,19 @@
     private async Task SpawnCarton()
     {
         _snapshot = await Simulation.SpawnCartonAsync();
+    }
+
+    private async Task ClearLine()
+    {
+        _snapshot = await Simulation.ClearCartonsAsync();
+    }
+
+    private async Task ChangeLine(string lineId)
+    {
+        _lineId = lineId;
+        _snapshot = await Simulation.GetSnapshotAsync();
+        _speed = _snapshot.BeltSpeedInchesPerSecond;
+        _settings = SimSettingsEditModel.From(_snapshot.Settings);
     }
 
     private async Task SetSpeed(double value)

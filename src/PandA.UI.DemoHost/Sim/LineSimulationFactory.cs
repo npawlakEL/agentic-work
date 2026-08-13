@@ -11,9 +11,19 @@ namespace PandA.UI.DemoHost.Sim;
 
 internal static class LineSimulationFactory
 {
-    public static LineSimulation Create(DemoDataStore store)
+    public static IReadOnlyList<(string Id, string Name)> Lines(DemoDataStore store) =>
+        store.Lines.Values
+            .OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(l => (l.LineId!, l.Name))
+            .ToList();
+
+    public static LineSimulation Create(DemoDataStore store) => Create(store, null);
+
+    public static LineSimulation Create(DemoDataStore store, string? lineId)
     {
-        var line = store.Lines.Values.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase).First();
+        var line = lineId is null
+            ? store.Lines.Values.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase).First()
+            : store.Lines.Values.First(l => string.Equals(l.LineId, lineId, StringComparison.OrdinalIgnoreCase));
         var printers = store.Printers.Values
             .Where(p => string.Equals(p.LineId, line.LineId, StringComparison.OrdinalIgnoreCase))
             .OrderBy(p => p.ConfigOrder)
@@ -75,7 +85,10 @@ internal static class LineSimulationFactory
                 BeltSpeedInchesPerSecond = printers.FirstOrDefault()?.BeltSpeedInchesPerSecond ?? 24,
                 DefaultApplyDistanceInches = 1,
                 PrinterCount = Math.Max(1, printers.Count),
-            });
+            },
+            printers.Select(p => new SimPrinterStation(
+                p.PrinterId!,
+                string.Equals(p.Orientation, "Top", StringComparison.OrdinalIgnoreCase) ? "Top" : "Side")).ToList());
     }
 
     private static FirePointProfile? BuildProfile(DemoDataStore store, LineDto line)

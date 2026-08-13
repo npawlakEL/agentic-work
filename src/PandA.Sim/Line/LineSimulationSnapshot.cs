@@ -2,6 +2,12 @@ namespace PandA.Sim.Line;
 
 public sealed record SimPoint(double X, double Y, double Z);
 
+/// <summary>A configured printer station on the line (input): its id and apply surface.</summary>
+public sealed record SimPrinterStation(string PrinterId, string Orientation);
+
+/// <summary>A printer station positioned on the belt for rendering (output).</summary>
+public sealed record SimPrinterSnapshot(string PrinterId, double PositionInches, string Orientation);
+
 public sealed record LabelPlacementSnapshot(
     string LabelType,
     string PrinterId,
@@ -10,6 +16,7 @@ public sealed record LabelPlacementSnapshot(
     SimPoint ApplyPoint,
     double CartonOffsetInches,
     string ApplyPointNotation,
+    string Orientation,
     bool Applied);
 
 public sealed record SimCartonSnapshot(
@@ -35,5 +42,6 @@ public sealed record LineSimulationSnapshot(
     string LineName,
     LineSimulationSettings Settings,
     IReadOnlyList<TrackingEyeSnapshot> Eyes,
+    IReadOnlyList<SimPrinterSnapshot> Printers,
     IReadOnlyList<SimCartonSnapshot> Cartons,
     string LastEvent);

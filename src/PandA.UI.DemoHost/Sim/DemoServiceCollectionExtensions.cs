@@ -16,6 +16,7 @@ public static class DemoServiceCollectionExtensions
     public static IServiceCollection AddPandaDemoBackend(this IServiceCollection services)
     {
         services.AddSingleton<DemoDataStore>();
+        services.AddSingleton<SimLineCatalog>();
         services.AddSingleton<LineSimulation>(sp => LineSimulationFactory.Create(sp.GetRequiredService<DemoDataStore>()));
 
         // Operator identity — scoped per Blazor circuit so each connected operator is distinct.
