@@ -181,6 +181,38 @@ public sealed class DemoDataStore
                 Slots = slots,
             };
         }
+
+        // Two Side-only cartons (Shipping + Return): every label maps to a Side printer, so they fully
+        // print and verify clean — the console's green end-to-end sample alongside the Top-label cartons
+        // above, which print partially (Content is a Top apply the Phase-1 induct path can't print yet).
+        for (var j = 0; j < 2; j++)
+        {
+            var id = $"CTN{2000 + j}";
+            Cartons[id] = new DemoCarton
+            {
+                CartonId = id,
+                BlindLabel = $"BLIND{7200 + j}",
+                Upc = $"09876500{j:D4}",
+                Gtin = $"1009876500{j:D4}",
+                Ean = $"400987650{j:D4}",
+                CartonStatus = "Inducted",
+                VerifyResult = "",
+                VerifiedUtc = null,
+                PrintedCount = 0,
+                ProfileName = mapName,
+                PassFailDestination = "Ship Lane",
+                WaveId = $"W{200 + j}",
+                IsHeld = false,
+                RejectReason = "",
+                RejectedUtc = null,
+                LineId = lineId,
+                Slots =
+                [
+                    new(1, "Shipping", $"SHIP{9200 + j}", $"LPN{5200 + j}", $"^XA^FO50,50^A0N,40,40^FDShipping {j}^FS^XZ", false),
+                    new(2, "Return", $"RTRN{9200 + j}", $"LPN{5220 + j}", $"^XA^FO50,50^A0N,40,40^FDReturn {j}^FS^XZ", false),
+                ],
+            };
+        }
     }
 }
 

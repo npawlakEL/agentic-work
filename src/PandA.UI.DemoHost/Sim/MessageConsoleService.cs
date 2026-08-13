@@ -174,7 +174,8 @@ public sealed class MessageConsoleService
         var inductResult = await induct.InductAsync(line.LineId!, parsedScan.BlindLabel);
         entries.Add(new ConsoleEntry(ConsoleEntryKind.StepResult, $"Induct → {inductResult.Status}"));
 
-        foreach (var job in gateway.Jobs.Skip(before))
+        var printedJobs = gateway.Jobs.Skip(before).ToList();
+        foreach (var job in printedJobs)
         {
             var fire = job.FirePoint is { } f
                 ? $"  fire[print dev{f.PrintTrackingDevice}@{f.PrintFirePoint}, apply dev{f.ApplyTrackingDevice}@{f.ApplyFirePoint}]"
@@ -194,14 +195,13 @@ public sealed class MessageConsoleService
         if (inductResult.Status == InductStatus.PartiallyPrinted)
         {
             // Phase-1 induct only prints Side-oriented labels (architecture-log 005); a Top label (e.g.
-            // Content) has no printer yet, so the carton prints partially. The verify scan still proceeds
-            // against the advised label set (happy-path scanner), matching the SimHost behavior.
-            entries.Add(new ConsoleEntry(ConsoleEntryKind.Info, "Note: some labels had no eligible printer (Phase-1 induct prints Side labels only)."));
+            // Content) has no printer yet, so the carton prints partially. The verify scan below reads only
+            // what physically printed, so the missing label makes verify fail — the honest outcome.
+            entries.Add(new ConsoleEntry(ConsoleEntryKind.Info, "Note: some labels had no eligible printer (Phase-1 induct prints Side labels only); the verify scan will read only what printed."));
         }
 
-        // 2) Inbound 286 verify scan — auto-generate a matching read from the advised labels (happy path).
-        var reloaded = await orders.FindActiveByTuIdAsync(blindLabel);
-        var rawBuffer = BuildMatchingBuffer(reloaded!, config.BufferOrder);
+        // 2) Inbound 286 verify scan — the scanner reads only the labels that were physically printed.
+        var rawBuffer = BuildScannedBuffer(printedJobs, config.BufferOrder);
         var verifyMsg = new VerifyScanMessage(SourceMode, SorterNumber, SorterMode, VerifyDeviceId, SeqNum: parsedScan.SeqNum, LabelBuffer: rawBuffer);
         var verifyWire = verifyMsg.ToFrame().ToWire();
         entries.Add(new ConsoleEntry(ConsoleEntryKind.InboundFrame, $"IN  286 PANDA_SCAN_VERIFY   {verifyWire}"));
@@ -212,6 +212,13 @@ public sealed class MessageConsoleService
         entries.Add(new ConsoleEntry(ConsoleEntryKind.StepResult,
             $"Verify → {verifyResult.Verify!.Outcome} ⇒ station {verifyResult.Status}"));
 
+        foreach (var detail in verifyResult.Verify!.Details)
+        {
+            var scanned = string.IsNullOrEmpty(detail.Scanned) ? "(no read)" : detail.Scanned;
+            entries.Add(new ConsoleEntry(ConsoleEntryKind.Info,
+                $"  {detail.LabelType}: {detail.Reason} (expected {detail.Expected ?? "-"}, scanned {scanned})"));
+        }
+
         var final = await orders.FindActiveByTuIdAsync(blindLabel);
         var finalStatus = final!.Status.ToString();
         var success = verifyResult.Status == VerifyStationStatus.Verified;
@@ -221,10 +228,12 @@ public sealed class MessageConsoleService
     }
 
     /// <summary>
-    /// Build a raw scanner buffer aligned to the line's <see cref="LabelBufferOrder"/>: each advised label is
-    /// placed at its type's configured position; unmatched positions stay empty (a slot that read nothing).
+    /// Build the raw verify-scanner buffer aligned to the line's <see cref="LabelBufferOrder"/> from the
+    /// labels that were <em>physically printed</em>: each printed label's LPN is placed at its type's
+    /// configured position; positions whose label never printed stay empty (a slot that read nothing). A
+    /// partial print therefore yields a buffer missing that label, and verify fails — the honest outcome.
     /// </summary>
-    private static string[] BuildMatchingBuffer(TransportOrder order, LabelBufferOrder bufferOrder)
+    private static string[] BuildScannedBuffer(IReadOnlyList<PrintJob> printed, LabelBufferOrder bufferOrder)
     {
         var buffer = new string[bufferOrder.MaxPosition];
         for (var i = 0; i < buffer.Length; i++)
@@ -234,11 +243,11 @@ public sealed class MessageConsoleService
 
         foreach (var pos in bufferOrder.Positions)
         {
-            var label = order.Labels.Labels.FirstOrDefault(
-                l => string.Equals(l.LabelType, pos.LabelType, StringComparison.OrdinalIgnoreCase));
-            if (label is not null)
+            var job = printed.FirstOrDefault(
+                j => string.Equals(j.LabelType, pos.LabelType, StringComparison.OrdinalIgnoreCase));
+            if (job is not null)
             {
-                buffer[pos.Position - 1] = label.Lpn;
+                buffer[pos.Position - 1] = job.Lpn;
             }
         }
 
