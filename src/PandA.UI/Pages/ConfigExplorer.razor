@@ -39,12 +39,20 @@
                 <div class="d-flex align-center mb-3">
                     <MudText Typo="Typo.h6" data-testid="detail-title">@_selected.Label</MudText>
                     <MudSpacer />
-                    @if (_canDelete)
+                    @if (CreatableChildKind(_selected.Kind) is { } childKind)
                     {
-                        <MudButton Variant="Variant.Outlined" Color="Color.Error" data-testid="delete-button"
-                                   OnClick="DeleteAsync" Class="me-2">Delete</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="new-button"
+                                   OnClick="@(() => StartNew(childKind))">New @ChildLabel(childKind)</MudButton>
                     }
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="save-button" OnClick="SaveAsync">Save</MudButton>
+                    else
+                    {
+                        @if (_canDelete)
+                        {
+                            <MudButton Variant="Variant.Outlined" Color="Color.Error" data-testid="delete-button"
+                                       OnClick="DeleteAsync" Class="me-2">Delete</MudButton>
+                        }
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="save-button" OnClick="SaveAsync">Save</MudButton>
+                    }
                 </div>
 
                 @switch (_selected.Kind)
@@ -108,6 +116,7 @@
                         break;
 
                     case ConfigNodeKind.FirePoint when _firePoint is not null:
+                        <MudTextField @bind-Value="_firePoint.PrinterId" Label="Printer id" data-testid="firepoint-printerid" />
                         <MudTextField @bind-Value="_firePoint.LabelType" Label="Label type" />
                         <MudTextField @bind-Value="_firePoint.PrintTrackingDevice" Label="Print tracking device" />
                         <MudNumericField T="int" @bind-Value="_firePoint.PrintPoint" Label="Print point" />
@@ -199,6 +208,48 @@
         }
     }
 
+    private void StartNew(ConfigNodeKind childKind)
+    {
+        _canDelete = false;
+        _settings = null; _label = null; _station = null; _line = null; _printer = null; _firePoint = null; _map = null;
+
+        switch (childKind)
+        {
+            case ConfigNodeKind.LabelDefinition: _label = new LabelDraft(); break;
+            case ConfigNodeKind.MandaStation: _station = new StationDraft(); break;
+            case ConfigNodeKind.Line: _line = new LineDraft(); break;
+            case ConfigNodeKind.Printer: _printer = new PrinterDraft(); break;
+            case ConfigNodeKind.FirePoint: _firePoint = new FirePointDraft(); break;
+            case ConfigNodeKind.Map: _map = new MapDraft(); break;
+            default: return;
+        }
+
+        // A synthetic, unsaved node (null EntityId) drives the same detail form; Save creates it.
+        _selected = new ConfigTreeNode(childKind, $"New {ChildLabel(childKind)}", null, []);
+    }
+
+    private static ConfigNodeKind? CreatableChildKind(ConfigNodeKind groupKind) => groupKind switch
+    {
+        ConfigNodeKind.LabelDefinitions => ConfigNodeKind.LabelDefinition,
+        ConfigNodeKind.MandaStations => ConfigNodeKind.MandaStation,
+        ConfigNodeKind.Lines => ConfigNodeKind.Line,
+        ConfigNodeKind.Printers => ConfigNodeKind.Printer,
+        ConfigNodeKind.FirePoints => ConfigNodeKind.FirePoint,
+        ConfigNodeKind.Maps => ConfigNodeKind.Map,
+        _ => null,
+    };
+
+    private static string ChildLabel(ConfigNodeKind childKind) => childKind switch
+    {
+        ConfigNodeKind.LabelDefinition => "Label",
+        ConfigNodeKind.MandaStation => "Station",
+        ConfigNodeKind.Line => "Line",
+        ConfigNodeKind.Printer => "Printer",
+        ConfigNodeKind.FirePoint => "Fire Point",
+        ConfigNodeKind.Map => "Map",
+        _ => "Entity",
+    };
+
     private async Task SaveAsync()
     {
         if (_selected is null)
@@ -227,9 +278,15 @@
                 var kind = _selected.Kind;
                 var entityId = _selected.EntityId;
                 await ReloadTreeAsync();
-                // Re-point the selection at the freshly-built tree so the title/label isn't stale.
-                if (_root is not null && entityId is not null && FindNode(_root, kind, entityId) is { } refreshed)
+                if (entityId is null)
                 {
+                    // A newly-created entity: its id isn't known here, so clear the detail; the new node
+                    // is now in the refreshed tree for the operator to select.
+                    _selected = null;
+                }
+                else if (_root is not null && FindNode(_root, kind, entityId) is { } refreshed)
+                {
+                    // Re-point the selection at the freshly-built tree so the title/label isn't stale.
                     _selected = refreshed;
                 }
             }

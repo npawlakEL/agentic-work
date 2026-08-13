@@ -15,5 +15,6 @@
     [Parameter] public int Depth { get; set; }
     [Parameter] public EventCallback<ConfigTreeNode> OnSelect { get; set; }
 
-    private bool IsDisabled => Node.EntityId is null && Node.Kind is not ConfigNodeKind.SettingsGroup;
+    // Root is a pure container; every other node is selectable — entities to edit, groups to add a child under.
+    private bool IsDisabled => Node.Kind is ConfigNodeKind.Root;
 }

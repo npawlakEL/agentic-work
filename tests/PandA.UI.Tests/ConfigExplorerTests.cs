@@ -60,12 +60,37 @@ public sealed class ConfigExplorerTests : TestContext
         Assert.True(_config.LastSavedSettings!.ReprintLabelsEnabled);
     }
 
+    [Fact]
+    public void Creating_a_new_label_saves_with_null_id()
+    {
+        RenderComponent<MudBlazor.MudPopoverProvider>();
+        var cut = RenderComponent<ConfigExplorer>();
+
+        // Select the "Label Definitions" group node, then click "New Label".
+        var group = cut.FindAll("[data-testid=tree-node]")
+            .First(n => n.TextContent.Contains("Label Definitions", StringComparison.Ordinal));
+        group.Click();
+
+        cut.Find("[data-testid=new-button]").Click();
+
+        // A blank editor opens; save creates it (null id → the editor allocates one).
+        cut.Find("[data-testid=save-button]").Click();
+
+        Assert.Equal(1, _config.LabelSaves);
+        Assert.NotNull(_config.LastSavedLabel);
+        Assert.Null(_config.LastSavedLabel!.LabelDefId);
+        // After a create, the detail returns to the empty state (new id unknown here).
+        Assert.NotNull(cut.Find("[data-testid=detail-empty]"));
+    }
+
     private sealed class FakeConfig
         : IConfigTreeQuery, ISettingsEditor, ILabelDefEditor, IMandaStationEditor,
           ILineEditor, IPrinterEditor, IFirePointEditor, IMapEditor
     {
         public int SettingsSaves { get; private set; }
         public SettingsDto? LastSavedSettings { get; private set; }
+        public LabelDefDto? LastSavedLabel { get; private set; }
+        public int LabelSaves { get; private set; }
 
         public Task<ConfigTreeNode> GetTreeAsync(CancellationToken ct = default)
         {
@@ -96,8 +121,12 @@ public sealed class ConfigExplorerTests : TestContext
             Task.FromResult<IReadOnlyList<LabelDefDto>>([]);
         Task<LabelDefDto?> IConfigEditor<LabelDefDto>.GetAsync(string id, CancellationToken ct) =>
             Task.FromResult<LabelDefDto?>(new LabelDefDto(id, "Shipping", "Side", 0));
-        Task<CommandResult> IConfigEditor<LabelDefDto>.SaveAsync(LabelDefDto e, CancellationToken ct) =>
-            Task.FromResult(CommandResult.Ok());
+        Task<CommandResult> IConfigEditor<LabelDefDto>.SaveAsync(LabelDefDto e, CancellationToken ct)
+        {
+            LabelSaves++;
+            LastSavedLabel = e;
+            return Task.FromResult(CommandResult.Ok());
+        }
         Task<CommandResult> IConfigEditor<LabelDefDto>.DeleteAsync(string id, CancellationToken ct) =>
             Task.FromResult(CommandResult.Ok());
 

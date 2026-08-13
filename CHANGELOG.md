@@ -47,6 +47,11 @@ real operator identity through the audited reprint path. 256 tests green (231 ba
 - **`PandA.E2E.Tests/AppFlowTests`** — whole-app flows: nav reaches every screen, theme toggle flips
   `data-dark` (real-browser interactivity guard), operator identity persists across navigation.
 - **`PandA.UI.Tests/PandaLayoutTests`** — shell chrome + operator-selector + theme-toggle unit gates.
+- **Config Explorer create-new-entity flow** — selecting a group node (Labels/Stations/Lines/Printers/
+  Fire Points/Maps) shows a **New** button that opens a blank editor; Save with a null id creates the entity
+  through the pluggable editor and it appears in the refreshed tree. Group nodes are now selectable (only the
+  Root stays inert); added a Printer-id field so new fire points can be parented. Gated by a bUnit create
+  test (asserts the saved DTO has a null id) and an end-to-end Playwright create flow.
 
 ### Changed
 - Label Lookup and Reject Cartons now pass `Operator.CurrentOperator` (was hardcoded `"operator"`) to

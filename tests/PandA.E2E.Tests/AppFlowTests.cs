@@ -82,4 +82,31 @@ public sealed class AppFlowTests(DemoHostFixture fixture)
         await Assertions.Expect(page.Locator("[data-testid=operator-selector] input"))
             .ToHaveValueAsync("QA Operator", new() { Timeout = 10_000 });
     }
+
+    [Fact]
+    public async Task Config_explorer_creates_a_new_entity_end_to_end()
+    {
+        var page = await fixture.Browser.NewPageAsync();
+        await page.GotoAsync(fixture.BaseUrl + "/config", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        await page.Locator("[data-testid=page-heading]").WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
+
+        // Select the "Label Definitions" group, add a new label, fill the name, and save.
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Label Definitions" }).ClickAsync();
+
+        var newButton = page.Locator("[data-testid=new-button]");
+        await newButton.WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
+        await newButton.ClickAsync();
+
+        var name = page.Locator("[data-testid=detail-panel] input").First;
+        await name.WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
+        await name.FillAsync("E2E Test Label");
+
+        await page.Locator("[data-testid=save-button]").ClickAsync();
+
+        // On success the detail returns to the empty state and the new label appears in the tree.
+        await page.Locator("[data-testid=detail-empty]").WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
+        await Assertions.Expect(page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "E2E Test Label" }))
+            .ToBeVisibleAsync(new() { Timeout = 10_000 });
+        Assert.False(await page.Locator("#blazor-error-ui").IsVisibleAsync());
+    }
 }
