@@ -45,6 +45,7 @@ public sealed class InductService : IInductService
     private readonly IXRefStore? _xref;
     private readonly ILogger<InductService> _logger;
     private readonly FirePointResolver _firePoints = new();
+    private readonly ApplyPointResolver _applyPoints = new();
 
     public InductService(
         ITransportOrderStore store,
@@ -200,17 +201,31 @@ public sealed class InductService : IInductService
 
             // Resolve the print/apply firing points from the carton's resolved fire-point profile (if any).
             FirePoint? firePoint = null;
+            int? applyPulse = null;
             if (activeProfile is { } profile)
             {
                 var resolution = _firePoints.Resolve(profile, printer.PrinterId, label.LabelType);
                 firePoint = resolution.FirePoint;
+
+                // DYNAP (decision-016): convert the human APPLY point (inch/edge) into a carton-aware PLC
+                // pulse when the carton's physical dimensions are known. PRINT point stays static. Top-apply
+                // additionally needs tamp kinematics (not yet commissioned) so it is left null for now.
+                if (firePoint is { } fp
+                    && order.InductMeasurements is { } m
+                    && m.Length > 0
+                    && printer.PrinterType == ApplyOrientation.Side)
+                {
+                    var applyConfig = new ApplyPointConfig(EncoderResolution: context.Config.EncoderResolution);
+                    var dims = new CartonDimensions(m.Length, m.Height);
+                    applyPulse = _applyPoints.Resolve(fp.ApplyFirePoint, ApplyOrientation.Side, dims, applyConfig);
+                }
             }
 
             // F12 (decision-014): request Zebra host status by appending ~HS when the line opts in.
             var zpl = context.Config.PrinterStatusSuffix ? ZplStatusSuffix.Append(label.Zpl) : label.Zpl;
 
             await _gateway.SendAsync(
-                new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, zpl, firePoint),
+                new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, zpl, firePoint, applyPulse),
                 cancellationToken).ConfigureAwait(false);
             _logger.LogInformation(
                 "Dispatched label {LabelType} for transport order {TuId} to printer {PrinterId} on line {LineId}.",
@@ -227,7 +242,6 @@ public sealed class InductService : IInductService
         }
 
         var result = InductResult.FromAssignments(selection.Assignments);
-        // DYNAP: dynamic apply-point calculation here.
         // F08: routing here.
 
         // Only a FULL run counts as a print run and increments the monotonic counter (decision-003).

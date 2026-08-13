@@ -352,5 +352,32 @@ public sealed class InductServiceTests
         var forOrder = await runs.GetRunsForOrderAsync(pandaDataId);
         Assert.Equal(2, forOrder.Count);
     }
+
+    private static FirePointProfile SideProfile(string applyPoint) =>
+        new("Generic", [(("Ship1", "Shipping"), new FirePoint(2, 800, 3, ApplyPoint.Parse(applyPoint)))]);
+
+    [Fact]
+    public async Task Induct_SideApply_WithCartonDimensions_ResolvesDynamicApplyPulse()
+    {
+        // Leading apply "1L" with default EncoderResolution 0.2 => 1 / 0.2 = 5 pulses (length-independent).
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: SideProfile("1L")));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        await _induct.InductAsync(new InductScan("L1", "BLIND1", Length: 100, Height: 12));
+
+        var job = _gateway.Jobs.Single(j => j.LabelType == "Shipping");
+        Assert.Equal(5, job.ApplyPulse);
+    }
+
+    [Fact]
+    public async Task Induct_SideApply_WithoutCartonDimensions_LeavesApplyPulseNull()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: SideProfile("1L")));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        await _induct.InductAsync("L1", "BLIND1"); // bare identity induct: Length 0
+
+        Assert.Null(_gateway.Jobs.Single(j => j.LabelType == "Shipping").ApplyPulse);
+    }
 }
 
