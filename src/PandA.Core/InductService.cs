@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using PandA.Core.Induct;
 using PandA.Core.Settings;
 
 namespace PandA.Core;
@@ -10,10 +11,24 @@ namespace PandA.Core;
 /// </summary>
 public interface IInductService
 {
+    /// <summary>
+    /// Induct from a decoded <see cref="InductScan"/> event (the transport-agnostic projection of the PLC
+    /// 281 → ADS plugin → MfcTransportOrder+extension flow; decision-020). Carries the physical carton
+    /// measurements so run-history/quality/apply-point features can read them from the carton.
+    /// </summary>
+    ValueTask<InductResult> InductAsync(
+        InductScan scan,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Identity-only induct convenience (no physical measurements). Equivalent to inducting an
+    /// <see cref="InductScan.ForBlindLabel"/> scan; used by callers/tests that only exercise the print path.
+    /// </summary>
     ValueTask<InductResult> InductAsync(
         string lineId,
         string blindLabel,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default) =>
+        InductAsync(InductScan.ForBlindLabel(lineId, blindLabel), cancellationToken);
 }
 
 public sealed class InductService : IInductService
@@ -45,11 +60,19 @@ public sealed class InductService : IInductService
         _logger = logger ?? NullLogger<InductService>.Instance;
     }
 
-    public async ValueTask<InductResult> InductAsync(
+    public ValueTask<InductResult> InductAsync(
         string lineId,
         string blindLabel,
+        CancellationToken cancellationToken = default) =>
+        InductAsync(InductScan.ForBlindLabel(lineId, blindLabel), cancellationToken);
+
+    public async ValueTask<InductResult> InductAsync(
+        InductScan scan,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(scan);
+        var lineId = scan.LineId;
+        var blindLabel = scan.BlindLabel;
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentException.ThrowIfNullOrWhiteSpace(blindLabel);
 
@@ -61,6 +84,10 @@ public sealed class InductService : IInductService
             _logger.LogWarning("No active transport order for induct scan {TuId} on line {LineId}.", blindLabel, lineId);
             return InductResult.NoActiveOrder();
         }
+
+        // Wave-0 inbound foundation: stamp the carton with its physical induct measurements so downstream
+        // features (F-LOG1/F20/DYNAP) can read them. Pure capture; no gating behavior yet (decision-020).
+        order.StampInductScan(scan.ToMeasurements());
 
         if (order.Labels.Labels.Count == 0)
         {

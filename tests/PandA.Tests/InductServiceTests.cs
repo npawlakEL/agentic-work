@@ -1,4 +1,5 @@
 using PandA.Core;
+using PandA.Core.Induct;
 using PandA.Sim;
 
 namespace PandA.Tests;
@@ -217,6 +218,57 @@ public sealed class InductServiceTests
         await _induct.InductAsync("L1", "BLIND1");
 
         Assert.Equal("^XAShipping^XZ", _gateway.Jobs.Single(j => j.LabelType == "Shipping").Zpl);
+    }
+
+    [Fact]
+    public async Task Induct_FromInductScan_StampsPhysicalMeasurementsOnCarton()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        var scan = new InductScan("L1", "BLIND1",
+            FrontGap: 120, Length: 480, Width: 300, Height: 220, Weight: 1500,
+            SorterNumber: 2, SorterMode: 1, DeviceId: 7, SeqNum: 4242,
+            ScannedLabels: ["BLIND1"]);
+
+        var result = await _induct.InductAsync(scan);
+
+        Assert.Equal(InductStatus.Printed, result.Status);
+        var stored = await _store.FindActiveByTuIdAsync("BLIND1");
+        var m = stored!.InductMeasurements;
+        Assert.NotNull(m);
+        Assert.Equal(120, m!.FrontGap);
+        Assert.Equal(480, m.Length);
+        Assert.Equal(220, m.Height);
+        Assert.Equal(1500, m.Weight);
+        Assert.Equal(7, m.DeviceId);
+        Assert.Equal(4242, m.SeqNum);
+        Assert.Equal(2, m.SorterNumber);
+    }
+
+    [Fact]
+    public async Task Induct_BareBlindLabel_LeavesMeasurementsAtDefaults()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        await _induct.InductAsync("L1", "BLIND1"); // identity-only convenience path
+
+        var stored = await _store.FindActiveByTuIdAsync("BLIND1");
+        Assert.NotNull(stored!.InductMeasurements);
+        Assert.Equal(0, stored.InductMeasurements!.Length); // no physical bundle plumbed
+        Assert.Equal(int.MaxValue, stored.InductMeasurements.FrontGap); // gap always passes classification
+    }
+
+    [Fact]
+    public async Task Induct_FromInductScan_UnknownBlindLabel_ReturnsNoActiveOrder()
+    {
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+
+        var result = await _induct.InductAsync(new InductScan("L1", "NOPE", Length: 400));
+
+        Assert.Equal(InductStatus.NoActiveOrder, result.Status);
+        Assert.Empty(_gateway.Jobs);
     }
 }
 

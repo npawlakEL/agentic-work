@@ -1,5 +1,7 @@
 namespace PandA.Core;
 
+using PandA.Core.Induct;
+
 public enum TransportOrderStatus
 {
     /// <summary>Advised by the host; label set stored, awaiting induct scan (source PandaData/ADVISED).</summary>
@@ -72,6 +74,13 @@ public sealed class TransportOrder
     public string? VerifyPassDest { get; private set; }
 
     public string? VerifyFailDest { get; private set; }
+
+    /// <summary>
+    /// Physical carton measurements captured at the induct scan (Wave-0 inbound foundation). Null until the
+    /// carton is inducted; a bare (identity-only) induct leaves them null. Read by F-LOG1 (run history),
+    /// F20 (gap classification), and DYNAP (apply-point calculation).
+    /// </summary>
+    public InductScanMeasurements? InductMeasurements { get; private set; }
 
     /// <summary>Number of completed (full) print runs this carton has been through (source Printed, monotonic).</summary>
     public int PrintCount { get; private set; }
@@ -156,6 +165,17 @@ public sealed class TransportOrder
         VerifyEnabled = verifyEnabled;
         VerifyPassDest = string.IsNullOrWhiteSpace(verifyPassDest) ? null : verifyPassDest;
         VerifyFailDest = string.IsNullOrWhiteSpace(verifyFailDest) ? null : verifyFailDest;
+    }
+
+    /// <summary>
+    /// Wave-0 inbound foundation — stamp the carton with the physical measurements from its induct scan
+    /// (dimensions, front gap, PLC index bundle). Pure state capture; no gating behavior. Later features
+    /// (F-LOG1/F20/DYNAP) read <see cref="InductScan"/> once they are wired onto the induct path.
+    /// </summary>
+    public void StampInductScan(InductScanMeasurements measurements)
+    {
+        ArgumentNullException.ThrowIfNull(measurements);
+        InductMeasurements = measurements;
     }
 
     /// <summary>
