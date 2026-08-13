@@ -24,6 +24,47 @@ _(Next cycle's changes will be logged here by the Learner.)_
 
 ---
 
+## [0.7.0] — 2026-08-13 — Phase-2 Wave 2: interactivity fix + operator identity
+
+Wave-2 integration hardening of the standalone Blazor UI module. Fixes a critical latent defect — the demo
+host rendered as **static SSR with no interactivity**, so every button was dead in the browser — and wires
+real operator identity through the audited reprint path. 256 tests green (231 backend + 16 bUnit + 9 e2e).
+
+### Fixed
+- **Critical: the DemoHost was non-interactive.** `App.razor` rendered `<Routes />` / `<HeadOutlet />` with
+  no `@rendermode`, so despite `AddInteractiveServerRenderMode()` being registered, the whole component tree
+  was static SSR — no Blazor circuit, so `onclick`/`ValueChanged` never fired (theme toggle, reprint, MandA
+  print, config save were all inert in a real browser). Applied `@rendermode="InteractiveServer"` to both.
+  The existing gates missed this: bUnit forces interactivity, and the screen-load gate only checked that a
+  click didn't *error*, not that it *did* anything. (learnings/003.)
+
+### Added
+- **`IOperatorContext`** (`PandA.UI.Contracts.Common`) — injected operator identity port
+  (`CurrentOperator` / `SetOperator` / `OperatorChanged`) so audited actions attribute to a real person.
+  Demo-backed by a scoped-per-circuit `DemoOperatorContext`; a real host backs it with its auth session.
+- **App-bar operator selector** in `PandaLayout` bound to the port; a `data-dark` state hook on the layout
+  root so e2e can assert real interactivity.
+- **`PandA.E2E.Tests/AppFlowTests`** — whole-app flows: nav reaches every screen, theme toggle flips
+  `data-dark` (real-browser interactivity guard), operator identity persists across navigation.
+- **`PandA.UI.Tests/PandaLayoutTests`** — shell chrome + operator-selector + theme-toggle unit gates.
+
+### Changed
+- Label Lookup and Reject Cartons now pass `Operator.CurrentOperator` (was hardcoded `"operator"`) to
+  `AuthorizeReprintAsync`; their bUnit tests assert the captured actor equals the current context.
+
+### Learnings
+- **learnings/003** — the static-SSR interactivity trap (a registered render mode ≠ an applied one), why
+  "renders + no console error + clickable" is not "works", and operator identity behind a port.
+
+### Known follow-ups
+- Create-new-entity flows in Config Explorer and Wave-0.5 backend foundations (SETTINGS provider, F16 ILogger
+  retrofit, INBOUND TransportOrder fields, LineConfig omnibus, MandA Core manual entry point) remain.
+
+### Tests
+- 231 backend + 16 bUnit + 9 e2e passing.
+
+---
+
 ## [0.6.0] — 2026-08-13 — Standalone Blazor UI module (Phase-2, Wave 0+1)
 
 Adds the standalone, pluggable Blazor UI module (decision-019): a portable view-model interface layer, a

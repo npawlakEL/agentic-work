@@ -1,3 +1,4 @@
+using PandA.UI.Contracts.Common;
 using PandA.UI.Contracts.Config;
 using PandA.UI.Contracts.Lookup;
 using PandA.UI.Contracts.Manda;
@@ -13,6 +14,9 @@ public static class DemoServiceCollectionExtensions
     public static IServiceCollection AddPandaDemoBackend(this IServiceCollection services)
     {
         services.AddSingleton<DemoDataStore>();
+
+        // Operator identity — scoped per Blazor circuit so each connected operator is distinct.
+        services.AddScoped<IOperatorContext, DemoOperatorContext>();
 
         // Status streams (one instance implements both feeds).
         services.AddSingleton<DemoStatusStreams>();

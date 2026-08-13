@@ -1,4 +1,7 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@using PandA.UI.Contracts.Common
+@inject IOperatorContext Operator
 
 @* Design-system providers (Axon wraps MudBlazor). Order matters: theme first. *@
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
@@ -6,7 +9,7 @@
 <ElDialogProvider />
 <ElSnackbarProvider />
 
-<MudLayout>
+<MudLayout data-testid="app-root" data-dark="@(_isDarkMode ? "true" : "false")">
     <MudAppBar Elevation="1">
         <MudIconButton Icon="@Icons.Material.Filled.Menu"
                        Color="Color.Inherit"
@@ -15,6 +18,17 @@
                        OnClick="ToggleDrawer" />
         <MudText Typo="Typo.h6" Class="ml-2">PandA — Print &amp; Apply</MudText>
         <MudSpacer />
+        <div data-testid="operator-selector" class="mr-2" style="max-width:200px">
+            <MudTextField T="string"
+                          Value="@Operator.CurrentOperator"
+                          ValueChanged="OnOperatorChanged"
+                          Immediate="true"
+                          Label="Operator"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Person"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense" />
+        </div>
         <MudTooltip Text="@(_isDarkMode ? "Switch to light theme" : "Switch to dark theme")">
             <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
                            Color="Color.Inherit"
@@ -47,7 +61,21 @@
     private bool _drawerOpen = true;
     private bool _isDarkMode;
 
+    protected override void OnInitialized() => Operator.OperatorChanged += OnOperatorContextChanged;
+
+    private void OnOperatorContextChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnOperatorChanged(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            Operator.SetOperator(value);
+        }
+    }
+
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 
     private void ToggleTheme() => _isDarkMode = !_isDarkMode;
+
+    public void Dispose() => Operator.OperatorChanged -= OnOperatorContextChanged;
 }

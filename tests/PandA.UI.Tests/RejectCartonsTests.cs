@@ -13,6 +13,7 @@ public sealed class RejectCartonsTests : TestContext
 {
     private readonly FakeRejects _rejects = new();
     private readonly FakeReprint _reprint = new();
+    private readonly FakeOperatorContext _operator = new("M. Okoro");
 
     public RejectCartonsTests()
     {
@@ -20,6 +21,7 @@ public sealed class RejectCartonsTests : TestContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddSingleton<IRejectCartonQuery>(_rejects);
         Services.AddSingleton<IReprintAuthorizationCommand>(_reprint);
+        Services.AddSingleton<IOperatorContext>(_operator);
     }
 
     [Fact]
@@ -42,6 +44,7 @@ public sealed class RejectCartonsTests : TestContext
         cut.Find("[data-testid=authorize-reprint]").Click();
 
         Assert.Equal(1, _reprint.CartonCalls);
+        Assert.Equal("M. Okoro", _reprint.LastOperator);
     }
 
     private sealed class FakeRejects : IRejectCartonQuery
@@ -61,9 +64,12 @@ public sealed class RejectCartonsTests : TestContext
     {
         public int CartonCalls { get; private set; }
 
+        public string? LastOperator { get; private set; }
+
         public Task<CommandResult> AuthorizeReprintAsync(string cartonId, string operatorName, CancellationToken ct = default)
         {
             CartonCalls++;
+            LastOperator = operatorName;
             return Task.FromResult(CommandResult.Ok("ok"));
         }
 

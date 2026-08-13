@@ -191,6 +191,10 @@ trustworthy.
 — from the host's auth context when embedded in econtroller, or a lightweight operator-select/login in the
 standalone demo. Replace the hardcoded `"operator"`.
 **Priority:** High (audit integrity; blocks trusting the reprint audit trail) — targeted for Wave 2.
+**RESOLVED 2026-08-13 (v0.7.0):** Added `IOperatorContext` (Contracts.Common) — an injected identity port
+read at action time by the Lookup/Reject reprint handlers, driven by the app-bar operator selector, demo-
+backed by a scoped `DemoOperatorContext`. The hardcoded `"operator"` is gone; bUnit asserts the captured
+actor equals the current context. A production host backs the port with its real auth session.
 
 ### Global "Reprint Labels" allow-all setting
 **Added:** 2026-08-11

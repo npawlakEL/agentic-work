@@ -5,6 +5,7 @@
 @using PandA.UI.Contracts.Reprint
 @inject IRejectCartonQuery Query
 @inject IReprintAuthorizationCommand Reprint
+@inject IOperatorContext Operator
 @inject ISnackbar Snackbar
 
 <PageTitle>PandA — Reject Cartons</PageTitle>
@@ -100,7 +101,7 @@
     {
         try
         {
-            var result = await Reprint.AuthorizeReprintAsync(row.CartonId, "operator", CancellationToken.None);
+            var result = await Reprint.AuthorizeReprintAsync(row.CartonId, Operator.CurrentOperator, CancellationToken.None);
             Snackbar.Add(result.Message ?? (result.Success ? "Authorized." : "Failed."),
                 result.Success ? Severity.Success : Severity.Error);
             await ReloadAsync();

@@ -14,6 +14,7 @@ public sealed class LabelLookupTests : TestContext
 {
     private readonly FakeLookup _lookup = new();
     private readonly FakeReprint _reprint = new();
+    private readonly FakeOperatorContext _operator = new("A. Rivera");
 
     public LabelLookupTests()
     {
@@ -22,6 +23,7 @@ public sealed class LabelLookupTests : TestContext
         Services.AddSingleton<ITransportOrderQuery>(_lookup);
         Services.AddSingleton<ICartonLabelDetailQuery>(_lookup);
         Services.AddSingleton<IReprintAuthorizationCommand>(_reprint);
+        Services.AddSingleton<IOperatorContext>(_operator);
     }
 
     [Fact]
@@ -45,6 +47,19 @@ public sealed class LabelLookupTests : TestContext
         button.Click();
 
         Assert.Equal(1, _reprint.CartonCalls);
+        Assert.Equal("A. Rivera", _reprint.LastOperator);
+    }
+
+    [Fact]
+    public void Authorize_reprint_uses_current_operator_from_context()
+    {
+        RenderComponent<MudBlazor.MudPopoverProvider>();
+        var cut = RenderComponent<LabelLookup>();
+
+        _operator.SetOperator("J. Chen");
+        cut.Find("[data-testid=authorize-reprint]").Click();
+
+        Assert.Equal("J. Chen", _reprint.LastOperator);
     }
 
     private sealed class FakeLookup : ITransportOrderQuery, ICartonLabelDetailQuery
@@ -73,9 +88,12 @@ public sealed class LabelLookupTests : TestContext
     {
         public int CartonCalls { get; private set; }
 
+        public string? LastOperator { get; private set; }
+
         public Task<CommandResult> AuthorizeReprintAsync(string cartonId, string operatorName, CancellationToken ct = default)
         {
             CartonCalls++;
+            LastOperator = operatorName;
             return Task.FromResult(CommandResult.Ok("ok"));
         }
 
