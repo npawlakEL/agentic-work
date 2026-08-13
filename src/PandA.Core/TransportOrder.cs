@@ -82,6 +82,14 @@ public sealed class TransportOrder
     /// </summary>
     public InductScanMeasurements? InductMeasurements { get; private set; }
 
+    /// <summary>
+    /// F20 (decision — read-quality) — the carton status classified at the induct scan from the blind label
+    /// markers and front gap (<see cref="InductQualityClassifier"/>). Null until the carton is inducted.
+    /// <see cref="CartonStatus.PrintReady"/> is the only status that prints the real label; every other value
+    /// is an exception candidate (F10) and is logged by run-history (F-LOG1).
+    /// </summary>
+    public CartonStatus? StatusAtInduct { get; private set; }
+
     /// <summary>Number of completed (full) print runs this carton has been through (source Printed, monotonic).</summary>
     public int PrintCount { get; private set; }
 
@@ -176,6 +184,16 @@ public sealed class TransportOrder
     {
         ArgumentNullException.ThrowIfNull(measurements);
         InductMeasurements = measurements;
+    }
+
+    /// <summary>
+    /// F20 — record the read-quality status classified at the induct scan (see
+    /// <see cref="InductQualityClassifier"/>). Pure capture; used by run-history (F-LOG1) and the exception
+    /// trigger (F10). Does not gate the print decision on its own.
+    /// </summary>
+    public void StampInductStatus(CartonStatus status)
+    {
+        StatusAtInduct = status;
     }
 
     /// <summary>

@@ -39,6 +39,7 @@ public sealed class InductService : IInductService
     private readonly IPrinterGateway _gateway;
     private readonly IClock _clock;
     private readonly ISettingsProvider _settings;
+    private readonly IMinGapProvider? _minGap;
     private readonly ILogger<InductService> _logger;
     private readonly FirePointResolver _firePoints = new();
 
@@ -49,6 +50,7 @@ public sealed class InductService : IInductService
         IPrinterGateway gateway,
         IClock clock,
         ISettingsProvider settings,
+        IMinGapProvider? minGap = null,
         ILogger<InductService>? logger = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -57,6 +59,7 @@ public sealed class InductService : IInductService
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _minGap = minGap;
         _logger = logger ?? NullLogger<InductService>.Instance;
     }
 
@@ -89,13 +92,23 @@ public sealed class InductService : IInductService
         // features (F-LOG1/F20/DYNAP) can read them. Pure capture; no gating behavior yet (decision-020).
         order.StampInductScan(scan.ToMeasurements());
 
+        // F20: classify read-quality from the blind-label markers + front gap. Stamped for run-history
+        // (F-LOG1) and the exception trigger (F10); does not gate the print decision on its own here.
+        var inductStatus = InductQualityClassifier.Classify(blindLabel, scan.FrontGap, _minGap?.GetMinGap() ?? 0);
+        order.StampInductStatus(inductStatus);
+        if (inductStatus != CartonStatus.PrintReady)
+        {
+            _logger.LogInformation(
+                "Induct scan {TuId} on line {LineId} classified {Status} (front gap {FrontGap}).",
+                blindLabel, lineId, inductStatus, scan.FrontGap);
+        }
+
         if (order.Labels.Labels.Count == 0)
         {
             _logger.LogWarning("Transport order {TuId} on line {LineId} has no label data.", order.TuId, lineId);
             return InductResult.NoData();
         }
 
-        // F20: read-quality classification here.
         // Reprint policy (decision-003): an already-printed carton may only reprint when an operator has
         // authorized it. Otherwise nothing is printed.
         if (!order.CanPrint)

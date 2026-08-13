@@ -270,5 +270,41 @@ public sealed class InductServiceTests
         Assert.Equal(InductStatus.NoActiveOrder, result.Status);
         Assert.Empty(_gateway.Jobs);
     }
+
+    private sealed class FixedMinGap(int minGap) : IMinGapProvider
+    {
+        public int GetMinGap() => minGap;
+    }
+
+    [Fact]
+    public async Task Induct_FrontGapBelowMinimum_ClassifiesGapError_ButStillPrints()
+    {
+        var induct = new InductService(
+            _store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider(),
+            new FixedMinGap(100));
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        var result = await induct.InductAsync(new InductScan("L1", "BLIND1", FrontGap: 50, Length: 400));
+
+        Assert.Equal(InductStatus.Printed, result.Status); // F20 stamps; it does not gate the print on its own
+        var stored = await _store.FindActiveByTuIdAsync("BLIND1");
+        Assert.Equal(CartonStatus.GapError, stored!.StatusAtInduct);
+    }
+
+    [Fact]
+    public async Task Induct_AdequateFrontGap_ClassifiesPrintReady()
+    {
+        var induct = new InductService(
+            _store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider(),
+            new FixedMinGap(100));
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        await induct.InductAsync(new InductScan("L1", "BLIND1", FrontGap: 250, Length: 400));
+
+        var stored = await _store.FindActiveByTuIdAsync("BLIND1");
+        Assert.Equal(CartonStatus.PrintReady, stored!.StatusAtInduct);
+    }
 }
 

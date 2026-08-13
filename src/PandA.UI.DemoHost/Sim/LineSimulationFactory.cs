@@ -61,7 +61,7 @@ internal static class LineSimulationFactory
             gateway,
             clock,
             settings,
-            NullLogger<InductService>.Instance);
+            logger: NullLogger<InductService>.Instance);
         var verify = new VerifyStationService(
             orders,
             new VerificationService(),
