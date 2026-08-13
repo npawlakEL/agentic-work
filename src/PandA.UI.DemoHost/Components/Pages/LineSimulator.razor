@@ -77,9 +77,6 @@
                 <MudNumericField T="double" Label="Carton spacing/gap (in)" Min="12" Max="120" Step="1" Value="_settings.CartonSpacingInches" ValueChanged="v => _settings.CartonSpacingInches = v" />
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
-                <MudNumericField T="int" Label="Printer count" Min="1" Max="4" Value="_settings.PrinterCount" ValueChanged="v => _settings.PrinterCount = v" />
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
                 <MudNumericField T="double" Label="Conveyor length (in)" Min="160" Max="600" Step="10" Value="_settings.ConveyorLengthInches" ValueChanged="v => _settings.ConveyorLengthInches = v" />
             </MudItem>
             <MudItem xs="12" md="3" Class="sim-settings-actions">
@@ -87,7 +84,9 @@
             </MudItem>
         </MudGrid>
         <MudText Typo="Typo.caption" Class="mt-2">
-            Layout order is fixed for v1: Inbound Scanner → Printer eye(s) → Verify Scanner. DYNAP will read encoder resolution, carton height, and DefaultApplyDistance from this settings object.
+            Layout order is fixed for v1: Inbound Scanner → Printer eye(s) → Verify Scanner. The selected PandA
+            line defines its own printers (count, type, and order); printers of the same type render next to
+            each other. DYNAP reads encoder resolution, carton height, and DefaultApplyDistance from these settings.
         </MudText>
     </MudExpansionPanel>
 </MudExpansionPanels>

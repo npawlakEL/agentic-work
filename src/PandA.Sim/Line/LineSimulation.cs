@@ -308,15 +308,18 @@ public sealed class LineSimulation
         _printers.FirstOrDefault(p => string.Equals(p.PrinterId, printerId, StringComparison.OrdinalIgnoreCase))?.Orientation
         ?? "Side";
 
-    /// <summary>Maps configured printers onto the middle (apply) tracking-eye positions, in order.</summary>
-    private List<SimPrinterSnapshot> PrinterStations()
+    /// <summary>
+    /// Lays the configured printers out along the belt, centred on the printer-eye zone. Printers are
+    /// grouped so same-orientation stations (all Side, all Top, ...) sit next to each other, and every
+    /// printer gets a distinct X so none overlap in the 3D view.
+    /// </summary>
+    private IReadOnlyList<SimPrinterSnapshot> PrinterStations()
     {
         var eyes = BuildEyes();
-        var middle = eyes.Skip(1).Take(Math.Max(0, eyes.Count - 2)).ToList();
-        if (middle.Count == 0)
-        {
-            middle = [eyes[Math.Min(1, eyes.Count - 1)]];
-        }
+        var zoneEyes = eyes.Skip(1).Take(Math.Max(0, eyes.Count - 2)).ToList();
+        var centerX = zoneEyes.Count > 0
+            ? zoneEyes.Average(e => e.PositionInches)
+            : eyes[Math.Min(1, eyes.Count - 1)].PositionInches;
 
         var stations = _printers.Count > 0
             ? _printers
@@ -324,10 +327,38 @@ public sealed class LineSimulation
                 .Select(i => new SimPrinterStation($"printer-{i + 1}", "Side"))
                 .ToList();
 
-        return stations
+        return LayoutPrinters(stations, centerX);
+    }
+
+    /// <summary>
+    /// Pure printer-bank layout: orders <paramref name="stations"/> so same-orientation printers are
+    /// contiguous, then spreads them along X (centred on <paramref name="centerX"/>) with a fixed
+    /// centre-to-centre <paramref name="spacingInches"/> so every station gets a distinct position.
+    /// </summary>
+    public static IReadOnlyList<SimPrinterSnapshot> LayoutPrinters(
+        IReadOnlyList<SimPrinterStation> stations,
+        double centerX,
+        double spacingInches = 30.0)
+    {
+        if (stations.Count == 0)
+        {
+            return [];
+        }
+
+        var ordered = stations
+            .Select((p, i) => (Printer: p, Index: i))
+            .OrderBy(t => string.Equals(t.Printer.Orientation, "Top", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+            .ThenBy(t => t.Index)
+            .Select(t => t.Printer)
+            .ToList();
+
+        var span = spacingInches * (ordered.Count - 1);
+        var startX = centerX - span / 2.0;
+
+        return ordered
             .Select((p, i) => new SimPrinterSnapshot(
                 p.PrinterId,
-                middle[Math.Min(i, middle.Count - 1)].PositionInches,
+                startX + spacingInches * i,
                 string.Equals(p.Orientation, "Top", StringComparison.OrdinalIgnoreCase) ? "Top" : "Side"))
             .ToList();
     }

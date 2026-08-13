@@ -205,6 +205,7 @@ function buildStation(printer) {
     group.add(tamp);
     group.userData.tamp = tamp;
     group.userData.top = top;
+    group.userData.printerId = printer.printerId;
     return group;
 }
 
@@ -238,8 +239,14 @@ function animateStation(group, cartonList) {
     }
 
     const top = group.userData.top;
+    const printerId = group.userData.printerId;
     let under = null;
     for (const carton of cartonList ?? []) {
+        // Only the printer that actually printed a label for this carton reaches out to apply it.
+        const fired = (carton.labels ?? []).some(l => l.printerId === printerId);
+        if (!fired) {
+            continue;
+        }
         const centerX = toSceneX(carton.positionInches + carton.lengthInches / 2);
         const applying = carton.state === "Applied" || carton.state === "Printed";
         if (applying && Math.abs(centerX - group.position.x) < carton.lengthInches / 2 + 3) {
