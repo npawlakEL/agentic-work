@@ -353,10 +353,13 @@ public sealed class LineSimulation
 
         var anchor = EyePosition(firePoint.ApplyTrackingDevice);
         var applyPoint = GetApplyPoint(firePoint);
+        // Fire-point reference expressed as distance from the TRAILING (upstream) edge, matching the
+        // source notation: nL = n from the leading edge, nT = n from the trailing edge, nM = n from centre
+        // (positive toward leading). The renderer measures the ruler and label from this reference.
         var offset = applyPoint.Edge switch
         {
-            Core.Edge.Leading => ResolveDynamicApplyDistance(applyPoint),
-            Core.Edge.Trailing => carton.LengthInches - ResolveDynamicApplyDistance(applyPoint),
+            Core.Edge.Leading => carton.LengthInches - ResolveDynamicApplyDistance(applyPoint),
+            Core.Edge.Trailing => ResolveDynamicApplyDistance(applyPoint),
             _ => carton.LengthInches / 2 + ResolveDynamicApplyDistance(applyPoint),
         };
 
