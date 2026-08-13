@@ -24,6 +24,53 @@ _(Next cycle's changes will be logged here by the Learner.)_
 
 ---
 
+## [0.8.0] — 2026-08-13 — Backend Wave 2: full-port feature slices
+
+Ports seven PandA features into `PandA.Core`/`PandA.Sim` via a senior/coder workflow — background Coder
+agents authored new-file domain slices in parallel while a single Senior owned the build, full-suite run,
+review, and integration of hot-file features. **328 backend tests green** (up from 279). Nothing pushed.
+
+### Added
+- **FLOG1** — carton run-history audit (`CartonRunRecord`, `ICartonRunRepository` + in-memory store).
+- **F10** — local exception-label builder (`ExceptionLabelBuilder` + `Labels/*` + template repository).
+- **F18 Facet A** — multi-barcode identity xref (`XRef`, `XRefService`, `IXRefStore` + in-memory), per
+  decision-017.
+- **F12** — Zebra `~HS` host-status suffix (`ZplStatusSuffix`), and wired into the induct print path gated
+  by `LineConfig.PrinterStatusSuffix`.
+- **PROFSW** — per-carton fire-point profile selection: host-supplied `ProfileName` resolves against the
+  line's `ProfileRegistry` (case-insensitive); set-but-unknown ⇒ `NoProfile` (print nothing, GAP F19);
+  absent ⇒ `ActiveProfile` fallback. Adds `IProfileStore` + in-memory store.
+- **F15** — PLC pre-verify carton recovery (decision-009): re-arms a `Printed` carton only, keeps
+  `PrintCount` **monotonic**, reprint-gated via `ReprintLabels`, adds a `TrackingRearmed` flag;
+  `PlcEventHandlerService` + event codes + `IVerifyDeviceProvider`; position gate; codes 217/218 ignored.
+- **F08** — verify-outcome routing criterion (decision-008): PandA does **not** select lanes; it annotates
+  the carton with a transport-agnostic `RoutingCriterion {Type,Value}` (`ForVerify`: Pass/Ignore→"Pass",
+  else the outcome name) surfaced on `VerifyStationResult` for the EController adapter to project onto
+  `SortCriteriaExtension`.
+
+### Changed
+- `InductService` print loop now appends `~HS` when the line opts in (F12).
+- `VerifyStationService` populates the new `VerifyStationResult.Routing` criterion (null on NoActiveOrder).
+
+### Learnings
+- **learnings/004** — parallel-coder orchestration (partition by files, not just features; non-building
+  coders need a mandatory Senior build gate), building to the **decision** over superseded spec text, and
+  honest two-stage (domain-built → integrated) deferral.
+- **reviewer-log/007** — Senior caught 3 pre-commit issues: an invalid coder-emitted record constructor, a
+  lost first-file-in-new-folder create, and F08/F15 spec-vs-decision scope drift.
+
+### Known follow-ups
+- **Deferred integrations blocked on Wave-0 foundations:** FLOG1 induct wiring + F18 barcode-based induct
+  resolution need the PLC **inbound-scan payload** plumbed through `InductAsync`; F10 exception-label-on-
+  induct needs **F20 read-quality classification**. Exception-label design conversation to precede F10.
+- Wave-0.5 backend foundations (SETTINGS provider, F16 ILogger retrofit, INBOUND TransportOrder fields,
+  LineConfig omnibus, MandA Core manual entry point) remain.
+
+### Tests
+- 328 backend (+ 17 bUnit + 10 e2e from the prior UI wave) passing. Build clean; DemoHost `/`, `/sim` → 200.
+
+---
+
 ## [0.7.0] — 2026-08-13 — Phase-2 Wave 2: interactivity fix + operator identity
 
 Wave-2 integration hardening of the standalone Blazor UI module. Fixes a critical latent defect — the demo
