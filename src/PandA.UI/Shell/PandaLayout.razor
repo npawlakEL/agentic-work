@@ -2,6 +2,7 @@
 @implements IDisposable
 @using PandA.UI.Contracts.Common
 @inject IOperatorContext Operator
+@inject IServiceProvider Services
 
 @* Design-system providers (Axon wraps MudBlazor). Order matters: theme first. *@
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
@@ -39,7 +40,7 @@
 
     <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always" Variant="DrawerVariant.Responsive">
         <MudNavMenu>
-            @foreach (var entry in NavModel.Entries)
+            @foreach (var entry in AllNavEntries)
             {
                 <MudNavLink Href="@entry.Href"
                             Match="@(entry.Href == "/" ? NavLinkMatch.All : NavLinkMatch.Prefix)"
@@ -60,6 +61,12 @@
 @code {
     private bool _drawerOpen = true;
     private bool _isDarkMode;
+
+    // Core routes owned by the PandA.UI library plus any host-supplied extras (e.g. the
+    // DemoHost's Line Simulator). INavExtras is optional — absent in a bare host.
+    private IEnumerable<NavModel.NavEntry> AllNavEntries =>
+        NavModel.Entries.Concat(
+            (Services.GetService(typeof(INavExtras)) as INavExtras)?.Entries ?? []);
 
     protected override void OnInitialized() => Operator.OperatorChanged += OnOperatorContextChanged;
 

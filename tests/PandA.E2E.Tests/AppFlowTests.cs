@@ -13,6 +13,7 @@ public sealed class AppFlowTests(DemoHostFixture fixture)
     [
         ("Dashboard", "Dashboard"),
         ("Config Explorer", "Config Explorer"),
+        ("Line Simulator", "Line Simulator"),
         ("Label Lookup", "Label Data Lookup"),
         ("MandA Station", "MandA Station"),
         ("Reject Cartons", "Reject Cartons"),

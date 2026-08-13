@@ -1,0 +1,265 @@
+@page "/sim"
+@layout PandA.UI.Shell.PandaLayout
+@using PandA.Sim.Line
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject LineSimulation Simulation
+
+<PageTitle>PandA — Line Simulator</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" data-testid="page-heading">Line Simulator</MudText>
+<MudText Typo="Typo.body1" Class="mb-4 sim-copy">
+    A C#-authoritative view of the PandA.Core print/apply lifecycle. JavaScript renders only the snapshot returned by the simulator.
+</MudText>
+
+<MudPaper Elevation="2" Class="sim-toolbar pa-4 mb-4">
+    <div class="sim-toolbar__actions">
+        <MudButton Variant="MudBlazor.Variant.Filled" Color="Color.Success" OnClick="StartLine" data-testid="sim-start">Start line</MudButton>
+        <MudButton Variant="MudBlazor.Variant.Outlined" Color="Color.Default" OnClick="StopLine" data-testid="sim-stop">Stop line</MudButton>
+        <MudButton Variant="MudBlazor.Variant.Filled" Color="Color.Primary" OnClick="SpawnCarton" data-testid="sim-spawn">Spawn carton</MudButton>
+    </div>
+    <div class="sim-toolbar__speed">
+        <MudText Typo="Typo.caption">Belt speed: @_snapshot.BeltSpeedInchesPerSecond.ToString("0.#") in/s</MudText>
+        <MudSlider T="double"
+                   Min="6"
+                   Max="72"
+                   Step="1"
+                   Value="_speed"
+                   ValueChanged="SetSpeed"
+                   Color="Color.Primary"
+                   data-testid="sim-speed" />
+    </div>
+    <div class="sim-toolbar__status">
+        <MudChip T="string" Color="@(_snapshot.Running ? Color.Success : Color.Default)" Size="Size.Small">
+            @(_snapshot.Running ? "Running" : "Stopped")
+        </MudChip>
+        <MudText Typo="Typo.body2" data-testid="sim-carton-count">Cartons: @_snapshot.Cartons.Count</MudText>
+        <MudText Typo="Typo.caption">@_snapshot.LastEvent</MudText>
+    </div>
+</MudPaper>
+
+<MudExpansionPanels Class="mb-4">
+    <MudExpansionPanel Text="Sim Settings" data-testid="sim-settings-panel">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="int" Label="Tracking-eye count" Min="3" Max="12" Value="_settings.TrackingEyeCount" ValueChanged="v => _settings.TrackingEyeCount = v" data-testid="sim-eye-count" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="double" Label="EncoderResolution (inches per pulse)" Min="0.01" Max="5" Step="0.01" Value="_settings.EncoderResolutionInchesPerPulse" ValueChanged="v => _settings.EncoderResolutionInchesPerPulse = v" data-testid="sim-encoder-resolution" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="double" Label="Carton height (in)" Min="4" Max="48" Step="0.5" Value="_settings.CartonHeightInches" ValueChanged="v => _settings.CartonHeightInches = v" data-testid="sim-carton-height" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="double" Label="Carton length (in)" Min="6" Max="60" Step="0.5" Value="_settings.CartonLengthInches" ValueChanged="v => _settings.CartonLengthInches = v" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="double" Label="Carton width (in)" Min="6" Max="48" Step="0.5" Value="_settings.CartonWidthInches" ValueChanged="v => _settings.CartonWidthInches = v" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="double" Label="DefaultApplyDistance (in)" Min="0" Max="24" Step="0.25" Value="_settings.DefaultApplyDistanceInches" ValueChanged="v => _settings.DefaultApplyDistanceInches = v" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="double" Label="Print fire offset (in)" Min="0" Max="96" Step="0.5" Value="_settings.PrintFirePointOffsetInches" ValueChanged="v => _settings.PrintFirePointOffsetInches = v" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="double" Label="Apply fire offset (in)" Min="-48" Max="96" Step="0.5" Value="_settings.ApplyFirePointOffsetInches" ValueChanged="v => _settings.ApplyFirePointOffsetInches = v" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="double" Label="Carton spacing/gap (in)" Min="12" Max="120" Step="1" Value="_settings.CartonSpacingInches" ValueChanged="v => _settings.CartonSpacingInches = v" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="int" Label="Printer count" Min="1" Max="4" Value="_settings.PrinterCount" ValueChanged="v => _settings.PrinterCount = v" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudNumericField T="double" Label="Conveyor length (in)" Min="160" Max="600" Step="10" Value="_settings.ConveyorLengthInches" ValueChanged="v => _settings.ConveyorLengthInches = v" />
+            </MudItem>
+            <MudItem xs="12" md="3" Class="sim-settings-actions">
+                <MudButton Variant="MudBlazor.Variant.Filled" Color="Color.Primary" OnClick="ApplySettings" data-testid="sim-apply-settings">Apply settings</MudButton>
+            </MudItem>
+        </MudGrid>
+        <MudText Typo="Typo.caption" Class="mt-2">
+            Layout order is fixed for v1: Inbound Scanner → Printer eye(s) → Verify Scanner. DYNAP will read encoder resolution, carton height, and DefaultApplyDistance from this settings object.
+        </MudText>
+    </MudExpansionPanel>
+</MudExpansionPanels>
+
+<div class="sim-layout">
+    <div class="sim-stage-card">
+        <div class="sim-camera-bar">
+            <MudButton Size="Size.Small" Variant="MudBlazor.Variant.Filled" Color="Color.Primary" OnClick="ResetView" data-testid="sim-reset-view">Reset view</MudButton>
+            <MudButton Size="Size.Small" Variant="MudBlazor.Variant.Outlined" Color="Color.Default" OnClick='() => SetCamera("perspective")'>Perspective</MudButton>
+            <MudButton Size="Size.Small" Variant="MudBlazor.Variant.Outlined" Color="Color.Default" OnClick='() => SetCamera("top")'>Top</MudButton>
+            <MudButton Size="Size.Small" Variant="MudBlazor.Variant.Outlined" Color="Color.Default" OnClick='() => SetCamera("side")'>Side</MudButton>
+        </div>
+        <div @ref="_sceneHost"
+             id="sim-scene"
+             class="sim-stage"
+             data-testid="sim-scene-container"
+             aria-label="3D line simulation scene"></div>
+    </div>
+
+    <MudPaper Elevation="1" Class="pa-4 sim-inspector">
+        <MudText Typo="Typo.h6" Class="mb-2">Snapshot</MudText>
+        <MudText Typo="Typo.body2"><strong>Line:</strong> @_snapshot.LineName (@_snapshot.LineId)</MudText>
+        <MudText Typo="Typo.body2"><strong>Eyes:</strong> @string.Join(", ", _snapshot.Eyes.Select(e => $"{e.Id}@{e.PositionInches:0}\""))</MudText>
+        <MudDivider Class="my-3" />
+        @if (_snapshot.Cartons.Count == 0)
+        {
+            <MudText Typo="Typo.body2">No cartons on the belt. Start the line and spawn one to watch Core decisions render.</MudText>
+        }
+        else
+        {
+            @foreach (var carton in _snapshot.Cartons)
+            {
+                <div class="sim-carton-row" data-testid="sim-carton-row">
+                    <MudText Typo="Typo.subtitle2">@carton.BlindLabel</MudText>
+                    <MudText Typo="Typo.caption">@carton.State · @carton.PositionInches.ToString("0.0") in</MudText>
+                </div>
+            }
+        }
+    </MudPaper>
+</div>
+
+@code {
+    private ElementReference _sceneHost;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<LineSimulator>? _self;
+    private LineSimulationSnapshot _snapshot = new(false, 24, 260, "", "", new LineSimulationSettings(), [], [], "Loading");
+    private SimSettingsEditModel _settings = new();
+    private double _speed = 24;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _snapshot = await Simulation.GetSnapshotAsync();
+        _speed = _snapshot.BeltSpeedInchesPerSecond;
+        _settings = SimSettingsEditModel.From(_snapshot.Settings);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _self = DotNetObjectReference.Create(this);
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sim3d.js");
+        await _module.InvokeVoidAsync("start", _sceneHost, _self);
+    }
+
+    [JSInvokable]
+    public async Task<LineSimulationSnapshot> GetSnapshot()
+    {
+        _snapshot = await Simulation.GetSnapshotAsync();
+        return _snapshot;
+    }
+
+    private async Task StartLine()
+    {
+        await Simulation.StartAsync();
+        _snapshot = await Simulation.GetSnapshotAsync();
+    }
+
+    private async Task StopLine()
+    {
+        await Simulation.StopAsync();
+        _snapshot = await Simulation.GetSnapshotAsync();
+    }
+
+    private async Task SpawnCarton()
+    {
+        _snapshot = await Simulation.SpawnCartonAsync();
+    }
+
+    private async Task SetSpeed(double value)
+    {
+        _speed = value;
+        _settings.BeltSpeedInchesPerSecond = value;
+        await Simulation.SetBeltSpeedAsync(value);
+        _snapshot = await Simulation.GetSnapshotAsync();
+    }
+
+    private async Task ApplySettings()
+    {
+        _settings.BeltSpeedInchesPerSecond = _speed;
+        _snapshot = await Simulation.UpdateSettingsAsync(_settings.ToSettings());
+        _speed = _snapshot.BeltSpeedInchesPerSecond;
+        _settings = SimSettingsEditModel.From(_snapshot.Settings);
+    }
+
+    private async Task ResetView()
+    {
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("resetView");
+        }
+    }
+
+    private async Task SetCamera(string preset)
+    {
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("setCameraPreset", preset);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("stop");
+            await _module.DisposeAsync();
+        }
+
+        _self?.Dispose();
+    }
+
+    private sealed class SimSettingsEditModel
+    {
+        public int TrackingEyeCount { get; set; } = 3;
+        public double EncoderResolutionInchesPerPulse { get; set; } = 0.25;
+        public double BeltSpeedInchesPerSecond { get; set; } = 24;
+        public double ConveyorLengthInches { get; set; } = 260;
+        public double CartonLengthInches { get; set; } = 24;
+        public double CartonWidthInches { get; set; } = 16;
+        public double CartonHeightInches { get; set; } = 12;
+        public double DefaultApplyDistanceInches { get; set; } = 1;
+        public double PrintFirePointOffsetInches { get; set; } = 5;
+        public double ApplyFirePointOffsetInches { get; set; }
+        public double CartonSpacingInches { get; set; } = 36;
+        public int PrinterCount { get; set; } = 1;
+
+        public static SimSettingsEditModel From(LineSimulationSettings settings) => new()
+        {
+            TrackingEyeCount = settings.TrackingEyeCount,
+            EncoderResolutionInchesPerPulse = settings.EncoderResolutionInchesPerPulse,
+            BeltSpeedInchesPerSecond = settings.BeltSpeedInchesPerSecond,
+            ConveyorLengthInches = settings.ConveyorLengthInches,
+            CartonLengthInches = settings.CartonLengthInches,
+            CartonWidthInches = settings.CartonWidthInches,
+            CartonHeightInches = settings.CartonHeightInches,
+            DefaultApplyDistanceInches = settings.DefaultApplyDistanceInches,
+            PrintFirePointOffsetInches = settings.PrintFirePointOffsetInches,
+            ApplyFirePointOffsetInches = settings.ApplyFirePointOffsetInches,
+            CartonSpacingInches = settings.CartonSpacingInches,
+            PrinterCount = settings.PrinterCount,
+        };
+
+        public LineSimulationSettings ToSettings() => new()
+        {
+            TrackingEyeCount = TrackingEyeCount,
+            EncoderResolutionInchesPerPulse = EncoderResolutionInchesPerPulse,
+            BeltSpeedInchesPerSecond = BeltSpeedInchesPerSecond,
+            ConveyorLengthInches = ConveyorLengthInches,
+            CartonLengthInches = CartonLengthInches,
+            CartonWidthInches = CartonWidthInches,
+            CartonHeightInches = CartonHeightInches,
+            DefaultApplyDistanceInches = DefaultApplyDistanceInches,
+            PrintFirePointOffsetInches = PrintFirePointOffsetInches,
+            ApplyFirePointOffsetInches = ApplyFirePointOffsetInches,
+            CartonSpacingInches = CartonSpacingInches,
+            PrinterCount = PrinterCount,
+        };
+    }
+}
