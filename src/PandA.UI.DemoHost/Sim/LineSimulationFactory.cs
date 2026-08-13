@@ -52,6 +52,14 @@ internal static class LineSimulationFactory
 
         var orders = new InMemoryTransportOrderStore();
         var gateway = new CapturingPrinterGateway();
+        // Reflect real sim prints on the dashboard: stamp the printer that actually printed.
+        gateway.JobSent += job =>
+        {
+            if (store.PrinterRuntime.TryGetValue(job.PrinterId, out var rt))
+            {
+                rt.LastPrintedUtc = DateTimeOffset.UtcNow;
+            }
+        };
         var clock = new SimClock(DateTimeOffset.UtcNow);
         ISettingsProvider settings = new InMemorySettingsProvider();
         var induct = new InductService(

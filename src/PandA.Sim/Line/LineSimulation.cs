@@ -152,10 +152,19 @@ public sealed class LineSimulation
             order.SetAdviceMetadata(waveId: $"SIM-WAVE-{sequence % 3 + 1}", verifyEnabled: true, verifyPassDest: "Ship Lane", verifyFailDest: "Reject Lane");
             await _orders.UpsertAsync(order).ConfigureAwait(false);
 
+            // Stagger each new carton behind the current rearmost one so cartons never stack at the same
+            // position. Overlapping spawns would cross the tracking eyes in the same simulation step (same
+            // clock instant), collapsing the load-balance round-robin to a single printer via the tie-break.
+            var startInches = -_settings.CartonSpacingInches;
+            if (_cartons.Count > 0)
+            {
+                startInches = Math.Min(startInches, _cartons.Min(c => c.PositionInches) - _settings.CartonSpacingInches);
+            }
+
             _cartons.Add(new SimCarton($"Carton {sequence:000}", blind, order)
             {
-                PositionInches = -_settings.CartonSpacingInches,
-                PreviousPositionInches = -_settings.CartonSpacingInches,
+                PositionInches = startInches,
+                PreviousPositionInches = startInches,
                 LengthInches = _settings.CartonLengthInches,
                 WidthInches = _settings.CartonWidthInches,
                 HeightInches = _settings.CartonHeightInches,

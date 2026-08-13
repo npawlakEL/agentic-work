@@ -32,12 +32,6 @@ public sealed class DemoStatusStreams(DemoDataStore store) : ILineStatusStream, 
         {
             await Task.Delay(Interval, ct).ConfigureAwait(false);
 
-            // Simulate a printer having just printed.
-            foreach (var rt in store.PrinterRuntime.Values.Where(r => r.Online && !r.IsSpare))
-            {
-                rt.LastPrintedUtc = DateTimeOffset.UtcNow;
-            }
-
             foreach (var printer in SnapshotPrinters())
             {
                 yield return printer;
