@@ -149,7 +149,7 @@ public sealed class LineSimulation
                     new Label("Content", $"CONT-SIM-{sequence:0000}", $"^XA^FO50,120^FDContent {sequence}^FS^XZ"),
                 ]),
                 _clock.UtcNow);
-            order.SetAdviceMetadata($"SIM-WAVE-{sequence % 3 + 1}", "Line Simulation", verifyEnabled: true, verifyPassDest: "Ship Lane", verifyFailDest: "Reject Lane");
+            order.SetAdviceMetadata(waveId: $"SIM-WAVE-{sequence % 3 + 1}", verifyEnabled: true, verifyPassDest: "Ship Lane", verifyFailDest: "Reject Lane");
             await _orders.UpsertAsync(order).ConfigureAwait(false);
 
             _cartons.Add(new SimCarton($"Carton {sequence:000}", blind, order)
