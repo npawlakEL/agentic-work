@@ -279,8 +279,10 @@ function animateStation(group, cartonList) {
     if (serving) {
         const centerX = toSceneX(serving.carton.positionInches + serving.carton.lengthInches / 2);
         const near = Math.abs(centerX - group.position.x) < serving.carton.lengthInches / 2 + 3;
-        const placing = serving.label.onTamp || serving.label.applied;
-        if (near && placing) {
+        // Extend to stamp only while the label is loaded and NOT yet applied. The instant it applies we
+        // retract, revealing the label on the carton at the apply point instead of hiding it behind the pad.
+        const stamping = serving.label.onTamp && !serving.label.applied;
+        if (near && stamping) {
             under = serving.carton;
         }
     }
