@@ -24,6 +24,48 @@ _(Next cycle's changes will be logged here by the Learner.)_
 
 ---
 
+## [0.9.0] — 2026-08-14 — Backend serialized wiring wave: induct integration
+
+Wires the five previously "domain-built;integration-deferred" slices into the `InductService` induct path.
+Every feature edits the same hot files, so the wave was **serialized and Senior-owned** (no parallel coders),
+one feature built + full-suite tested + committed at a time. **358 backend tests green** (up from 352 at wave
+start, 331 after Wave 0). Build clean. DemoHost re-verified. Nothing pushed.
+
+### Added
+- **F20** — induct read-quality classification wired: `InductQualityClassifier` stamps
+  `TransportOrder.StatusAtInduct` from blind-label markers + `FrontGap`/`MinGap` (via optional
+  `IMinGapProvider`). Stamps only — does not gate the print. Feeds F-LOG1 and the F10 trigger.
+- **F-LOG1** — carton run-history wired: a `CartonRunRecord` is created at induct from scan measurements +
+  `StatusAtInduct` (optional `ICartonRunRepository`), with the first matched printer attached. `StableOrderId`
+  FNV-1a hash groups re-inducts under a stable `PandaDataId`.
+- **F18** — barcode cross-reference wired end-to-end: advice-time association (`AdviceBarcode` /
+  `AdviceMessage.Barcodes` → `XRefService`) and induct-time `ResolveByBarcodeAsync` (blind label + scanned
+  labels → xref TuIds → elect least-printed/earliest) when a direct TuId lookup misses (optional `IXRefStore`).
+- **DYNAP** — dynamic apply-point wired: `ApplyPointResolver` converts the human APPLY point (inch/edge) into
+  a carton-aware PLC pulse carried on `PrintJob.ApplyPulse`. Side-apply with known dimensions only; the PRINT
+  point stays static; top-apply is left null pending tamp-kinematic commissioning; measurement→pulse unit
+  calibration is an adapter concern.
+- **F10** — local exception labels wired (decision-021): an unmatched carton with exceptions enabled gets a
+  synthesized `{Reason}-{seq}` identity, a ZPL built from the injected `IExceptionLabelSource`
+  (`LocalTemplateSource` default; DCMS/eHub source owned by the adapter), printed to a printer of the line's
+  apply orientation, recorded as a printed run, and a verify-then-reject routing criterion (F08). New
+  `IExceptionLabelSource`/`LocalTemplateSource`/`ExceptionLabelPolicy`; `LineConfig.PrintExceptionLabels`
+  (nullable per-line switch, defined-global-override); `InductResult.ExceptionLabel` + `ExceptionCartonId` +
+  `Routing`.
+
+### Changed
+- `InductService` gained four optional trailing constructor collaborators (`IMinGapProvider`,
+  `ICartonRunRepository`, `IXRefStore`, `IExceptionLabelSource`), each null/no-op by default and placed before
+  `logger`, so all existing construction sites compile unchanged.
+- `spec_features` F20/F-LOG1/F18/DYNAP/F10 → `built`.
+
+### Learnings
+- reviewer-log/008, learnings/005: optional-trailing-param seams for incremental hot-file integration;
+  integration tests must be pipeline-reachable; model "unset" explicitly for presence-based precedence rules;
+  build to the architecture-log decision, keeping external-system variability behind a port.
+
+---
+
 ## [0.8.0] — 2026-08-13 — Backend Wave 2: full-port feature slices
 
 Ports seven PandA features into `PandA.Core`/`PandA.Sim` via a senior/coder workflow — background Coder
