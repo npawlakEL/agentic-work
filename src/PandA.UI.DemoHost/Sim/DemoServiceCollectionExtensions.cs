@@ -17,6 +17,7 @@ public static class DemoServiceCollectionExtensions
     {
         services.AddSingleton<DemoDataStore>();
         services.AddSingleton<SimLineCatalog>();
+        services.AddSingleton<MessageConsoleService>();
         services.AddSingleton<LineSimulation>(sp => LineSimulationFactory.Create(sp.GetRequiredService<DemoDataStore>()));
 
         // Operator identity — scoped per Blazor circuit so each connected operator is distinct.

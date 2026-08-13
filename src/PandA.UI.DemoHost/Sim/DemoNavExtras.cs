@@ -12,5 +12,6 @@ public sealed class DemoNavExtras : INavExtras
     public IReadOnlyList<NavModel.NavEntry> Entries { get; } =
     [
         new("Line Simulator", "/sim", MudBlazor.Icons.Material.Filled.ViewInAr),
+        new("Message Console", "/console", MudBlazor.Icons.Material.Filled.Terminal),
     ];
 }

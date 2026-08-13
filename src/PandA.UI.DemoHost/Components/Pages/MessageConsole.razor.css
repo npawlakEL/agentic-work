@@ -1,0 +1,68 @@
+.console-muted {
+    color: var(--mud-palette-text-secondary);
+}
+
+.console-log {
+    font-family: ui-monospace, "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    background: var(--mud-palette-background-grey);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    overflow-x: auto;
+    max-height: 32rem;
+    overflow-y: auto;
+}
+
+.console-line {
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: 0.05rem 0;
+}
+
+.console-inboundframe {
+    color: var(--mud-palette-info);
+    font-weight: 600;
+}
+
+.console-outboundprint {
+    color: var(--mud-palette-primary);
+}
+
+.console-stepresult {
+    color: var(--mud-palette-success-darken);
+    font-weight: 600;
+}
+
+.console-info {
+    color: var(--mud-palette-text-secondary);
+}
+
+.console-level {
+    display: inline-block;
+    min-width: 3.25rem;
+    font-weight: 700;
+}
+
+.console-category {
+    display: inline-block;
+    min-width: 12rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.console-log-warn .console-level,
+.console-log-warn {
+    color: var(--mud-palette-warning-darken);
+}
+
+.console-log-fail .console-level,
+.console-log-crit .console-level,
+.console-log-fail,
+.console-log-crit {
+    color: var(--mud-palette-error);
+}
+
+.console-log-info .console-level {
+    color: var(--mud-palette-info);
+}

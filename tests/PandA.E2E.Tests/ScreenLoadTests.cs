@@ -17,6 +17,7 @@ public sealed class ScreenLoadTests(DemoHostFixture fixture)
         { "/manda", "MandA Station" },
         { "/config", "Config Explorer" },
         { "/sim", "Line Simulator" },
+        { "/console", "Message Console" },
     };
 
     [Theory]

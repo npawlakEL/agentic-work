@@ -1,0 +1,190 @@
+@page "/console"
+@layout PandA.UI.Shell.PandaLayout
+@using PandA.UI.DemoHost.Sim
+@inject MessageConsoleService Console
+@inject ISnackbar Snackbar
+
+<PageTitle>PandA — Message Console</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true" data-testid="page-heading">Message Console</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">
+    Run a barcode through the real Core services with no 3D simulator — inbound 281 induct scan → send to
+    printer → inbound 286 verify scan — and read the wire frames and captured logs to see the logic under the hood.
+</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="5">
+        <MudPaper Elevation="2" Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6" Class="mb-3">Select</MudText>
+            <MudSelect T="string" Value="_lineId" ValueChanged="ChangeLine" Label="PandA line" Dense="true"
+                       Variant="MudBlazor.Variant.Outlined" Class="mb-3" data-testid="console-line-select">
+                @foreach (var line in _lines)
+                {
+                    <MudSelectItem T="string" Value="@line.Id">@line.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" Value="_cartonId" ValueChanged="ChangeCarton" Label="Barcode (carton)" Dense="true"
+                       Variant="MudBlazor.Variant.Outlined" data-testid="console-carton-select">
+                @foreach (var c in _cartons)
+                {
+                    <MudSelectItem T="string" Value="@c.CartonId">@c.CartonId — @c.BlindLabel (@c.Status)</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudButton Class="mt-4" FullWidth="true" Variant="MudBlazor.Variant.Filled" Color="Color.Primary"
+                       StartIcon="@MudBlazor.Icons.Material.Filled.PlayArrow" OnClick="RunAsync"
+                       Disabled="_running || _selected is null" data-testid="console-run">
+                @(_running ? "Running…" : "Run end-to-end")
+            </MudButton>
+        </MudPaper>
+
+        @if (_selected is not null)
+        {
+            <MudPaper Elevation="1" Class="pa-4" data-testid="console-data">
+                <MudText Typo="Typo.h6" Class="mb-2">Barcode data</MudText>
+                <MudSimpleTable Dense="true" Bordered="false" Striped="true">
+                    <tbody>
+                        <tr><td><strong>Blind label</strong></td><td>@_selected.BlindLabel</td></tr>
+                        <tr><td><strong>Status</strong></td><td>@_selected.Status</td></tr>
+                        <tr><td><strong>Profile / map</strong></td><td>@_selected.ProfileName</td></tr>
+                        <tr><td><strong>Wave</strong></td><td>@_selected.WaveId</td></tr>
+                        <tr><td><strong>Destination</strong></td><td>@_selected.PassFailDestination</td></tr>
+                        <tr><td><strong>UPC / GTIN / EAN</strong></td><td>@_selected.Upc · @_selected.Gtin · @_selected.Ean</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+
+                <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1">Advised labels</MudText>
+                <MudSimpleTable Dense="true" Bordered="true">
+                    <thead>
+                        <tr><th>#</th><th>Type</th><th>Barcode</th><th>LPN</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var l in _selected.Labels)
+                        {
+                            <tr><td>@l.Slot</td><td>@l.LabelType</td><td>@l.LabelBarcode</td><td>@l.Lpn</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        }
+    </MudItem>
+
+    <MudItem xs="12" md="7">
+        <MudPaper Elevation="2" Class="pa-4 mb-4" data-testid="console-transcript">
+            <div class="d-flex align-center mb-3">
+                <MudText Typo="Typo.h6" Class="flex-grow-1">Run transcript</MudText>
+                @if (_result is not null)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@(_result.Success ? Color.Success : Color.Error)">
+                        @_result.FinalStatus
+                    </MudChip>
+                }
+            </div>
+
+            @if (_result is null)
+            {
+                <MudText Typo="Typo.body2" Class="console-muted">
+                    Pick a line and a barcode, then run to see the message flow.
+                </MudText>
+            }
+            else
+            {
+                <div class="console-log" data-testid="console-transcript-body">
+                    @foreach (var e in _result.Entries)
+                    {
+                        <div class="console-line console-@(e.Kind.ToString().ToLowerInvariant())">@e.Text</div>
+                    }
+                </div>
+            }
+        </MudPaper>
+
+        @if (_result is not null)
+        {
+            <MudExpansionPanels>
+                <MudExpansionPanel Text="@($"Captured logs ({_result.Logs.Count})")" Expanded="true" data-testid="console-logs">
+                    @if (_result.Logs.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="console-muted">No log lines were emitted.</MudText>
+                    }
+                    else
+                    {
+                        <div class="console-log">
+                            @foreach (var log in _result.Logs)
+                            {
+                                <div class="console-line console-log-@(log.Level.ToLowerInvariant())">
+                                    <span class="console-level">@log.Level</span>
+                                    <span class="console-category">@log.Category</span>
+                                    <span>@log.Message</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private IReadOnlyList<(string Id, string Name)> _lines = [];
+    private IReadOnlyList<ConsoleCartonSummary> _cartons = [];
+    private string _lineId = "";
+    private string _cartonId = "";
+    private ConsoleCartonData? _selected;
+    private MessageRunResult? _result;
+    private bool _running;
+
+    protected override void OnInitialized()
+    {
+        _lines = Console.Lines();
+        _lineId = Console.DefaultLineId;
+        LoadCartons();
+    }
+
+    private void LoadCartons()
+    {
+        _cartons = Console.CartonsForLine(_lineId);
+        _cartonId = _cartons.Count > 0 ? _cartons[0].CartonId : "";
+        _selected = _cartonId.Length > 0 ? Console.Describe(_cartonId) : null;
+        _result = null;
+    }
+
+    private void ChangeLine(string lineId)
+    {
+        _lineId = lineId;
+        LoadCartons();
+    }
+
+    private void ChangeCarton(string cartonId)
+    {
+        _cartonId = cartonId;
+        _selected = Console.Describe(cartonId);
+        _result = null;
+    }
+
+    private async Task RunAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _running = true;
+        try
+        {
+            _result = await Console.RunAsync(_lineId, _cartonId);
+            if (!_result.Success)
+            {
+                Snackbar.Add($"Run ended at {_result.FinalStatus}", MudBlazor.Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Run failed: {ex.Message}", MudBlazor.Severity.Error);
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+}

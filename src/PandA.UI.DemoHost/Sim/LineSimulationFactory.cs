@@ -128,7 +128,7 @@ internal static class LineSimulationFactory
         return (ParseTrackingDevice(fp.PrintTrackingDevice), ParseTrackingDevice(fp.ApplyTrackingDevice), Math.Max(0, fp.PrintPoint));
     }
 
-    private static FirePointProfile? BuildProfile(DemoDataStore store, LineDto line)
+    internal static FirePointProfile? BuildProfile(DemoDataStore store, LineDto line)
     {
         if (line.ActiveMapId is null || !store.Maps.TryGetValue(line.ActiveMapId, out var map))
         {
@@ -147,13 +147,13 @@ internal static class LineSimulationFactory
     private static FirePoint ToFirePoint(FirePointDto fp) =>
         new(ParseTrackingDevice(fp.PrintTrackingDevice), fp.PrintPoint, ParseTrackingDevice(fp.ApplyTrackingDevice), ApplyPoint.Parse(fp.ApplyPointNotation));
 
-    private static int ParseTrackingDevice(string trackingDevice)
+    internal static int ParseTrackingDevice(string trackingDevice)
     {
         var digits = new string(trackingDevice.Where(char.IsDigit).ToArray());
         return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0 ? parsed : 1;
     }
 
-    private static PrinterConfig ToPrinterConfig(PrinterDto printer) =>
+    internal static PrinterConfig ToPrinterConfig(PrinterDto printer) =>
         new(
             printer.PrinterId!,
             printer.Ip,
