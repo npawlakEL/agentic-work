@@ -82,9 +82,19 @@ public sealed class InductService : IInductService
         var context = await _lines.GetLineAsync(lineId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"No line configuration for line '{lineId}'.");
 
+        // PROFSW / GAP F19: resolve the carton's fire-point profile by its host-supplied ProfileName.
+        // A ProfileName that is set but not among the line's active profiles => NoProfile, print nothing.
+        var (profileOk, activeProfile) = ResolveProfile(context.Config, order);
+        if (!profileOk)
+        {
+            _logger.LogWarning(
+                "Transport order {TuId} on line {LineId} requests unknown profile {ProfileName}; nothing printed.",
+                order.TuId, lineId, order.ProfileName);
+            return InductResult.NoProfile();
+        }
+
         // Orientation is a provisioned dimension; Phase 1 uses the default (Side). See architecture-log 005.
         var selection = _selection.Select(context.Config, context.States, order.Labels);
-        // PROFSW: profile select here.
 
         var now = _clock.UtcNow;
         var printersById = context.Config.Printers.ToDictionary(p => p.PrinterId, StringComparer.OrdinalIgnoreCase);
@@ -99,9 +109,9 @@ public sealed class InductService : IInductService
             var printer = printersById[assignment.PrinterId];
             var label = assignment.Label;
 
-            // Resolve the print/apply firing points from the line's active fire-point profile (if any).
+            // Resolve the print/apply firing points from the carton's resolved fire-point profile (if any).
             FirePoint? firePoint = null;
-            if (context.Config.ActiveProfile is { } profile)
+            if (activeProfile is { } profile)
             {
                 var resolution = _firePoints.Resolve(profile, printer.PrinterId, label.LabelType);
                 firePoint = resolution.FirePoint;
@@ -147,5 +157,22 @@ public sealed class InductService : IInductService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// PROFSW profile selection: a carton with a host-supplied <see cref="TransportOrder.ProfileName"/>
+    /// must resolve to an active profile in the line's registry; otherwise the induct is <c>NoProfile</c>.
+    /// A carton without a ProfileName falls back to the line's default profile.
+    /// </summary>
+    private static (bool Ok, FirePointProfile? Profile) ResolveProfile(LineConfig config, TransportOrder order)
+    {
+        if (order.ProfileName is { } name)
+        {
+            return config.ProfileRegistry.TryGetValue(name, out var named)
+                ? (true, named)
+                : (false, null);
+        }
+
+        return (true, config.ActiveProfile);
     }
 }

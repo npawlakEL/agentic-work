@@ -22,6 +22,12 @@ public enum InductStatus
     /// Nothing was printed.
     /// </summary>
     NoReprint = 5,
+
+    /// <summary>
+    /// The carton's host-supplied <c>ProfileName</c> was set but is not among the line's active profiles
+    /// (GAP F19 / PROFSW). Nothing was printed.
+    /// </summary>
+    NoProfile = 6,
 }
 
 /// <summary>Outcome of an induct scan: overall status plus the per-label selection assignments.</summary>
@@ -42,6 +48,8 @@ public sealed class InductResult
     public static InductResult NoData() => new(InductStatus.NoData, []);
 
     public static InductResult NoReprint() => new(InductStatus.NoReprint, []);
+
+    public static InductResult NoProfile() => new(InductStatus.NoProfile, []);
 
     public static InductResult FromAssignments(IReadOnlyList<LabelAssignment> assignments)
     {
