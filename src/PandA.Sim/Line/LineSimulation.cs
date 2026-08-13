@@ -250,14 +250,7 @@ public sealed class LineSimulation
                 _lastEvent = $"{carton.BlindLabel} print decision: {result.Status}";
             }
 
-            return;
-        }
-
-        if (eyeIndex > 0 && eyeIndex < eyes.Count - 1 && carton.State == SimCartonState.Printed)
-        {
-            carton.State = SimCartonState.Applied;
-            carton.MarkApplied();
-            _lastEvent = $"{carton.BlindLabel} TAMP apply fired at {eye.Id}";
+            UpdateLabelStates(carton, eye);
             return;
         }
 
@@ -273,7 +266,46 @@ public sealed class LineSimulation
                 VerifyFailThreshold).ConfigureAwait(false);
             carton.State = result.Status == VerifyStationStatus.Verified ? SimCartonState.Verified : SimCartonState.Rejected;
             _lastEvent = $"{carton.BlindLabel} verify decision: {result.Status}";
+            return;
         }
+
+        // Intermediate eye: print the label onto the tamp head (its print eye) and/or fire the TAMP for
+        // labels whose apply eye is this one. Each label transitions on its own printer's eyes.
+        var appliedHere = UpdateLabelStates(carton, eye);
+        if (appliedHere)
+        {
+            carton.State = SimCartonState.Applied;
+            _lastEvent = $"{carton.BlindLabel} TAMP apply fired at {eye.Id}";
+        }
+    }
+
+    /// <summary>
+    /// Advances each label's own print/apply state as the carton crosses <paramref name="eye"/>: a label
+    /// rides onto its printer's tamp head at its print eye, then is deposited on the carton at its apply
+    /// eye. Returns true if any label was applied at this eye.
+    /// </summary>
+    private bool UpdateLabelStates(SimCarton carton, TrackingEye eye)
+    {
+        var appliedHere = false;
+        carton.MutateLabels(label =>
+        {
+            var (printEye, applyEye) = PrinterEyeIds(label.PrinterId);
+            var next = label;
+            if (!next.Applied && !next.OnTamp && string.Equals(printEye, eye.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                next = next with { OnTamp = true };
+            }
+
+            if (!next.Applied && string.Equals(applyEye, eye.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                next = next with { Applied = true, OnTamp = false };
+                appliedHere = true;
+            }
+
+            return next;
+        });
+
+        return appliedHere;
     }
 
     private void AttachNewPrintJobs(SimCarton carton)
@@ -309,59 +341,70 @@ public sealed class LineSimulation
         ?? "Side";
 
     /// <summary>
-    /// Lays the configured printers out along the belt, centred on the printer-eye zone. Printers are
-    /// grouped so same-orientation stations (all Side, all Top, ...) sit next to each other, and every
-    /// printer gets a distinct X so none overlap in the 3D view.
+    /// Seats each configured printer at its apply tracking-eye. Printers that share an apply device
+    /// cluster around that eye but are spread out side-by-side (never stacked), grouped by orientation.
     /// </summary>
     private IReadOnlyList<SimPrinterSnapshot> PrinterStations()
     {
-        var eyes = BuildEyes();
-        var zoneEyes = eyes.Skip(1).Take(Math.Max(0, eyes.Count - 2)).ToList();
-        var centerX = zoneEyes.Count > 0
-            ? zoneEyes.Average(e => e.PositionInches)
-            : eyes[Math.Min(1, eyes.Count - 1)].PositionInches;
-
+        var topo = BuildTopology();
         var stations = _printers.Count > 0
             ? _printers
             : Enumerable.Range(0, Math.Max(1, _settings.PrinterCount))
-                .Select(i => new SimPrinterStation($"printer-{i + 1}", "Side"))
+                .Select(i => new SimPrinterStation($"printer-{i + 1}", "Side", ApplyTrackingDevice: 2))
                 .ToList();
 
-        return LayoutPrinters(stations, centerX);
+        return SeatPrinters(stations, topo.DeviceX);
     }
 
     /// <summary>
-    /// Pure printer-bank layout: orders <paramref name="stations"/> so same-orientation printers are
-    /// contiguous, then spreads them along X (centred on <paramref name="centerX"/>) with a fixed
-    /// centre-to-centre <paramref name="spacingInches"/> so every station gets a distinct position.
+    /// Pure printer-seating: place each station at its apply-device X. When several printers share an
+    /// apply device they are fanned out around that X on a fixed <paramref name="spacingInches"/> pitch,
+    /// ordered so same-orientation printers stay contiguous — so a shared apply eye still renders as
+    /// distinct, physically adjacent printers rather than one on top of another.
     /// </summary>
-    public static IReadOnlyList<SimPrinterSnapshot> LayoutPrinters(
+    public static IReadOnlyList<SimPrinterSnapshot> SeatPrinters(
         IReadOnlyList<SimPrinterStation> stations,
-        double centerX,
-        double spacingInches = 30.0)
+        IReadOnlyDictionary<int, double> applyDeviceX,
+        double spacingInches = 26.0)
     {
         if (stations.Count == 0)
         {
             return [];
         }
 
-        var ordered = stations
+        var fallbackX = applyDeviceX.Count > 0 ? applyDeviceX.Values.Average() : 0;
+        var result = new List<SimPrinterSnapshot>(stations.Count);
+
+        var clusters = stations
             .Select((p, i) => (Printer: p, Index: i))
-            .OrderBy(t => string.Equals(t.Printer.Orientation, "Top", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
-            .ThenBy(t => t.Index)
-            .Select(t => t.Printer)
-            .ToList();
+            .GroupBy(t => Math.Max(1, t.Printer.ApplyTrackingDevice))
+            .OrderBy(g => applyDeviceX.TryGetValue(g.Key, out var x) ? x : fallbackX);
 
-        var span = spacingInches * (ordered.Count - 1);
-        var startX = centerX - span / 2.0;
+        foreach (var cluster in clusters)
+        {
+            var baseX = applyDeviceX.TryGetValue(cluster.Key, out var x) ? x : fallbackX;
+            var members = cluster
+                .OrderBy(t => IsTop(t.Printer) ? 1 : 0)
+                .ThenBy(t => t.Index)
+                .Select(t => t.Printer)
+                .ToList();
 
-        return ordered
-            .Select((p, i) => new SimPrinterSnapshot(
-                p.PrinterId,
-                startX + spacingInches * i,
-                string.Equals(p.Orientation, "Top", StringComparison.OrdinalIgnoreCase) ? "Top" : "Side"))
-            .ToList();
+            var span = spacingInches * (members.Count - 1);
+            var startX = baseX - span / 2.0;
+            for (var i = 0; i < members.Count; i++)
+            {
+                result.Add(new SimPrinterSnapshot(
+                    members[i].PrinterId,
+                    startX + spacingInches * i,
+                    IsTop(members[i]) ? "Top" : "Side"));
+            }
+        }
+
+        return result.OrderBy(r => r.PositionInches).ToList();
     }
+
+    private static bool IsTop(SimPrinterStation station) =>
+        string.Equals(station.Orientation, "Top", StringComparison.OrdinalIgnoreCase);
 
     private double ResolvePrintPosition(FirePoint? firePoint)
     {
@@ -371,7 +414,8 @@ public sealed class LineSimulation
         }
 
         var anchor = EyePosition(firePoint.PrintTrackingDevice);
-        return anchor + Math.Max(0, firePoint.PrintFirePoint) + _settings.PrintFirePointOffsetInches;
+        var pulseInches = Math.Max(0, firePoint.PrintFirePoint) * _settings.EncoderResolutionInchesPerPulse;
+        return anchor + pulseInches + _settings.PrintFirePointOffsetInches;
     }
 
     private (double PositionInches, double CartonOffsetInches) ResolveApplyPosition(SimCarton carton, FirePoint? firePoint)
@@ -405,9 +449,25 @@ public sealed class LineSimulation
 
     private double EyePosition(int trackingDevice)
     {
-        var eyes = BuildEyes();
-        var index = Math.Clamp(trackingDevice - 1, 0, eyes.Count - 1);
-        return eyes[index].PositionInches;
+        var topo = BuildTopology();
+        if (topo.DeviceX.TryGetValue(Math.Max(1, trackingDevice), out var x))
+        {
+            return x;
+        }
+
+        return topo.Eyes.Count > 0 ? topo.Eyes[0].PositionInches : 0;
+    }
+
+    /// <summary>The (print-eye, apply-eye) ids a printer's labels are anchored to in the current topology.</summary>
+    private (string PrintEyeId, string ApplyEyeId) PrinterEyeIds(string printerId)
+    {
+        var topo = BuildTopology();
+        var station = _printers.FirstOrDefault(p => string.Equals(p.PrinterId, printerId, StringComparison.OrdinalIgnoreCase));
+        var printDevice = Math.Max(1, station?.PrintTrackingDevice ?? 1);
+        var applyDevice = Math.Max(1, station?.ApplyTrackingDevice ?? 2);
+        var printEye = topo.DeviceEyeId.GetValueOrDefault(printDevice, "Inbound Scanner");
+        var applyEye = topo.DeviceEyeId.GetValueOrDefault(applyDevice, printEye);
+        return (printEye, applyEye);
     }
 
     private LineSimulationSnapshot BuildSnapshot()
@@ -434,14 +494,53 @@ public sealed class LineSimulation
         return new LineSimulationSnapshot(Running, BeltSpeedInchesPerSecond, ConveyorLengthInches, LineId, LineName, _settings, eyes, PrinterStations(), cartons, _lastEvent);
     }
 
-    private List<TrackingEye> BuildEyes()
+    /// <summary>
+    /// The line's tracking-eye topology, derived from the configured printers' fire-point devices:
+    /// the inbound scanner (device 1), one eye per distinct print/apply tracking device the printers
+    /// reference, then a verify scanner at the tail. Also yields device -> eye-id and device -> X maps
+    /// so print/apply events and printer bodies can be anchored back to their eye.
+    /// </summary>
+    private Topology BuildTopology()
     {
-        var count = _settings.TrackingEyeCount;
-        var first = Math.Min(48, _settings.ConveyorLengthInches * 0.2);
-        var last = Math.Max(first + 48, _settings.ConveyorLengthInches - 48);
-        var step = count == 1 ? 0 : (last - first) / (count - 1);
-        return Enumerable.Range(0, count)
-            .Select(i => new TrackingEye(i == 0 ? "Inbound Scanner" : i == count - 1 ? "Verify Scanner" : $"Printer Eye {i}", first + step * i))
-            .ToList();
+        var applyDevices = _printers.Select(p => Math.Max(1, p.ApplyTrackingDevice)).ToHashSet();
+
+        var devices = new SortedSet<int> { 1 };
+        foreach (var p in _printers)
+        {
+            devices.Add(Math.Max(1, p.PrintTrackingDevice));
+            devices.Add(Math.Max(1, p.ApplyTrackingDevice));
+        }
+
+        var ordered = devices.ToList();
+        var first = Math.Min(48, ConveyorLengthInches * 0.18);
+        var verifyX = Math.Max(first + 60, ConveyorLengthInches - 36);
+        var zoneEnd = Math.Max(first + 24, verifyX - 40);
+        var step = ordered.Count <= 1 ? 0 : (zoneEnd - first) / (ordered.Count - 1);
+
+        var eyes = new List<TrackingEye>(ordered.Count + 1);
+        var deviceX = new Dictionary<int, double>();
+        var deviceEyeId = new Dictionary<int, string>();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var device = ordered[i];
+            var x = first + step * i;
+            var id = device == 1
+                ? "Inbound Scanner"
+                : applyDevices.Contains(device) ? $"Apply Eye {device}" : $"Print Eye {device}";
+            deviceX[device] = x;
+            deviceEyeId[device] = id;
+            eyes.Add(new TrackingEye(id, x));
+        }
+
+        eyes.Add(new TrackingEye("Verify Scanner", verifyX));
+        return new Topology(eyes, deviceX, deviceEyeId, applyDevices);
     }
+
+    private sealed record Topology(
+        List<TrackingEye> Eyes,
+        Dictionary<int, double> DeviceX,
+        Dictionary<int, string> DeviceEyeId,
+        HashSet<int> ApplyDevices);
+
+    private List<TrackingEye> BuildEyes() => BuildTopology().Eyes;
 }

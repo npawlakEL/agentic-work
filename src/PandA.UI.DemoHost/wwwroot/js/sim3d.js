@@ -17,7 +17,7 @@ let fallbackCanvas;
 let fallbackContext;
 
 const REST_TAMP_Y = 42;   // top arm parked high above the belt
-const REST_SIDE_Z = 30;   // side arm parked out toward its printer body
+const REST_SIDE_Z = 24;   // side arm parked belt-side of its body so the pad stays visible
 const ARM_HALF = 10;      // half-length of the tamp arm mesh
 const BELT_TOP_Y = 3.2;   // top surface of the belt (carton sits here)
 const LABEL_W = 4;        // rendered label width along the travel axis (inches)
@@ -203,7 +203,24 @@ function buildStation(printer) {
     }
 
     group.add(tamp);
+
+    // A "loaded" label riding the tamp pad: shown only between the print fire point and apply, so the
+    // operator watches the label print onto the head, travel, then get stamped onto the carton.
+    const loaded = new three.Mesh(
+        new three.PlaneGeometry(LABEL_W, LABEL_H),
+        new three.MeshBasicMaterial({ color: 0xf87171, side: three.DoubleSide })
+    );
+    if (top) {
+        loaded.rotation.set(-Math.PI / 2, 0, 0);
+        loaded.position.set(0, -ARM_HALF - 0.3, 0);
+    } else {
+        loaded.position.set(0, 0, -ARM_HALF - 0.3);
+    }
+    loaded.visible = false;
+    tamp.add(loaded);
+
     group.userData.tamp = tamp;
+    group.userData.loaded = loaded;
     group.userData.top = top;
     group.userData.printerId = printer.printerId;
     return group;
@@ -231,7 +248,8 @@ function syncPrinters(printerList, cartonList) {
     }
 }
 
-// Extend a station's tamp onto the carton when one is beneath it and being applied; retract otherwise.
+// Ride the printed label on this printer's tamp, then reach onto the carton to stamp it — driven by
+// the label's own onTamp/applied state, so only the printer that printed a given carton acts on it.
 function animateStation(group, cartonList) {
     const tamp = group.userData.tamp;
     if (!tamp) {
@@ -240,18 +258,30 @@ function animateStation(group, cartonList) {
 
     const top = group.userData.top;
     const printerId = group.userData.printerId;
-    let under = null;
+    const loaded = group.userData.loaded;
+
+    let serving = null;
     for (const carton of cartonList ?? []) {
-        // Only the printer that actually printed a label for this carton reaches out to apply it.
-        const fired = (carton.labels ?? []).some(l => l.printerId === printerId);
-        if (!fired) {
+        const label = (carton.labels ?? []).find(l => l.printerId === printerId);
+        if (!label) {
             continue;
         }
-        const centerX = toSceneX(carton.positionInches + carton.lengthInches / 2);
-        const applying = carton.state === "Applied" || carton.state === "Printed";
-        if (applying && Math.abs(centerX - group.position.x) < carton.lengthInches / 2 + 3) {
-            under = carton;
-            break;
+        serving = { carton, label };
+        break;
+    }
+
+    // The printed label sits on the pad from its print fire point until it's applied.
+    if (loaded) {
+        loaded.visible = !!serving && !!serving.label.onTamp && !serving.label.applied;
+    }
+
+    let under = null;
+    if (serving) {
+        const centerX = toSceneX(serving.carton.positionInches + serving.carton.lengthInches / 2);
+        const near = Math.abs(centerX - group.position.x) < serving.carton.lengthInches / 2 + 3;
+        const placing = serving.label.onTamp || serving.label.applied;
+        if (near && placing) {
+            under = serving.carton;
         }
     }
 
@@ -302,44 +332,6 @@ function resizeBelt(settings) {
         beltMesh.scale.x = length / 260;
         beltMesh.position.x = toSceneX(length / 2);
     }
-}
-
-// Park the printer at the first "Printer Eye" (the apply point the tamp guards).
-function positionPrinter(eyeList, cartonList) {
-    const printerEye = eyeList.find(e => /printer/i.test(e.id)) ?? eyeList[Math.min(1, eyeList.length - 1)];
-    // If a carton is carrying an apply point, prefer its real apply X so the tamp lines up
-    // with the actual fire point being verified.
-    const applyX = cartonList
-        .flatMap(c => c.labels ?? [])
-        .map(l => l.applyPoint?.x)
-        .find(x => typeof x === "number");
-    const inches = applyX ?? printerEye?.positionInches ?? 100;
-    applicatorSceneX = toSceneX(inches);
-    if (printerAssembly) {
-        printerAssembly.position.x = applicatorSceneX;
-    }
-}
-
-// Extend the tamp arm down when a carton is beneath the applicator, retract otherwise.
-function animateTamp(cartonList) {
-    if (!tampArm) {
-        return;
-    }
-
-    let targetY = REST_TAMP_Y;
-    for (const carton of cartonList) {
-        const centerX = toSceneX(carton.positionInches + carton.lengthInches / 2);
-        const underHead = Math.abs(centerX - applicatorSceneX) < carton.lengthInches / 2 + 3;
-        const applying = carton.state === "Applied" || carton.state === "Printed";
-        if (underHead && applying) {
-            const boxTop = BELT_TOP_Y + carton.heightInches;
-            targetY = boxTop + ARM_HALF + 0.6; // pad tip just touches the carton top
-            break;
-        }
-    }
-
-    // Smoothly approach the target so the stamp reads as a deliberate motion.
-    tampArm.position.y += (targetY - tampArm.position.y) * 0.25;
 }
 
 function syncEyes(nextEyes) {

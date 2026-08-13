@@ -54,12 +54,11 @@ public sealed class SimCarton
         _labels.AddRange(labels);
     }
 
-    public void MarkApplied()
+    public void MutateLabels(Func<LabelPlacementSnapshot, LabelPlacementSnapshot> transform)
     {
         for (var i = 0; i < _labels.Count; i++)
         {
-            var label = _labels[i];
-            _labels[i] = label with { Applied = true };
+            _labels[i] = transform(_labels[i]);
         }
     }
 }

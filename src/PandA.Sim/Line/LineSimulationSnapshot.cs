@@ -2,8 +2,17 @@ namespace PandA.Sim.Line;
 
 public sealed record SimPoint(double X, double Y, double Z);
 
-/// <summary>A configured printer station on the line (input): its id and apply surface.</summary>
-public sealed record SimPrinterStation(string PrinterId, string Orientation);
+/// <summary>
+/// A configured printer station on the line (input): its id, apply surface, and the tracking-device
+/// ids its fire point is anchored to. The apply device seats the printer on the belt; the print device
+/// drives when the printed label appears on the tamp head.
+/// </summary>
+public sealed record SimPrinterStation(
+    string PrinterId,
+    string Orientation,
+    int PrintTrackingDevice = 1,
+    int ApplyTrackingDevice = 2,
+    int PrintFirePointPulses = 0);
 
 /// <summary>A printer station positioned on the belt for rendering (output).</summary>
 public sealed record SimPrinterSnapshot(string PrinterId, double PositionInches, string Orientation);
@@ -17,7 +26,8 @@ public sealed record LabelPlacementSnapshot(
     double CartonOffsetInches,
     string ApplyPointNotation,
     string Orientation,
-    bool Applied);
+    bool Applied,
+    bool OnTamp = false);
 
 public sealed record SimCartonSnapshot(
     string CartonId,

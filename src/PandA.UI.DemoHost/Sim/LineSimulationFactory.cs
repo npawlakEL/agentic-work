@@ -69,6 +69,11 @@ internal static class LineSimulationFactory
             clock,
             NullLogger<VerifyStationService>.Instance);
 
+        var stationDevices = printers.ToDictionary(
+            p => p.PrinterId!,
+            p => ResolveStationDevices(store, line, p),
+            StringComparer.OrdinalIgnoreCase);
+
         return new LineSimulation(
             line.LineId!,
             line.Name,
@@ -86,9 +91,33 @@ internal static class LineSimulationFactory
                 DefaultApplyDistanceInches = 1,
                 PrinterCount = Math.Max(1, printers.Count),
             },
-            printers.Select(p => new SimPrinterStation(
-                p.PrinterId!,
-                string.Equals(p.Orientation, "Top", StringComparison.OrdinalIgnoreCase) ? "Top" : "Side")).ToList());
+            printers.Select(p =>
+            {
+                var (printDevice, applyDevice, printPulses) = stationDevices[p.PrinterId!];
+                return new SimPrinterStation(
+                    p.PrinterId!,
+                    string.Equals(p.Orientation, "Top", StringComparison.OrdinalIgnoreCase) ? "Top" : "Side",
+                    printDevice,
+                    applyDevice,
+                    printPulses);
+            }).ToList());
+    }
+
+    /// <summary>Reads the printer's fire point from the line's active map to recover its print/apply tracking devices.</summary>
+    private static (int PrintDevice, int ApplyDevice, int PrintPulses) ResolveStationDevices(DemoDataStore store, LineDto line, PrinterDto printer)
+    {
+        var fp = line.ActiveMapId is not null && store.Maps.TryGetValue(line.ActiveMapId, out var map)
+            ? map.FirePointIds
+                .Select(id => store.FirePoints.TryGetValue(id, out var f) ? f : null)
+                .FirstOrDefault(f => f is not null && string.Equals(f.PrinterId, printer.PrinterId, StringComparison.OrdinalIgnoreCase))
+            : null;
+
+        if (fp is null)
+        {
+            return (1, 2, 0);
+        }
+
+        return (ParseTrackingDevice(fp.PrintTrackingDevice), ParseTrackingDevice(fp.ApplyTrackingDevice), Math.Max(0, fp.PrintPoint));
     }
 
     private static FirePointProfile? BuildProfile(DemoDataStore store, LineDto line)

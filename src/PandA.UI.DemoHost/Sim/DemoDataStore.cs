@@ -112,8 +112,8 @@ public sealed class DemoDataStore
                 PrinterId: printerId,
                 LabelType: labelType,
                 PrintTrackingDevice: "TD1",
-                PrintPoint: 5,
-                ApplyTrackingDevice: "TD2",
+                PrintPoint: orientation == "Top" ? 60 : 40,
+                ApplyTrackingDevice: orientation == "Top" ? "TD3" : "TD2",
                 ApplyPointNotation: orientation == "Top" ? "0M" : "1T",
                 DynamicApply: orientation == "Top");
 
