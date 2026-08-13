@@ -306,5 +306,51 @@ public sealed class InductServiceTests
         var stored = await _store.FindActiveByTuIdAsync("BLIND1");
         Assert.Equal(CartonStatus.PrintReady, stored!.StatusAtInduct);
     }
+
+    [Fact]
+    public async Task Induct_WithRunRepository_LogsRunWithMeasurementsAndAssignedPrinter()
+    {
+        var runs = new InMemoryCartonRunRepository();
+        var induct = new InductService(
+            _store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider(),
+            runs: runs);
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+
+        await induct.InductAsync(new InductScan("L1", "BLIND1",
+            FrontGap: 120, Length: 480, Width: 300, Height: 220, Weight: 1500,
+            SorterNumber: 2, SorterMode: 1, DeviceId: 7, SeqNum: 4242, ScannedLabels: ["BLIND1"]));
+
+        var run = Assert.Single(runs.Records);
+        Assert.Equal("BLIND1", run.TuId);
+        Assert.Equal(480, run.Length);
+        Assert.Equal(220, run.Height);
+        Assert.Equal(120, run.FrontGap);
+        Assert.Equal(7, run.DeviceId);
+        Assert.Equal(4242, run.SeqNum);
+        Assert.Equal(CartonStatus.PrintReady, run.StatusAtInduct);
+        Assert.Equal("Ship1", run.AssignedPrinter);
+    }
+
+    [Fact]
+    public async Task Induct_TwiceForSameCarton_RunsShareStablePandaDataId()
+    {
+        var runs = new InMemoryCartonRunRepository();
+        var induct = new InductService(
+            _store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider(),
+            runs: runs);
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+        await induct.InductAsync("L1", "BLIND1");
+
+        var order = await _store.FindActiveByTuIdAsync("BLIND1");
+        order!.AuthorizeReprint("relabel");
+        await _store.UpsertAsync(order);
+        await induct.InductAsync("L1", "BLIND1");
+
+        var pandaDataId = runs.Records[0].PandaDataId;
+        var forOrder = await runs.GetRunsForOrderAsync(pandaDataId);
+        Assert.Equal(2, forOrder.Count);
+    }
 }
 

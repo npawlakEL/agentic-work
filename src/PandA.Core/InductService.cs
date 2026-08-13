@@ -40,6 +40,7 @@ public sealed class InductService : IInductService
     private readonly IClock _clock;
     private readonly ISettingsProvider _settings;
     private readonly IMinGapProvider? _minGap;
+    private readonly ICartonRunRepository? _runs;
     private readonly ILogger<InductService> _logger;
     private readonly FirePointResolver _firePoints = new();
 
@@ -51,6 +52,7 @@ public sealed class InductService : IInductService
         IClock clock,
         ISettingsProvider settings,
         IMinGapProvider? minGap = null,
+        ICartonRunRepository? runs = null,
         ILogger<InductService>? logger = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -60,6 +62,7 @@ public sealed class InductService : IInductService
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _minGap = minGap;
+        _runs = runs;
         _logger = logger ?? NullLogger<InductService>.Instance;
     }
 
@@ -103,6 +106,33 @@ public sealed class InductService : IInductService
                 blindLabel, lineId, inductStatus, scan.FrontGap);
         }
 
+        // F-LOG1: record this carton pass through the induct scanner for run-history auditing. The assigned
+        // printer is filled in later (UpdatePrinterAsync) once a printer is matched in the print loop.
+        long? runId = null;
+        if (_runs is { } runs)
+        {
+            var record = CartonRunRecord.Create(
+                tuId: order.TuId,
+                pandaDataId: StableOrderId(order.TuId),
+                lineId: lineId,
+                sorterNumber: scan.SorterNumber,
+                sorterMode: scan.SorterMode,
+                deviceId: scan.DeviceId,
+                seqNum: scan.SeqNum,
+                labelStatus: 0,
+                scannedLabels: [.. scan.ScannedLabels],
+                length: scan.Length,
+                width: scan.Width,
+                height: scan.Height,
+                weight: scan.Weight,
+                frontGap: scan.FrontGap,
+                statusAtInduct: inductStatus,
+                assignedPrinter: null,
+                destinationLane: null,
+                createdAt: _clock.UtcNow);
+            runId = await runs.CreateRunAsync(record, cancellationToken).ConfigureAwait(false);
+        }
+
         if (order.Labels.Labels.Count == 0)
         {
             _logger.LogWarning("Transport order {TuId} on line {LineId} has no label data.", order.TuId, lineId);
@@ -138,6 +168,7 @@ public sealed class InductService : IInductService
 
         var now = _clock.UtcNow;
         var printersById = context.Config.Printers.ToDictionary(p => p.PrinterId, StringComparer.OrdinalIgnoreCase);
+        var runPrinterRecorded = false;
 
         foreach (var assignment in selection.Assignments)
         {
@@ -148,6 +179,13 @@ public sealed class InductService : IInductService
 
             var printer = printersById[assignment.PrinterId];
             var label = assignment.Label;
+
+            // F-LOG1: attach the first matched printer to the run-history record for this carton.
+            if (runId is { } id && !runPrinterRecorded && _runs is { } runsRepo)
+            {
+                await runsRepo.UpdatePrinterAsync(id, printer.PrinterId, cancellationToken).ConfigureAwait(false);
+                runPrinterRecorded = true;
+            }
 
             // Resolve the print/apply firing points from the carton's resolved fire-point profile (if any).
             FirePoint? firePoint = null;
@@ -217,5 +255,23 @@ public sealed class InductService : IInductService
         }
 
         return (true, config.ActiveProfile);
+    }
+
+    /// <summary>
+    /// F-LOG1 — our TransportOrder is keyed by the string <see cref="TransportOrder.TuId"/>; the source's
+    /// run-history groups by the numeric PandaData RecID. Derive a stable non-negative long from the TuId so
+    /// repeat runs of the same carton group together in <c>GetRunsForOrderAsync</c>.
+    /// </summary>
+    private static long StableOrderId(string tuId)
+    {
+        // FNV-1a 64-bit; masked to non-negative.
+        ulong hash = 1469598103934665603UL;
+        foreach (var c in tuId)
+        {
+            hash ^= c;
+            hash *= 1099511628211UL;
+        }
+
+        return (long)(hash & 0x7FFFFFFFFFFFFFFFUL);
     }
 }
