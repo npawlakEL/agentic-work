@@ -87,6 +87,13 @@ public sealed class TransportOrder
     /// <summary>Reason recorded when an operator authorized a reprint (audit).</summary>
     public string? ReprintAuthorizationReason { get; private set; }
 
+    /// <summary>
+    /// True when the carton was system-re-armed by a pre-verify PLC tracking recovery (F15/decision-009).
+    /// Permits exactly one further print run while the carton stays in <see cref="TransportOrderStatus.Advised"/>
+    /// (distinct from operator <see cref="AuthorizeReprint"/>). Cleared when the next run completes.
+    /// </summary>
+    public bool TrackingRearmed { get; private set; }
+
     /// <summary>Per-label-type print outcome for the current run.</summary>
     public IReadOnlyCollection<LabelPrintState> PrintStates => _printStates.Values;
 
@@ -102,7 +109,8 @@ public sealed class TransportOrder
     /// </summary>
     public bool CanPrint =>
         (PrintCount == 0 && Status == TransportOrderStatus.Advised)
-        || Status == TransportOrderStatus.ReprintAuthorized;
+        || Status == TransportOrderStatus.ReprintAuthorized
+        || (TrackingRearmed && Status == TransportOrderStatus.Advised);
 
     /// <summary>Replace the advised label set (Phase-1 duplicate-advice = overwrite / last-wins; spec §6a).</summary>
     public void OverwriteAdvice(
@@ -129,6 +137,7 @@ public sealed class TransportOrder
         VerifiedAt = null;
         VerifyFailedAt = null;
         ReprintAuthorizationReason = null;
+        TrackingRearmed = false;
         SetAdviceMetadata(waveId, profileName, bypass, verifyEnabled, verifyPassDest, verifyFailDest);
         _printStates = BuildPrintStates(labels);
     }
@@ -149,9 +158,30 @@ public sealed class TransportOrder
         VerifyFailDest = string.IsNullOrWhiteSpace(verifyFailDest) ? null : verifyFailDest;
     }
 
-    public void ResetForTrackingEvent()
+    /// <summary>
+    /// F15 / decision-009 — pre-verify PLC tracking recovery. Only a carton still in
+    /// <see cref="TransportOrderStatus.Printed"/> can be recovered (a <see cref="TransportOrderStatus.Verified"/>
+    /// or <see cref="TransportOrderStatus.HeldForIntervention"/> carton, or an already re-armed
+    /// <see cref="TransportOrderStatus.Advised"/> one, is a no-op — making repeat events idempotent).
+    /// When reprint is allowed the carton is system-re-armed back to <see cref="TransportOrderStatus.Advised"/>
+    /// (<see cref="PrintCount"/> stays monotonic); when reprint is disabled it is held for an operator.
+    /// </summary>
+    public TrackingRecovery ResetForTrackingEvent(int eventCode, bool reprintAllowed)
     {
+        _ = eventCode;
+        if (Status != TransportOrderStatus.Printed)
+        {
+            return TrackingRecovery.NotApplicable;
+        }
+
+        if (!reprintAllowed)
+        {
+            Status = TransportOrderStatus.HeldForIntervention;
+            return TrackingRecovery.Held;
+        }
+
         Status = TransportOrderStatus.Advised;
+        TrackingRearmed = true;
         VerifiedAt = null;
         VerifyFailedAt = null;
         ReprintAuthorizationReason = null;
@@ -159,6 +189,8 @@ public sealed class TransportOrder
         {
             state.Reset();
         }
+
+        return TrackingRecovery.ReArmed;
     }
 
     public void ForceMarkPrinted(DateTimeOffset at)
@@ -194,6 +226,7 @@ public sealed class TransportOrder
         FirstPrintedAt ??= at;
         Status = TransportOrderStatus.Printed;
         ReprintAuthorizationReason = null;
+        TrackingRearmed = false;
     }
 
     /// <summary>Verify passed: carton is complete and may proceed (source ActiveRecord=0, VerifyTime set).</summary>

@@ -48,6 +48,16 @@ public sealed class InMemoryCartonRunRepository : ICartonRunRepository
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask<CartonRunRecord?> FindByRunIdAsync(long runId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        lock (_gate)
+        {
+            return ValueTask.FromResult(_records.GetValueOrDefault(runId));
+        }
+    }
+
     public ValueTask<IReadOnlyList<CartonRunRecord>> GetRunsForOrderAsync(
         long pandaDataId,
         CancellationToken cancellationToken = default)
