@@ -174,6 +174,23 @@ reprint override). Core exposes TransportOrder.AuthorizeReprint(reason); the ope
 carton, and surface held cartons for intervention. Also consider a reprint-only-the-missing-labels flow,
 enabled by the per-label print state now tracked on TransportOrder.
 **Priority:** High (operational; part of operator GUI)
+**Update 2026-08-13 (v0.6.0):** The GUI **action** is now built — the audited **Authorize Reprint** button
+in the Label Data Lookup grid and Reject Cartons list, wired to `IReprintAuthorizationCommand`
+(whole-carton + per-slot), with held cartons surfaced. **Still open:** the real Core `AuthorizeReprint`
+audit sink (Sim-only today) and **operator identity** (see next item). Per-missing-label-only reprint is
+supported at the contract level (`AuthorizeSlotReprintAsync`) but has no dedicated UI yet.
+
+### Operator identity for audited reprint actions
+**Added:** 2026-08-13
+**Source:** Reviewer (reviewer-log 005), Phase-2 UI
+**Context:** Every audited reprint from the Lookup/Reject screens currently passes the literal string
+`"operator"` as the actor (`AuthorizeReprintAsync(cartonId, "operator", ...)`). With no RBAC/auth in the
+standalone module yet, there is no real identity to attribute the action to, so the audit trail is not
+trustworthy.
+**Description:** Wire real operator identity into the audited reprint calls (and any future audited action)
+— from the host's auth context when embedded in econtroller, or a lightweight operator-select/login in the
+standalone demo. Replace the hardcoded `"operator"`.
+**Priority:** High (audit integrity; blocks trusting the reprint audit trail) — targeted for Wave 2.
 
 ### Global "Reprint Labels" allow-all setting
 **Added:** 2026-08-11

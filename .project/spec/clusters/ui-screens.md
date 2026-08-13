@@ -166,3 +166,37 @@ lookup grid). No release/clear action for now.
 - Fire-point Map **switch** as an operator quick-action (decision-011) — currently editable in the
   Config Explorer; a dedicated quick-switch control can come later.
 - Rendered label-image preview (ZPL→image) — not now; raw ZPL only.
+
+---
+
+## As-built status (2026-08-13, v0.6.0 — Wave 0+1 complete)
+
+The architecture above is implemented as specced. All five screens shipped, each gated (build under
+warnings-as-errors+nullable, Playwright screen-load, bUnit interaction) and reviewed (reviewer-logs 005/006).
+
+| Tracker | Screen / layer | Route | As-built | Gate |
+|---------|----------------|-------|----------|------|
+| UI-ARCH | RCL + contracts + Sim demo host | — | `PandA.UI` / `PandA.UI.Contracts` / `PandA.UI.DemoHost` all built; `AddPandaDemoBackend()` DI | build + boot 200 |
+| UI-DASH | Status Dashboard | `/` | live line/printer status streams, push updates | bUnit + e2e |
+| UI-LOOKUP | Label Data Lookup | `/lookup` | filter grid + expandable slots (raw ZPL) + authorize-reprint | bUnit + e2e |
+| UI-REJECT | Reject Cartons | `/rejects` | filtered list + shared authorize-reprint + empty state | bUnit + e2e |
+| UI-MANDA | MandA Station (UI part) | `/manda` | station dropdown → scan → print subset → per-label verify | bUnit + e2e |
+| UI-CFG | Config Explorer | `/config` | recursive tree + detail-edit CRUD across all 7 entity types | bUnit + e2e |
+| UI-REPRINT | Reprint authorization action | (in Lookup/Rejects) | audited button wired to `IReprintAuthorizationCommand` | covered by Lookup/Reject tests |
+
+**Cross-cutting as-built rules added during the build (not in the original spec):**
+- All backend interface calls are wrapped `try/catch`→Snackbar so a throwing real adapter can't kill the
+  Blazor Server circuit (the Sim never throws; the real Core/econtroller adapter can). See reviewer-log 005.
+- Reloads reconcile dependent view state (Lookup re-fetches/collapses the expanded row; Config re-resolves the
+  selected node) rather than only re-querying the list. See reviewer-log 006.
+- Positional collection fields (line buffer order, tracking devices) preserve interior empty positions through
+  the CSV edit round-trip.
+
+**Deferred to Wave 0.5 / econtroller-adapter (Sim-only today):**
+- `UI-MANDA` **Core** manual entry point (`sdisp_MA_Scan_Induct`: resolve-by-barcode, print subset, per-label
+  verify reusing the lifecycle + `MANDA%%` bypass) — currently satisfied by `DemoMandaServices`.
+- `UI-REPRINT` **Core** `TransportOrder.AuthorizeReprint(reason)` audit sink + **real operator identity**
+  (hardcoded `"operator"` today — backlogged).
+
+**Remaining Wave-2 UI hardening:** cross-screen nav e2e, theme-toggle coverage on every route,
+create-new-entity flows in Config Explorer, operator-identity wiring.

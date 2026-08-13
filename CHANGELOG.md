@@ -24,6 +24,67 @@ _(Next cycle's changes will be logged here by the Learner.)_
 
 ---
 
+## [0.6.0] — 2026-08-13 — Standalone Blazor UI module (Phase-2, Wave 0+1)
+
+Adds the standalone, pluggable Blazor UI module (decision-019): a portable view-model interface layer, a
+Sim-backed demo host, the Axon/MudBlazor shell, and all five operator screens — each landed under automated
+runtime gates (build + Playwright screen-load + bUnit interaction) per the domain owner's "everything must be
+tested/touched" requirement. Backend engine unchanged (still 231 tests); no econtroller coupling introduced.
+
+### Added
+- **`PandA.UI.Contracts`** — the full portable interface seam the RCL depends on (Common results, Status
+  streams, Lookup queries, Reprint command, Rejects query, MandA commands/stream, Config tree + `IConfigEditor<T>`
+  editor family + `ISettingsEditor`). The RCL never references `PandA.Core` or a DB directly.
+- **`PandA.UI`** (Razor Class Library) — Axon/MudBlazor shell (`PandaLayout`, light/dark toggle, nav) and the
+  five screens:
+  - **Status Dashboard** (`/`) — live line/printer status via subscription streams (UI-DASH).
+  - **Label Data Lookup** (`/lookup`) — filterable transport-order grid, expandable per-carton label slots
+    (raw ZPL), audited Authorize-Reprint on held cartons (UI-LOOKUP).
+  - **Reject Cartons** (`/rejects`) — filterable reject list + shared Authorize-Reprint (UI-REJECT).
+  - **MandA Station** (`/manda`) — station dropdown, scan→resolve→print-subset→per-label-verify (UI-MANDA, UI part).
+  - **Config Explorer** (`/config`) — recursive entity tree + detail-edit CRUD across all 7 entity types
+    (Settings/LabelDef/MandA/Line/Printer/FirePoint/Map) via the pluggable editors (UI-CFG).
+- **`PandA.UI.DemoHost`** — thin Blazor Server app with Sim-backed implementations of every contract
+  (`DemoDataStore` seed) + `AddPandaDemoBackend()` DI wiring. Runnable, clickable, zero real backend.
+- **Automated gates + CI** — `PandA.UI.Tests` (bUnit render+interaction) and `PandA.E2E.Tests`
+  (Playwright screen-load per route: 2xx, no error UI, heading, zero console errors, theme toggle);
+  `.github/workflows/ci.yml`. Root `.editorconfig` silences transitively-included Meziantou style rules under
+  warnings-as-errors.
+
+### Changed
+- Review-driven robustness hardening (reviewer-logs 005/006): every screen's backend interface calls wrapped
+  in `try/catch`→Snackbar to protect the Blazor Server circuit when a real (non-Sim) adapter throws.
+- Label Lookup reconciles the expanded row on reload (re-fetch or collapse); Config Explorer re-resolves the
+  selected tree node after save so the detail title can't go stale.
+- Config Explorer's CSV parsing preserves interior empty positions for positional fields (buffer order /
+  tracking devices) instead of silently shifting them.
+
+### Decisions
+- **decision-019** — standalone Blazor UI: RCL render-mode-agnostic, depends only on view-model interfaces,
+  Sim-backed demo host, Axon design system, light+dark, desktop-first, no RBAC yet.
+
+### Reviews
+- **reviewer-log 005** — Label Data Lookup: circuit-safety try/catch + stale-expansion reconcile (applied);
+  operator-identity gap backlogged.
+- **reviewer-log 006** — MandA + Config Explorer: positional-CSV corruption + stale selected-node (applied);
+  behavioral test assertions strengthened. Draft↔DTO mappings verified faithful across all 7 entity types.
+
+### Learnings
+- **learnings/002** — gates-first UI, guard handlers against a throwing real backend behind a polite Sim,
+  reconcile state on reload, assert payloads not call counts, Axon/MudBlazor alias + analyzer infra, test-hook
+  patterns.
+
+### Known follow-ups
+- Operator identity is hardcoded `"operator"` on all audited reprints — must be wired to real identity before
+  the audit trail is trustworthy (backlog: "Operator identity for audited reprint actions").
+- MandA/Reprint **Core** manual entry points (`sdisp_MA_Scan_Induct`, `TransportOrder.AuthorizeReprint`) remain
+  the Sim surface only; real Core wiring is the econtroller-adapter / Wave-0.5 backend work.
+
+### Tests
+- 231 backend + 11 bUnit + 6 Playwright e2e passing.
+
+---
+
 ## [0.5.0] — 2026-08-12 — Lane-eval + verify-semantics cycle
 
 First tagged version. Captures the accumulated PandA.Core / PandA.Sim / PandA.Harness engine built to date
