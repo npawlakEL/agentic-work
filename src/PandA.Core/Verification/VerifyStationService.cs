@@ -90,10 +90,15 @@ public sealed class VerifyStationService : IVerifyStationService
 
         await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
 
+        // Decision-008: annotate the carton with its verify result as a routing criterion for the adapter
+        // to project onto econtroller CriteriaBasedSorting. PandA does not pick the place itself.
+        var routing = RoutingCriterion.ForVerify(verify);
+
         return new VerifyStationResult(
             proceed ? VerifyStationStatus.Verified : VerifyStationStatus.HeldForIntervention,
             verify,
             threshold.PausePrinter,
-            threshold.ConsecutiveFailures);
+            threshold.ConsecutiveFailures,
+            routing);
     }
 }

@@ -18,8 +18,13 @@ public enum VerifyStationStatus
 /// <param name="Verify">The underlying verify result (null when no order matched).</param>
 /// <param name="PrinterPaused">True if this result tripped the line's consecutive-fail threshold.</param>
 /// <param name="ConsecutiveFailures">The line's consecutive-fail count after this scan.</param>
+/// <param name="Routing">
+/// The routing criterion the adapter projects onto econtroller <c>SortCriteriaExtension</c> (decision-008);
+/// null when no order matched.
+/// </param>
 public sealed record VerifyStationResult(
     VerifyStationStatus Status,
     VerifyResult? Verify,
     bool PrinterPaused,
-    int ConsecutiveFailures);
+    int ConsecutiveFailures,
+    RoutingCriterion? Routing = null);
