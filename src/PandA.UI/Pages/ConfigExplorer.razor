@@ -103,7 +103,7 @@
                                     <MudIcon Icon="@Icons.Material.Filled.Print" Size="Size.Small" />
                                     <span>@(string.IsNullOrWhiteSpace(item.Draft.Name) ? "New printer" : item.Draft.Name)</span>
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@OrientationColor(item.Draft.Orientation)">@item.Draft.Orientation</MudChip>
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">@item.FirePoints.Count fire points</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">@FirePointsForPrinter(item.Draft.Id).Count fire points</MudChip>
                                 </div>
                             </TitleContent>
                             <ChildContent>
@@ -135,38 +135,21 @@
 
                                 <div class="cfg-section-head cfg-sub-section">
                                     <MudText Typo="Typo.subtitle2"><MudIcon Icon="@Icons.Material.Filled.GpsFixed" Size="Size.Small" Class="me-1" />Fire points</MudText>
-                                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                                               Disabled="@(item.Draft.Id is null)" OnClick="@(() => AddFirePoint(item))" data-testid="add-firepoint">Add fire point</MudButton>
                                 </div>
-                                @if (item.Draft.Id is null)
+                                @{ var printerFps = FirePointsForPrinter(item.Draft.Id); }
+                                @if (printerFps.Count == 0)
                                 {
-                                    <MudText Typo="Typo.caption" Class="cfg-muted">Save the printer first to add fire points.</MudText>
-                                }
-                                else if (item.FirePoints.Count == 0)
-                                {
-                                    <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty">No fire points configured.</MudText>
+                                    <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty">No fire points. Add them in the Fire Points tab.</MudText>
                                 }
                                 else
                                 {
-                                    @foreach (var fp in item.FirePoints)
-                                    {
-                                        <div class="cfg-firepoint" data-testid="firepoint-row">
-                                            <MudGrid Spacing="2">
-                                                <MudItem xs="12" sm="4"><MudTextField @bind-Value="fp.LabelType" Label="Label type" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                                <MudItem xs="12" sm="4"><MudTextField @bind-Value="fp.ApplyPointNotation" Label="Apply point (1T, 1L, 0M)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                                <MudItem xs="12" sm="4"><MudNumericField T="int" @bind-Value="fp.PrintPoint" Label="Print point" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                                <MudItem xs="12" sm="6"><MudTextField @bind-Value="fp.PrintTrackingDevice" Label="Print tracking device" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="firepoint-printtd" /></MudItem>
-                                                <MudItem xs="12" sm="6"><MudTextField @bind-Value="fp.ApplyTrackingDevice" Label="Apply tracking device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                                <MudItem xs="12" Class="d-flex align-center justify-space-between">
-                                                    <MudCheckBox T="bool" @bind-Value="fp.DynamicApply" Label="Dynamic apply" />
-                                                    <div class="cfg-actions cfg-actions-tight">
-                                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveFirePointAsync(fp))" data-testid="save-firepoint">Save</MudButton>
-                                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteFirePointAsync(item, fp))" data-testid="delete-firepoint">Delete</MudButton>
-                                                    </div>
-                                                </MudItem>
-                                            </MudGrid>
-                                        </div>
-                                    }
+                                    <div class="cfg-chips">
+                                        @foreach (var fp in printerFps)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.GpsFixed">@FirePointChipText(fp)</MudChip>
+                                        }
+                                    </div>
+                                    <MudText Typo="Typo.caption" Class="cfg-muted">Manage fire points in the Fire Points tab.</MudText>
                                 }
                             </ChildContent>
                         </MudExpansionPanel>
@@ -199,7 +182,20 @@
                             <ChildContent>
                                 <MudGrid Spacing="2">
                                     <MudItem xs="12" sm="6"><MudTextField @bind-Value="map.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                    <MudItem xs="12"><MudTextField @bind-Value="map.FirePointIds" Label="Fire point ids (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="12">
+                                        <MudSelect T="string" MultiSelection="true" Label="Fire points"
+                                                   SelectedValues="@map.FirePointIds" SelectedValuesChanged="@(v => OnMapFirePointsChanged(map, v))"
+                                                   MultiSelectionTextFunc="@(ids => FirePointSummary(ids))"
+                                                   Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                                                   Disabled="@(_allFirePoints.Count == 0)"
+                                                   HelperText="@(_allFirePoints.Count == 0 ? "No fire points defined yet — add them in the Fire Points tab." : "Check the fire points this map applies.")"
+                                                   data-testid="map-firepoints">
+                                            @foreach (var fp in _allFirePoints.Where(f => f.Id is not null))
+                                            {
+                                                <MudSelectItem T="string" Value="@fp.Id">@FirePointLabel(fp)</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
                                 </MudGrid>
                                 <div class="cfg-actions">
                                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveMapAsync(map))" data-testid="save-map">Save map</MudButton>
@@ -210,6 +206,66 @@
                     }
                 </MudExpansionPanels>
             }
+        }
+    </MudTabPanel>
+
+    @* ------------------------------------------------------- Fire points *@
+    <MudTabPanel Text="Fire Points" Icon="@Icons.Material.Filled.GpsFixed">
+        <div class="cfg-section-head">
+            <MudText Typo="Typo.subtitle1"><MudIcon Icon="@Icons.Material.Filled.GpsFixed" Size="Size.Small" Class="me-1" />Fire points</MudText>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="AddFirePoint" Disabled="@(_allPrinters.Count == 0)" data-testid="add-firepoint">Add fire point</MudButton>
+        </div>
+        <MudText Typo="Typo.body2" Class="cfg-sub">A fire point defines a print/apply profile on one printer. Maps reference fire points, so a printer can carry several — each saved to different maps.</MudText>
+        @if (_allPrinters.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="firepoints-noprinters">Add a printer on a lane first, then define its fire points here.</MudText>
+        }
+        else if (_allFirePoints.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="firepoints-empty">No fire points defined yet.</MudText>
+        }
+        else
+        {
+            <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="cfg-panels">
+                @foreach (var fp in _allFirePoints)
+                {
+                    <MudExpansionPanel Expanded="@(fp.Id is null)" data-testid="firepoint-panel">
+                        <TitleContent>
+                            <div class="cfg-panel-title">
+                                <MudIcon Icon="@Icons.Material.Filled.GpsFixed" Size="Size.Small" />
+                                <span>@FirePointLabel(fp)</span>
+                                @if (fp.DynamicApply)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary">dynamic</MudChip>
+                                }
+                            </div>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" sm="6">
+                                    <MudSelect T="string" @bind-Value="fp.PrinterId" Label="Printer" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="firepoint-printer">
+                                        @foreach (var p in _allPrinters)
+                                        {
+                                            <MudSelectItem T="string" Value="@p.PrinterId">@PrinterOptionLabel(p)</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" sm="3"><MudTextField @bind-Value="fp.LabelType" Label="Label type" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="firepoint-labeltype" /></MudItem>
+                                <MudItem xs="12" sm="3"><MudTextField @bind-Value="fp.ApplyPointNotation" Label="Apply point (1T, 1L, 0M)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                <MudItem xs="12" sm="4"><MudNumericField T="int" @bind-Value="fp.PrintPoint" Label="Print point" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                <MudItem xs="12" sm="4"><MudTextField @bind-Value="fp.PrintTrackingDevice" Label="Print tracking device" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="firepoint-printtd" /></MudItem>
+                                <MudItem xs="12" sm="4"><MudTextField @bind-Value="fp.ApplyTrackingDevice" Label="Apply tracking device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                <MudItem xs="12" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="fp.DynamicApply" Label="Dynamic apply" /></MudItem>
+                            </MudGrid>
+                            <div class="cfg-actions">
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveFirePointAsync(fp))" data-testid="save-firepoint">Save fire point</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteFirePointAsync(fp))" data-testid="delete-firepoint">Delete</MudButton>
+                            </div>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+            </MudExpansionPanels>
         }
     </MudTabPanel>
 
@@ -351,6 +407,9 @@
     private List<PrinterEditItem> _printers = [];
     private List<MapDraft> _maps = [];
 
+    private List<PrinterDto> _allPrinters = [];
+    private List<FirePointDraft> _allFirePoints = [];
+
     private List<LabelDraft> _labels = [];
     private List<StationDraft> _stations = [];
     private SettingsDraft? _settings;
@@ -360,6 +419,8 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadLinesAsync();
+        await LoadPrintersAllAsync();
+        await LoadFirePointsAllAsync();
         await LoadLabelsAsync();
         await LoadStationsAsync();
         await LoadSettingsAsync();
@@ -393,6 +454,29 @@
         catch (Exception ex) when (ex is not OperationCanceledException) { Fail("stations", ex); }
     }
 
+    private async Task LoadPrintersAllAsync()
+    {
+        try
+        {
+            var list = await PrinterEditor.ListAsync();
+            _allPrinters = list.OrderBy(p => p.LineId, StringComparer.Ordinal).ThenBy(p => p.ConfigOrder).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Fail("printers", ex); }
+    }
+
+    private async Task LoadFirePointsAllAsync()
+    {
+        try
+        {
+            var list = await FirePointEditor.ListAsync();
+            _allFirePoints = list
+                .OrderBy(f => f.PrinterId, StringComparer.Ordinal)
+                .ThenBy(f => f.LabelType, StringComparer.Ordinal)
+                .Select(FirePointDraft.From).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Fail("fire points", ex); }
+    }
+
     private async Task LoadLinesAsync(string? prefer = null)
     {
         try
@@ -420,19 +504,10 @@
             if (_laneDraft is null) { return; }
 
             var printers = await PrinterEditor.ListForLineAsync(id);
-            var items = new List<PrinterEditItem>();
-            foreach (var p in printers.OrderBy(p => p.ConfigOrder))
-            {
-                var fps = p.PrinterId is { } pid
-                    ? await FirePointEditor.ListForPrinterAsync(pid)
-                    : (IReadOnlyList<FirePointDto>)[];
-                items.Add(new PrinterEditItem
-                {
-                    Draft = PrinterDraft.From(p),
-                    FirePoints = fps.OrderBy(f => f.LabelType, StringComparer.Ordinal).Select(FirePointDraft.From).ToList(),
-                });
-            }
-            _printers = items;
+            _printers = printers
+                .OrderBy(p => p.ConfigOrder)
+                .Select(p => new PrinterEditItem { Draft = PrinterDraft.From(p) })
+                .ToList();
 
             var maps = await MapEditor.ListForLineAsync(id);
             _maps = maps.OrderBy(m => m.Name, StringComparer.Ordinal).Select(MapDraft.From).ToList();
@@ -490,7 +565,7 @@
         item.Draft.LineId = _laneId ?? item.Draft.LineId;
         var result = await PrinterEditor.SaveAsync(item.Draft.ToDto());
         Notify(result, "Printer saved.");
-        if (result.Success) { await LoadLaneAsync(_laneId); }
+        if (result.Success) { await LoadLaneAsync(_laneId); await LoadPrintersAllAsync(); }
     }
 
     private async Task DeletePrinterAsync(PrinterEditItem item)
@@ -498,30 +573,35 @@
         if (item.Draft.Id is null) { _printers.Remove(item); return; }
         var result = await PrinterEditor.DeleteAsync(item.Draft.Id);
         Notify(result, "Printer deleted.");
-        if (result.Success) { await LoadLaneAsync(_laneId); }
+        if (result.Success) { await LoadLaneAsync(_laneId); await LoadPrintersAllAsync(); await LoadFirePointsAllAsync(); }
     }
 
     // ---- Fire points ----
 
-    private void AddFirePoint(PrinterEditItem item)
+    private void AddFirePoint()
     {
-        if (item.Draft.Id is null) { return; }
-        item.FirePoints.Add(new FirePointDraft { PrinterId = item.Draft.Id, LabelType = "Content", ApplyPointNotation = "0M" });
+        var pid = _allPrinters.FirstOrDefault()?.PrinterId ?? "";
+        _allFirePoints.Add(new FirePointDraft { PrinterId = pid, LabelType = "Content", ApplyPointNotation = "0M" });
     }
 
     private async Task SaveFirePointAsync(FirePointDraft fp)
     {
+        if (string.IsNullOrWhiteSpace(fp.PrinterId))
+        {
+            Snackbar.Add("Select a printer for the fire point.", Severity.Warning);
+            return;
+        }
         var result = await FirePointEditor.SaveAsync(fp.ToDto());
         Notify(result, "Fire point saved.");
-        if (result.Success) { await LoadLaneAsync(_laneId); }
+        if (result.Success) { await LoadFirePointsAllAsync(); }
     }
 
-    private async Task DeleteFirePointAsync(PrinterEditItem item, FirePointDraft fp)
+    private async Task DeleteFirePointAsync(FirePointDraft fp)
     {
-        if (fp.Id is null) { item.FirePoints.Remove(fp); return; }
+        if (fp.Id is null) { _allFirePoints.Remove(fp); return; }
         var result = await FirePointEditor.DeleteAsync(fp.Id);
         Notify(result, "Fire point deleted.");
-        if (result.Success) { await LoadLaneAsync(_laneId); }
+        if (result.Success) { await LoadFirePointsAllAsync(); }
     }
 
     // ---- Maps ----
@@ -597,6 +677,56 @@
 
     // ---- Helpers ----
 
+    private List<FirePointDraft> FirePointsForPrinter(string? printerId) =>
+        printerId is null ? [] : _allFirePoints.Where(f => f.PrinterId == printerId).ToList();
+
+    private static string FirePointChipText(FirePointDraft fp)
+    {
+        var type = string.IsNullOrWhiteSpace(fp.LabelType) ? "any" : fp.LabelType;
+        return string.IsNullOrWhiteSpace(fp.ApplyPointNotation) ? type : $"{type} · {fp.ApplyPointNotation}";
+    }
+
+    private string PrinterOptionLabel(PrinterDto p)
+    {
+        var line = _lines.FirstOrDefault(l => l.LineId == p.LineId);
+        var lane = line is null ? (p.LineId ?? "—") : line.Name;
+        var name = string.IsNullOrWhiteSpace(p.Name) ? (p.PrinterId ?? "printer") : p.Name;
+        return $"{lane} · {name}";
+    }
+
+    private string FirePointLabel(FirePointDraft fp)
+    {
+        var printer = _allPrinters.FirstOrDefault(p => p.PrinterId == fp.PrinterId);
+        var printerName = printer is null
+            ? (string.IsNullOrWhiteSpace(fp.PrinterId) ? "unassigned" : fp.PrinterId)
+            : (string.IsNullOrWhiteSpace(printer.Name) ? printer.PrinterId ?? "printer" : printer.Name);
+        var type = string.IsNullOrWhiteSpace(fp.LabelType) ? "any" : fp.LabelType;
+        var note = string.IsNullOrWhiteSpace(fp.ApplyPointNotation) ? "" : $" ({fp.ApplyPointNotation})";
+        return $"{printerName} · {type}{note}";
+    }
+
+    private string FirePointSummary(List<string> ids)
+    {
+        if (ids.Count == 0) { return ""; }
+        return string.Join(", ", ids.Select(id =>
+        {
+            var fp = _allFirePoints.FirstOrDefault(f => f.Id == id);
+            return fp is null ? id : FirePointLabel(fp);
+        }));
+    }
+
+    private static void OnMapFirePointsChanged(MapDraft map, IEnumerable<string> selected)
+    {
+        var chosen = selected.ToList();
+        // Preserve the existing order for still-selected ids, then append newly checked ones.
+        var ordered = map.FirePointIds.Where(chosen.Contains).ToList();
+        foreach (var id in chosen)
+        {
+            if (!ordered.Contains(id)) { ordered.Add(id); }
+        }
+        map.FirePointIds = ordered;
+    }
+
     private static Color OrientationColor(string? orientation) =>
         string.Equals(orientation, "Top", StringComparison.OrdinalIgnoreCase) ? Color.Secondary : Color.Info;
 
@@ -631,7 +761,6 @@
     private sealed class PrinterEditItem
     {
         public PrinterDraft Draft { get; set; } = new();
-        public List<FirePointDraft> FirePoints { get; set; } = [];
     }
 
     private sealed class SettingsDraft
@@ -769,13 +898,13 @@
         public string? Id { get; set; }
         public string LineId { get; set; } = "";
         public string Name { get; set; } = "";
-        public string FirePointIds { get; set; } = "";
+        public List<string> FirePointIds { get; set; } = [];
 
         public static MapDraft From(MapDto d) => new()
         {
-            Id = d.MapId, LineId = d.LineId, Name = d.Name, FirePointIds = Join(d.FirePointIds),
+            Id = d.MapId, LineId = d.LineId, Name = d.Name, FirePointIds = d.FirePointIds.ToList(),
         };
 
-        public MapDto ToDto() => new(Id, LineId, Name, Split(FirePointIds));
+        public MapDto ToDto() => new(Id, LineId, Name, FirePointIds);
     }
 }
