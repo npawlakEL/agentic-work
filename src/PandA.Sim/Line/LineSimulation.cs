@@ -240,6 +240,7 @@ public sealed class LineSimulation
                 await OnTrackingEyeAsync(carton, eye).ConfigureAwait(false);
             }
 
+            PrintLabelsAtFirePoint(carton);
             ApplyLabelsAtFullExtension(carton, stationX);
         }
 
@@ -265,7 +266,6 @@ public sealed class LineSimulation
                 _lastEvent = $"{carton.BlindLabel} print decision: {result.Status}";
             }
 
-            UpdateLabelStates(carton, eye);
             return;
         }
 
@@ -284,23 +284,30 @@ public sealed class LineSimulation
             return;
         }
 
-        // Intermediate eye: print the label onto the tamp head when the carton reaches a printer's print
-        // eye. The TAMP apply itself is fired later, at the applicator's fullest extension (see
-        // ApplyLabelsAtFullExtension), not at a discrete eye crossing.
-        UpdateLabelStates(carton, eye);
+        // Intermediate eyes are visual tracking markers only. Print (onto the tamp head) and apply (onto
+        // the carton) are both driven by continuous fire-point positions in the tick loop
+        // (PrintLabelsAtFirePoint / ApplyLabelsAtFullExtension), not by discrete eye crossings.
     }
 
     /// <summary>
-    /// Advances each label onto its printer's tamp head as the carton crosses <paramref name="eye"/>:
-    /// a label rides onto its printer's tamp head at its print eye. The apply (deposit-on-carton)
-    /// transition is handled separately by <see cref="ApplyLabelsAtFullExtension"/>.
+    /// Prints each label onto its printer's tamp head at the instant the carton reaches that label's
+    /// print fire point — the carton's centre crossing the label's computed print X. The label then rides
+    /// the tamp head until it is applied. Position-based (not eye-based) so the label appears at the true
+    /// print point, mirroring the apply timing.
     /// </summary>
-    private void UpdateLabelStates(SimCarton carton, TrackingEye eye)
+    private void PrintLabelsAtFirePoint(SimCarton carton)
     {
+        var centre = carton.PositionInches + carton.LengthInches / 2;
         carton.MutateLabels(label =>
         {
-            var (printEye, _) = PrinterEyeIds(label.PrinterId);
-            if (!label.Applied && !label.OnTamp && string.Equals(printEye, eye.Id, StringComparison.OrdinalIgnoreCase))
+            if (label.Applied || label.OnTamp)
+            {
+                return label;
+            }
+
+            // Level-triggered (not edge): a label created at the induct eye whose print point is already
+            // behind the carton centre still prints immediately, rather than missing the crossing tick.
+            if (centre >= label.PrintPoint.X)
             {
                 return label with { OnTamp = true };
             }
@@ -500,18 +507,6 @@ public sealed class LineSimulation
         }
 
         return topo.Eyes.Count > 0 ? topo.Eyes[0].PositionInches : 0;
-    }
-
-    /// <summary>The (print-eye, apply-eye) ids a printer's labels are anchored to in the current topology.</summary>
-    private (string PrintEyeId, string ApplyEyeId) PrinterEyeIds(string printerId)
-    {
-        var topo = BuildTopology();
-        var station = _printers.FirstOrDefault(p => string.Equals(p.PrinterId, printerId, StringComparison.OrdinalIgnoreCase));
-        var printDevice = Math.Max(1, station?.PrintTrackingDevice ?? 1);
-        var applyDevice = Math.Max(1, station?.ApplyTrackingDevice ?? 2);
-        var printEye = topo.DeviceEyeId.GetValueOrDefault(printDevice, "Inbound Scanner");
-        var applyEye = topo.DeviceEyeId.GetValueOrDefault(applyDevice, printEye);
-        return (printEye, applyEye);
     }
 
     private LineSimulationSnapshot BuildSnapshot()

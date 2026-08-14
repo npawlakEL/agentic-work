@@ -61,6 +61,62 @@ public sealed class LineSimulationPrintFlowTests
     }
 
     [Fact]
+    public async Task LabelPrintsOntoTampHead_WhenCartonCentreReachesPrintPoint()
+    {
+        var orders = new InMemoryTransportOrderStore();
+        var gateway = new CapturingPrinterGateway();
+        var clock = new SimClock(DateTimeOffset.UtcNow);
+
+        var profile = new FirePointProfile("Active",
+            [(("Ship1", "Shipping"), new FirePoint(1, 40, 2, ApplyPoint.Parse("1T")))]);
+        var config = new LineConfig("L1", [new PrinterConfig("Ship1", "10.0.0.1", 9100, ["Shipping"], ApplyOrientation.Side, 0)], activeProfile: profile);
+        var lines = new InMemoryLineProvider().Add(config, [new PrinterState("Ship1", plcOnline: true, engineOnline: true)]);
+
+        var induct = new InductService(orders, lines, new PrinterSelectionService(), gateway, clock, new InMemorySettingsProvider());
+        var verify = new VerifyStationService(orders, new VerificationService(), new VerifyThresholdTracker(), clock);
+
+        var sim = new LineSimulation(
+            "L1", "Line 1", induct, verify, orders, gateway, clock, verifyFailThreshold: 2,
+            new LineSimulationSettings { ConveyorLengthInches = 160, BeltSpeedInchesPerSecond = 120 },
+            [new SimPrinterStation("Ship1", "Side", PrintTrackingDevice: 1, ApplyTrackingDevice: 2, PrintFirePointPulses: 40)]);
+
+        await sim.StartAsync();
+        await sim.SpawnCartonAsync();
+
+        double? centreAtPrint = null;
+        double printX = 0;
+        var appliedBeforePrint = false;
+        for (var i = 0; i < 400 && centreAtPrint is null; i++)
+        {
+            await Task.Delay(5);
+            var snap = await sim.GetSnapshotAsync();
+            var label = snap.Cartons.FirstOrDefault()?.Labels.FirstOrDefault();
+            var carton = snap.Cartons.FirstOrDefault();
+            if (label is null || carton is null)
+            {
+                continue;
+            }
+
+            if (label.Applied && !label.OnTamp && centreAtPrint is null)
+            {
+                appliedBeforePrint = true;
+            }
+
+            if (label.OnTamp)
+            {
+                centreAtPrint = carton.PositionInches + carton.LengthInches / 2;
+                printX = label.PrintPoint.X;
+            }
+        }
+
+        Assert.True(centreAtPrint is not null, "label should ride the tamp head within the run window");
+        Assert.False(appliedBeforePrint, "label must print onto the tamp head before it is applied");
+        // onTamp fires as the carton centre reaches the label's print point, not at a discrete eye.
+        Assert.True(centreAtPrint!.Value >= printX - 1,
+            $"print should fire at/after the print point (centre {centreAtPrint:0.0} vs printX {printX:0.0})");
+    }
+
+    [Fact]
     public async Task LabelIsApplied_WhenCartonCentreReachesPrinterStation_NotAtEyeCrossing()
     {
         var orders = new InMemoryTransportOrderStore();
