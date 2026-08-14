@@ -79,6 +79,13 @@ export function setCameraPreset(preset) {
 }
 
 function initThree(OrbitControls) {
+    // A fresh scene/root is created here; drop any stale mesh maps from a previous init so a line
+    // switch (which re-runs start()) fully repopulates the new root. Otherwise entries whose ids are
+    // stable across lines (e.g. the tracking eyes) stay parented to the discarded root and vanish.
+    printers.clear();
+    cartons.clear();
+    eyes.clear();
+
     scene = new three.Scene();
     scene.background = new three.Color(0x0f1523);
 
