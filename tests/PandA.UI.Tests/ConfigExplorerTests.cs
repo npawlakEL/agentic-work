@@ -103,6 +103,47 @@ public sealed class ConfigExplorerTests : TestContext
         Assert.Equal("PR1", _config.LastSavedFirePoint!.PrinterId);
     }
 
+    [Fact]
+    public void Lane_builder_walks_through_steps_and_creates_lane()
+    {
+        RenderComponent<MudBlazor.MudPopoverProvider>();
+        var cut = RenderComponent<ConfigExplorer>();
+
+        // "Add lane" opens the step-by-step builder instead of saving immediately.
+        cut.Find("[data-testid=add-lane]").Click();
+        Assert.NotNull(cut.Find("[data-testid=lane-builder]"));
+
+        // Step 1: name the lane, then advance to the printers step.
+        cut.Find("[data-testid=lane-builder] input").Change("Pack Line 3");
+        cut.Find("[data-testid=builder-next]").Click();
+
+        // Step 2: add a printer, then finish.
+        cut.Find("[data-testid=builder-add-printer]").Click();
+        Assert.NotNull(cut.Find("[data-testid=builder-printer-panel]"));
+        cut.Find("[data-testid=builder-finish]").Click();
+
+        // The lane is created and the builder closes back to the toolbar.
+        Assert.Equal(1, _config.LineSaves);
+        Assert.NotNull(_config.LastSavedLine);
+        Assert.Equal("Pack Line 3", _config.LastSavedLine!.Name);
+        Assert.Null(_config.LastSavedLine!.LineId);
+        Assert.Empty(cut.FindAll("[data-testid=lane-builder]"));
+    }
+
+    [Fact]
+    public void Lane_builder_next_requires_a_name()
+    {
+        RenderComponent<MudBlazor.MudPopoverProvider>();
+        var cut = RenderComponent<ConfigExplorer>();
+
+        cut.Find("[data-testid=add-lane]").Click();
+        // Advancing without a name is blocked; still on step 1 (no printers step controls).
+        cut.Find("[data-testid=builder-next]").Click();
+
+        Assert.NotNull(cut.Find("[data-testid=builder-lane-name]"));
+        Assert.Empty(cut.FindAll("[data-testid=builder-add-printer]"));
+    }
+
     private sealed class FakeConfig
         : IConfigTreeQuery, ISettingsEditor, ILabelDefEditor, IMandaStationEditor,
           ILineEditor, IPrinterEditor, IFirePointEditor, IMapEditor
@@ -113,6 +154,8 @@ public sealed class ConfigExplorerTests : TestContext
         public int LabelSaves { get; private set; }
         public int FirePointSaves { get; private set; }
         public FirePointDto? LastSavedFirePoint { get; private set; }
+        public int LineSaves { get; private set; }
+        public LineDto? LastSavedLine { get; private set; }
 
         public Task<ConfigTreeNode> GetTreeAsync(CancellationToken ct = default)
         {
@@ -167,8 +210,12 @@ public sealed class ConfigExplorerTests : TestContext
             Task.FromResult<IReadOnlyList<LineDto>>([]);
         Task<LineDto?> IConfigEditor<LineDto>.GetAsync(string id, CancellationToken ct) =>
             Task.FromResult<LineDto?>(new LineDto(id, "L", [], [], [], null, LineControlPolicy.AllowDegraded, 1));
-        Task<CommandResult> IConfigEditor<LineDto>.SaveAsync(LineDto e, CancellationToken ct) =>
-            Task.FromResult(CommandResult.Ok());
+        Task<CommandResult> IConfigEditor<LineDto>.SaveAsync(LineDto e, CancellationToken ct)
+        {
+            LineSaves++;
+            LastSavedLine = e;
+            return Task.FromResult(CommandResult.Ok());
+        }
         Task<CommandResult> IConfigEditor<LineDto>.DeleteAsync(string id, CancellationToken ct) =>
             Task.FromResult(CommandResult.Ok());
 

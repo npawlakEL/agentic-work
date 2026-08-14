@@ -16,13 +16,119 @@
 
 <div class="cfg-head">
     <MudText Typo="Typo.h4" data-testid="page-heading">Config Explorer</MudText>
-    <MudText Typo="Typo.body2" Class="cfg-sub">Pick a lane to edit its config, printers, fire points and maps, or switch tabs to manage label definitions, stations and system settings.</MudText>
+    <MudText Typo="Typo.body2" Class="cfg-sub">Pick a lane to edit its config and printers, use Maps &amp; Fire Points to wire routing, or switch tabs to manage label definitions, stations and system settings.</MudText>
 </div>
 
 <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="cfg-panel" Class="cfg-tabs" data-testid="config-tabs">
 
     @* ---------------------------------------------------------------- Lines *@
     <MudTabPanel Text="Lines" Icon="@Icons.Material.Filled.ViewStream">
+      @if (_builderOpen)
+      {
+        <MudPaper Elevation="0" Class="cfg-card cfg-builder" data-testid="lane-builder">
+            <div class="cfg-builder-head">
+                <div>
+                    <MudText Typo="Typo.h6">New lane</MudText>
+                    <MudText Typo="Typo.caption" Class="cfg-muted">Step @(_builderStep + 1) of 2 — @(_builderStep == 0 ? "Lane details" : "Printers")</MudText>
+                </div>
+                <div class="cfg-steps">
+                    <span class="cfg-step @(_builderStep == 0 ? "active" : "done")">1 · Details</span>
+                    <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" />
+                    <span class="cfg-step @(_builderStep == 1 ? "active" : "")">2 · Printers</span>
+                </div>
+            </div>
+
+            @if (_builderStep == 0)
+            {
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="6"><MudTextField @bind-Value="_builderLane.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="builder-lane-name" /></MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="LineControlPolicy" @bind-Value="_builderLane.ControlPolicy" Label="Control policy" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            @foreach (var p in Enum.GetValues<LineControlPolicy>())
+                            {
+                                <MudSelectItem T="LineControlPolicy" Value="@p">@p</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6"><MudNumericField T="int" @bind-Value="_builderLane.OnlineMinimum" Label="Online minimum" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12"><MudTextField @bind-Value="_builderLane.Zones" Label="Zones (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12"><MudTextField @bind-Value="_builderLane.TrackingDevices" Label="Tracking devices (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12"><MudTextField @bind-Value="_builderLane.BufferOrder" Label="Buffer order (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                </MudGrid>
+            }
+            else
+            {
+                <div class="cfg-section-head">
+                    <MudText Typo="Typo.subtitle1"><MudIcon Icon="@Icons.Material.Filled.Print" Size="Size.Small" Class="me-1" />Printers</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="BuilderAddPrinter" data-testid="builder-add-printer">Add printer</MudButton>
+                </div>
+                @if (_builderPrinters.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="builder-printers-empty">No printers yet. Add one, or finish to create the lane without printers.</MudText>
+                }
+                else
+                {
+                    <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="cfg-panels">
+                        @foreach (var bp in _builderPrinters)
+                        {
+                            <MudExpansionPanel Expanded="true" data-testid="builder-printer-panel">
+                                <TitleContent>
+                                    <div class="cfg-panel-title">
+                                        <MudIcon Icon="@Icons.Material.Filled.Print" Size="Size.Small" />
+                                        <span>@(string.IsNullOrWhiteSpace(bp.Name) ? "New printer" : bp.Name)</span>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@OrientationColor(bp.Orientation)">@bp.Orientation</MudChip>
+                                    </div>
+                                </TitleContent>
+                                <ChildContent>
+                                    <MudGrid Spacing="2">
+                                        <MudItem xs="12" sm="6"><MudTextField @bind-Value="bp.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="12" sm="6">
+                                            <MudSelect T="string" @bind-Value="bp.Orientation" Label="Orientation" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                                <MudSelectItem T="string" Value="@("Side")">Side</MudSelectItem>
+                                                <MudSelectItem T="string" Value="@("Top")">Top</MudSelectItem>
+                                            </MudSelect>
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6"><MudTextField @bind-Value="bp.Ip" Label="IP" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="6" sm="3"><MudNumericField T="int" @bind-Value="bp.Port" Label="Port" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="6" sm="3"><MudNumericField T="int" @bind-Value="bp.ConfigOrder" Label="Config order" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="12"><MudTextField @bind-Value="bp.LabelTypes" Label="Label types (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="bp.LabelWidthInches" Label="Label width (in)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="bp.TampMountHeightInches" Label="Tamp mount height (in)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="bp.EncoderResolutionInchesPerPulse" Label="Encoder res (in/pulse)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="bp.BeltSpeedInchesPerSecond" Label="Belt speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="bp.TampSpeedInchesPerSecond" Label="Tamp speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="bp.SpareEligible" Label="Spare eligible" /></MudItem>
+                                    </MudGrid>
+                                    <div class="cfg-actions">
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteOutline" OnClick="@(() => BuilderRemovePrinter(bp))" data-testid="builder-remove-printer">Remove</MudButton>
+                                    </div>
+                                </ChildContent>
+                            </MudExpansionPanel>
+                        }
+                    </MudExpansionPanels>
+                }
+            }
+
+            <MudDivider Class="my-4" />
+            <div class="cfg-builder-actions">
+                <MudButton Variant="Variant.Text" OnClick="BuilderCancel" data-testid="builder-cancel">Cancel</MudButton>
+                <div class="cfg-actions-right">
+                    @if (_builderStep == 1)
+                    {
+                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ChevronLeft" OnClick="BuilderBack" data-testid="builder-back">Back</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check" OnClick="BuilderFinishAsync" data-testid="builder-finish">Create lane</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" EndIcon="@Icons.Material.Filled.ChevronRight" OnClick="BuilderNext" data-testid="builder-next">Next</MudButton>
+                    }
+                </div>
+            </div>
+        </MudPaper>
+      }
+      else
+      {
         <div class="cfg-toolbar">
             <MudSelect T="string" Label="Lane" Value="_laneId" ValueChanged="OnLaneChangedAsync"
                        Variant="Variant.Outlined" Margin="Margin.Dense" Class="cfg-lane-select"
@@ -33,7 +139,7 @@
                 }
             </MudSelect>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="AddLaneAsync" data-testid="add-lane">Add lane</MudButton>
+                       OnClick="OpenBuilder" data-testid="add-lane">Add lane</MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteOutline"
                        OnClick="DeleteLaneAsync" Disabled="@(_laneDraft is null)" data-testid="delete-lane">Delete lane</MudButton>
         </div>
@@ -139,7 +245,7 @@
                                 @{ var printerFps = FirePointsForPrinter(item.Draft.Id); }
                                 @if (printerFps.Count == 0)
                                 {
-                                    <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty">No fire points. Add them in the Fire Points tab.</MudText>
+                                    <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty">No fire points. Add them in the Maps &amp; Fire Points tab.</MudText>
                                 }
                                 else
                                 {
@@ -149,7 +255,7 @@
                                             <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.GpsFixed">@FirePointChipText(fp)</MudChip>
                                         }
                                     </div>
-                                    <MudText Typo="Typo.caption" Class="cfg-muted">Manage fire points in the Fire Points tab.</MudText>
+                                    <MudText Typo="Typo.caption" Class="cfg-muted">Manage fire points in the Maps &amp; Fire Points tab.</MudText>
                                 }
                             </ChildContent>
                         </MudExpansionPanel>
@@ -157,60 +263,80 @@
                 </MudExpansionPanels>
             }
 
-            @* ---- Maps ---- *@
-            <div class="cfg-section-head">
-                <MudText Typo="Typo.subtitle1"><MudIcon Icon="@Icons.Material.Filled.Map" Size="Size.Small" Class="me-1" />Maps</MudText>
-                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                           OnClick="AddMap" data-testid="add-map">Add map</MudButton>
-            </div>
-            @if (_maps.Count == 0)
-            {
-                <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="maps-empty">No maps on this lane yet.</MudText>
-            }
-            else
-            {
-                <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="cfg-panels">
-                    @foreach (var map in _maps)
-                    {
-                        <MudExpansionPanel data-testid="map-panel">
-                            <TitleContent>
-                                <div class="cfg-panel-title">
-                                    <MudIcon Icon="@Icons.Material.Filled.Map" Size="Size.Small" />
-                                    <span>@(string.IsNullOrWhiteSpace(map.Name) ? "New map" : map.Name)</span>
-                                </div>
-                            </TitleContent>
-                            <ChildContent>
-                                <MudGrid Spacing="2">
-                                    <MudItem xs="12" sm="6"><MudTextField @bind-Value="map.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                    <MudItem xs="12">
-                                        <MudSelect T="string" MultiSelection="true" Label="Fire points"
-                                                   SelectedValues="@map.FirePointIds" SelectedValuesChanged="@(v => OnMapFirePointsChanged(map, v))"
-                                                   MultiSelectionTextFunc="@(ids => FirePointSummary(ids))"
-                                                   Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
-                                                   Disabled="@(_allFirePoints.Count == 0)"
-                                                   HelperText="@(_allFirePoints.Count == 0 ? "No fire points defined yet — add them in the Fire Points tab." : "Check the fire points this map applies.")"
-                                                   data-testid="map-firepoints">
-                                            @foreach (var fp in _allFirePoints.Where(f => f.Id is not null))
-                                            {
-                                                <MudSelectItem T="string" Value="@fp.Id">@FirePointLabel(fp)</MudSelectItem>
-                                            }
-                                        </MudSelect>
-                                    </MudItem>
-                                </MudGrid>
-                                <div class="cfg-actions">
-                                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveMapAsync(map))" data-testid="save-map">Save map</MudButton>
-                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteMapAsync(map))" data-testid="delete-map">Delete</MudButton>
-                                </div>
-                            </ChildContent>
-                        </MudExpansionPanel>
-                    }
-                </MudExpansionPanels>
-            }
         }
+      }
     </MudTabPanel>
 
-    @* ------------------------------------------------------- Fire points *@
-    <MudTabPanel Text="Fire Points" Icon="@Icons.Material.Filled.GpsFixed">
+    @* --------------------------------------------- Maps & Fire points *@
+    <MudTabPanel Text="Maps &amp; Fire Points" Icon="@Icons.Material.Filled.Route">
+        @* ---- Maps (scoped to the selected lane) ---- *@
+        <div class="cfg-toolbar">
+            <MudSelect T="string" Label="Lane" Value="_laneId" ValueChanged="OnLaneChangedAsync"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="cfg-lane-select"
+                       Disabled="@(_lines.Count == 0)" data-testid="map-lane-select">
+                @foreach (var line in _lines)
+                {
+                    <MudSelectItem T="string" Value="@line.LineId">@line.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+        <div class="cfg-section-head">
+            <MudText Typo="Typo.subtitle1"><MudIcon Icon="@Icons.Material.Filled.Map" Size="Size.Small" Class="me-1" />Maps</MudText>
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="AddMap" Disabled="@(_laneId is null)" data-testid="add-map">Add map</MudButton>
+        </div>
+        @if (_laneId is null)
+        {
+            <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="maps-nolane">Select a lane to manage its maps.</MudText>
+        }
+        else if (_maps.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="maps-empty">No maps on this lane yet.</MudText>
+        }
+        else
+        {
+            <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="cfg-panels">
+                @foreach (var map in _maps)
+                {
+                    <MudExpansionPanel data-testid="map-panel">
+                        <TitleContent>
+                            <div class="cfg-panel-title">
+                                <MudIcon Icon="@Icons.Material.Filled.Map" Size="Size.Small" />
+                                <span>@(string.IsNullOrWhiteSpace(map.Name) ? "New map" : map.Name)</span>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">@map.FirePointIds.Count fire points</MudChip>
+                            </div>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" sm="6"><MudTextField @bind-Value="map.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                <MudItem xs="12">
+                                    <MudSelect T="string" MultiSelection="true" Label="Fire points"
+                                               SelectedValues="@map.FirePointIds" SelectedValuesChanged="@(v => OnMapFirePointsChanged(map, v))"
+                                               MultiSelectionTextFunc="@(ids => FirePointSummary(ids))"
+                                               Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                                               Disabled="@(_allFirePoints.Count == 0)"
+                                               HelperText="@(_allFirePoints.Count == 0 ? "No fire points defined yet — add them in the Fire points section below." : "Check the fire points this map applies.")"
+                                               data-testid="map-firepoints">
+                                        @foreach (var fp in _allFirePoints.Where(f => f.Id is not null))
+                                        {
+                                            <MudSelectItem T="string" Value="@fp.Id">@FirePointLabel(fp)</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                            </MudGrid>
+                            <div class="cfg-actions">
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveMapAsync(map))" data-testid="save-map">Save map</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteMapAsync(map))" data-testid="delete-map">Delete</MudButton>
+                            </div>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+            </MudExpansionPanels>
+        }
+
+        <MudDivider Class="my-4" />
+
+        @* ---- Fire points (all printers, system-wide) ---- *@
         <div class="cfg-section-head">
             <MudText Typo="Typo.subtitle1"><MudIcon Icon="@Icons.Material.Filled.GpsFixed" Size="Size.Small" Class="me-1" />Fire points</MudText>
             <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
@@ -398,6 +524,13 @@
     .cfg-muted { color: var(--mud-palette-text-secondary); }
     .cfg-inline-empty { padding: 12px 4px; }
     .cfg-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 48px 16px; color: var(--mud-palette-text-secondary); text-align: center; }
+    .cfg-builder-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    .cfg-steps { display: flex; align-items: center; gap: 8px; }
+    .cfg-step { font-size: 0.8rem; font-weight: 600; padding: 4px 12px; border-radius: 999px; color: var(--mud-palette-text-secondary); background: var(--mud-palette-background-gray); border: 1px solid var(--mud-palette-lines-default); }
+    .cfg-step.active { color: var(--mud-palette-primary-text); background: var(--mud-palette-primary); border-color: var(--mud-palette-primary); }
+    .cfg-step.done { color: var(--mud-palette-success); border-color: var(--mud-palette-success); background: transparent; }
+    .cfg-builder-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 16px; }
+    .cfg-actions-right { display: flex; gap: 8px; }
 </style>
 
 @code {
@@ -413,6 +546,12 @@
     private List<LabelDraft> _labels = [];
     private List<StationDraft> _stations = [];
     private SettingsDraft? _settings;
+
+    // Lane builder (step-by-step wizard) state.
+    private bool _builderOpen;
+    private int _builderStep;
+    private LineDraft _builderLane = new();
+    private List<PrinterDraft> _builderPrinters = [];
 
     private string LaneTitle => string.IsNullOrWhiteSpace(_laneDraft?.Name) ? "Untitled lane" : _laneDraft!.Name;
 
@@ -523,17 +662,71 @@
         await LoadLaneAsync(id);
     }
 
-    private async Task AddLaneAsync()
+    // ---- Lane builder (step-by-step wizard) ----
+
+    private void OpenBuilder()
     {
-        var before = _lines.Select(l => l.LineId).Where(id => id is not null).ToHashSet(StringComparer.Ordinal)!;
-        var result = await LineEditor.SaveAsync(new LineDraft { Name = "New Lane" }.ToDto());
-        Notify(result, "Lane added.");
-        if (result.Success)
+        _builderLane = new LineDraft { Name = "", ControlPolicy = LineControlPolicy.AllowDegraded, OnlineMinimum = 1 };
+        _builderPrinters = [];
+        _builderStep = 0;
+        _builderOpen = true;
+    }
+
+    private void BuilderCancel() => _builderOpen = false;
+
+    private void BuilderNext()
+    {
+        if (string.IsNullOrWhiteSpace(_builderLane.Name))
         {
-            var list = await LineEditor.ListAsync();
-            var added = list.FirstOrDefault(l => l.LineId is not null && !before.Contains(l.LineId));
-            await LoadLinesAsync(added?.LineId);
+            Snackbar.Add("Enter a lane name to continue.", Severity.Warning);
+            return;
         }
+        _builderStep = 1;
+    }
+
+    private void BuilderBack() => _builderStep = 0;
+
+    private void BuilderAddPrinter() =>
+        _builderPrinters.Add(new PrinterDraft { Name = "New Printer", Orientation = "Side" });
+
+    private void BuilderRemovePrinter(PrinterDraft printer) => _builderPrinters.Remove(printer);
+
+    private async Task BuilderFinishAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_builderLane.Name))
+        {
+            Snackbar.Add("Enter a lane name to continue.", Severity.Warning);
+            _builderStep = 0;
+            return;
+        }
+
+        var before = _lines.Select(l => l.LineId).Where(id => id is not null).ToHashSet(StringComparer.Ordinal)!;
+        var laneResult = await LineEditor.SaveAsync(_builderLane.ToDto());
+        Notify(laneResult, "Lane created.");
+        if (!laneResult.Success) { return; }
+
+        var list = await LineEditor.ListAsync();
+        var newId = list.FirstOrDefault(l => l.LineId is not null && !before.Contains(l.LineId))?.LineId;
+
+        var printerFailures = 0;
+        if (newId is not null)
+        {
+            foreach (var printer in _builderPrinters)
+            {
+                printer.LineId = newId;
+                var result = await PrinterEditor.SaveAsync(printer.ToDto());
+                if (!result.Success) { printerFailures++; }
+            }
+        }
+
+        if (printerFailures > 0)
+        {
+            Snackbar.Add($"{printerFailures} printer(s) could not be saved.", Severity.Warning);
+        }
+
+        _builderOpen = false;
+        await LoadLinesAsync(newId);
+        await LoadPrintersAllAsync();
     }
 
     private async Task DeleteLaneAsync()
