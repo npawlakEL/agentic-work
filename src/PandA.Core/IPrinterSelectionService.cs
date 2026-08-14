@@ -2,9 +2,10 @@ namespace PandA.Core;
 
 /// <summary>
 /// Selects which printer prints each label of a carton, implementing the authoritative algorithm in
-/// architecture-log 005: eligibility (online + not spare + LabelMap has the type + orientation),
-/// per-label-type least-recently-printed round robin, same-carton collision→backup routing, and a
-/// configured-order tie-break.
+/// architecture-log 005: eligibility (online + not spare + LabelMap has the type), per-label-type
+/// least-recently-printed round robin, same-carton collision→backup routing, and a configured-order
+/// tie-break. Orientation is a physical attribute of the printer, NOT a selection filter — a label
+/// routes to whichever printer maps its type regardless of orientation.
 /// </summary>
 public interface IPrinterSelectionService
 {

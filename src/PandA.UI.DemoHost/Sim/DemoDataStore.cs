@@ -157,28 +157,46 @@ public sealed class DemoDataStore
 
     private void SeedCartons()
     {
-        var lineId = Lines.Values.First().LineId!;
-        var mapName = Maps.Values.First().Name;
+        // Seed a carton set for EVERY line, each stamped with that line's OWN active-map profile name.
+        // Ordered deterministically by line name (never ConcurrentDictionary.Values ordering, which is
+        // undefined) and the map is pulled from the line's ActiveMapId so line and profile always agree —
+        // otherwise a carton could carry another line's profile and dead-end at NoProfile on induct.
+        var lines = Lines.Values.OrderBy(l => l.Name, StringComparer.Ordinal).ToList();
+        for (var li = 0; li < lines.Count; li++)
+        {
+            var line = lines[li];
+            var lineId = line.LineId!;
+            var mapName = line.ActiveMapId is { } activeMapId && Maps.TryGetValue(activeMapId, out var map)
+                ? map.Name
+                : Maps.Values.First(m => string.Equals(m.LineId, lineId, StringComparison.OrdinalIgnoreCase)).Name;
+            SeedCartonsForLine(lineId, mapName, li);
+        }
+    }
+
+    private void SeedCartonsForLine(string lineId, string mapName, int lineOffset)
+    {
         var statuses = new[] { "Inducted", "Printed", "Verified", "Held", "Rejected" };
         var reasons = new[] { "", "", "", "Verify failed", "No read at apply" };
+        var idOffset = lineOffset * 100;  // CTN id block per line (line0: x000, line1: x100, …) — no overlap.
+        var b = lineOffset * 1000;        // barcode/LPN/blind offset — keeps values globally distinct.
 
         for (var i = 0; i < 12; i++)
         {
-            var id = $"CTN{1000 + i}";
+            var id = $"CTN{1000 + idOffset + i}";
             var status = statuses[i % statuses.Length];
             var held = string.Equals(status, "Held", StringComparison.Ordinal);
             var rejected = string.Equals(status, "Rejected", StringComparison.Ordinal);
 
             var slots = new List<CartonLabelSlot>
             {
-                new(1, "Shipping", $"SHIP{9000 + i}", $"LPN{5000 + i}", $"^XA^FO50,50^A0N,40,40^FDShipping {i}^FS^XZ", i % 5 != 0),
-                new(2, "Content", $"CONT{9000 + i}", $"LPN{5100 + i}", $"^XA^FO50,50^A0N,40,40^FDContent {i}^FS^XZ", i % 5 != 0),
+                new(1, "Shipping", $"SHIP{9000 + b + i}", $"LPN{5000 + b + i}", $"^XA^FO50,50^A0N,40,40^FDShipping {i}^FS^XZ", i % 5 != 0),
+                new(2, "Content", $"CONT{9000 + b + i}", $"LPN{5100 + b + i}", $"^XA^FO50,50^A0N,40,40^FDContent {i}^FS^XZ", i % 5 != 0),
             };
 
             Cartons[id] = new DemoCarton
             {
                 CartonId = id,
-                BlindLabel = $"BLIND{7000 + i}",
+                BlindLabel = $"BLIND{7000 + b + i}",
                 Upc = $"01234500{i:D4}",
                 Gtin = $"1001234500{i:D4}",
                 Ean = $"400123450{i:D4}",
@@ -203,11 +221,11 @@ public sealed class DemoDataStore
         // label routes to the line's Top printer — so both sets are green end-to-end samples.
         for (var j = 0; j < 2; j++)
         {
-            var id = $"CTN{2000 + j}";
+            var id = $"CTN{2000 + idOffset + j}";
             Cartons[id] = new DemoCarton
             {
                 CartonId = id,
-                BlindLabel = $"BLIND{7200 + j}",
+                BlindLabel = $"BLIND{7200 + b + j}",
                 Upc = $"09876500{j:D4}",
                 Gtin = $"1009876500{j:D4}",
                 Ean = $"400987650{j:D4}",
@@ -224,8 +242,8 @@ public sealed class DemoDataStore
                 LineId = lineId,
                 Slots =
                 [
-                    new(1, "Shipping", $"SHIP{9200 + j}", $"LPN{5200 + j}", $"^XA^FO50,50^A0N,40,40^FDShipping {j}^FS^XZ", false),
-                    new(2, "Return", $"RTRN{9200 + j}", $"LPN{5220 + j}", $"^XA^FO50,50^A0N,40,40^FDReturn {j}^FS^XZ", false),
+                    new(1, "Shipping", $"SHIP{9200 + b + j}", $"LPN{5200 + b + j}", $"^XA^FO50,50^A0N,40,40^FDShipping {j}^FS^XZ", false),
+                    new(2, "Return", $"RTRN{9200 + b + j}", $"LPN{5220 + b + j}", $"^XA^FO50,50^A0N,40,40^FDReturn {j}^FS^XZ", false),
                 ],
             };
         }

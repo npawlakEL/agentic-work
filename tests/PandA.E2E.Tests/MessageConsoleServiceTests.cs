@@ -114,6 +114,49 @@ public sealed class MessageConsoleServiceTests
         Assert.NotEmpty(data.Labels);
     }
 
+    [Fact]
+    public async Task Non_default_line_also_has_a_green_runnable_carton()
+    {
+        var store = new DemoDataStore();
+        var console = new MessageConsoleService(store);
+        var lines = console.Lines();
+
+        // Every line must have its OWN seeded, green-runnable carton — not just the default line. Regression
+        // for the old .Values.First() seed that put all cartons (and a single line's profile) on one line,
+        // leaving other lines dead-ending at NoProfile.
+        Assert.True(lines.Count >= 2, "Expected at least two selectable lines.");
+        foreach (var (lineId, _) in lines)
+        {
+            var barcodes = console.CartonsForLine(lineId);
+            var sideOnly = barcodes.First(c =>
+                store.Cartons[c.CartonId].Slots.All(s =>
+                    !string.Equals(s.LabelType, "Content", StringComparison.OrdinalIgnoreCase)) &&
+                string.Equals(store.Cartons[c.CartonId].LineId, lineId, StringComparison.OrdinalIgnoreCase));
+
+            var result = await console.RunAsync(lineId, sideOnly.CartonId);
+
+            Assert.True(result.Success, $"Line {lineId} carton {sideOnly.CartonId} did not verify.\n{Dump(result)}");
+            Assert.Equal("Verified", result.FinalStatus);
+        }
+    }
+
+    [Fact]
+    public void Every_seeded_carton_carries_its_own_lines_active_profile()
+    {
+        var store = new DemoDataStore();
+
+        // Guards the line/profile-agreement invariant: a carton's ProfileName must be its own line's
+        // active-map name, or induct resolves NoProfile and nothing prints.
+        foreach (var carton in store.Cartons.Values)
+        {
+            var line = store.Lines.Values.First(l =>
+                string.Equals(l.LineId, carton.LineId, StringComparison.OrdinalIgnoreCase));
+            var activeMap = store.Maps[line.ActiveMapId!];
+
+            Assert.Equal(activeMap.Name, carton.ProfileName);
+        }
+    }
+
     private static string Dump(MessageRunResult result) =>
         string.Join("\n", result.Entries.Select(e => e.Text))
         + "\n--logs--\n"

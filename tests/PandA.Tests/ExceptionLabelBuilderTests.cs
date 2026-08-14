@@ -67,6 +67,23 @@ public sealed class ExceptionLabelBuilderTests
     }
 
     [Fact]
+    public void Build_NotReceived_SubstitutesLpnWhenTemplateHasLpnSlot()
+    {
+        // Regression: NotReceived is the primary unmatched-carton path and must honor <LPN> substitution
+        // (a duplicated private UsesLpn once omitted it, emitting the literal token as an unscannable barcode).
+        var template = new LabelTemplate("Not Received", "^XA^FD<CartonID>^FS^FD<LPN>^FS^XZ", true);
+
+        var result = _builder.Build(ExceptionType.NotReceived, "C777", "BLIND42", template);
+
+        Assert.True(result.HasLabel);
+        Assert.NotNull(result.Zpl);
+        Assert.Contains("C777", result.Zpl);
+        Assert.Contains("BLIND42", result.Zpl);
+        Assert.DoesNotContain("<CartonID>", result.Zpl);
+        Assert.DoesNotContain("<LPN>", result.Zpl);
+    }
+
+    [Fact]
     public void Build_UnknownExceptionType_ReturnsNoTemplate()
     {
         var result = _builder.Build((ExceptionType)999, "C123", "LPN001", null);

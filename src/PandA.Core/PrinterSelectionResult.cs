@@ -4,7 +4,7 @@ public enum LabelSelectionStatus
 {
     Assigned = 0,
 
-    /// <summary>No eligible printer serves this label's type/orientation (source: skip label, not fail carton).</summary>
+    /// <summary>No eligible printer maps this label's type (source: skip label, not fail carton).</summary>
     NoPrinter = 1,
 }
 

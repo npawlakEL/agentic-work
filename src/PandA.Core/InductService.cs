@@ -230,6 +230,9 @@ public sealed class InductService : IInductService
                     && printer.PrinterType == ApplyOrientation.Side)
                 {
                     var applyConfig = new ApplyPointConfig(EncoderResolution: context.Config.EncoderResolution);
+                    // Side-apply math ignores height; Length is already in step pulses. When Top-apply is
+                    // commissioned, Height (PLC units) must be converted to inches before it feeds the
+                    // tamp-kinematic lead correction (which is inch-based). Gated to Side keeps that latent.
                     var dims = new CartonDimensions(m.Length, m.Height);
                     applyPulse = _applyPoints.Resolve(fp.ApplyFirePoint, ApplyOrientation.Side, dims, applyConfig);
                 }
@@ -237,6 +240,11 @@ public sealed class InductService : IInductService
 
             // F12 (decision-014): request Zebra host status by appending ~HS when the line opts in.
             var zpl = context.Config.PrinterStatusSuffix ? ZplStatusSuffix.Append(label.Zpl) : label.Zpl;
+
+            // NOTE (deferred): FirePoint.NeglectPrint (source PrintFirePoint LIKE '0%' → "apply but do
+            // not print") is not yet honored here — apply-only dispatch requires the gateway/PrintJob to
+            // carry an "apply without ZPL" mode, which lands with Top-apply tamp commissioning. No seeded
+            // profile currently sets a neglect-print fire point, so this path is unreachable today.
 
             await _gateway.SendAsync(
                 new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, zpl, firePoint, applyPulse),

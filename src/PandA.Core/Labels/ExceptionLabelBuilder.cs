@@ -26,14 +26,11 @@ public sealed class ExceptionLabelBuilder
 
         var zpl = template.Template.Replace("<CartonID>", cartonId, StringComparison.Ordinal);
 
-        if (UsesLpn(type))
+        if (ExceptionLabelPolicy.UsesLpn(type))
         {
             zpl = zpl.Replace("<LPN>", lpn ?? string.Empty, StringComparison.Ordinal);
         }
 
         return ExceptionBuildResult.Success(zpl);
     }
-
-    private static bool UsesLpn(ExceptionType type) =>
-        type is ExceptionType.Duplicate or ExceptionType.NoInformation;
 }
