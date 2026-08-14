@@ -22,6 +22,7 @@ const ARM_HALF = 10;      // half-length of the tamp arm mesh
 const BELT_TOP_Y = 3.2;   // top surface of the belt (carton sits here)
 const LABEL_W = 4;        // rendered label width along the travel axis (inches)
 const LABEL_H = 4;        // rendered label height (inches)
+const CARTON_BROWN = 0x9c6b3f;  // kraft cardboard — cartons keep this colour; status is shown as text
 
 export async function start(element, dotnetReference) {
     host = element;
@@ -147,6 +148,93 @@ function buildLine() {
     root.add(floor);
 }
 
+// A warehouse label print-and-apply enclosure centred at belt-side z=`cz`, with a coloured top cap
+// (`accent` distinguishes top vs side units), a control panel + indicator lights on the camera-facing
+// face, a label supply reel on top, and a status beacon. Purely cosmetic — the tamp arm/pad are added
+// by the caller and are unaffected.
+function addPrinterEnclosure(parent, cz, accent) {
+    const shell = new three.MeshStandardMaterial({ color: 0xb8c0cc, roughness: 0.6, metalness: 0.28 });
+    const panelMat = new three.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.5, metalness: 0.3 });
+    const accentMat = new three.MeshStandardMaterial({ color: accent, roughness: 0.45, metalness: 0.3 });
+    const metalMat = new three.MeshStandardMaterial({ color: 0x64748b, roughness: 0.5, metalness: 0.5 });
+    const rollMat = new three.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.85 });
+
+    const body = new three.Mesh(new three.BoxGeometry(20, 22, 13), shell);
+    body.position.set(0, 14, cz);
+    parent.add(body);
+
+    const cap = new three.Mesh(new three.BoxGeometry(21, 2.2, 14), accentMat);
+    cap.position.set(0, 25.2, cz);
+    parent.add(cap);
+
+    const front = cz + 6.8;
+    const panel = new three.Mesh(new three.BoxGeometry(9, 9, 0.6), panelMat);
+    panel.position.set(-4, 16, front);
+    parent.add(panel);
+    const lightColors = [0x22c55e, 0xf59e0b, 0x38bdf8];
+    for (let i = 0; i < lightColors.length; i++) {
+        const c = lightColors[i];
+        const light = new three.Mesh(
+            new three.CylinderGeometry(0.5, 0.5, 0.4, 12),
+            new three.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.85 })
+        );
+        light.rotation.x = Math.PI / 2;
+        light.position.set(2 + i * 1.7, 19, front + 0.1);
+        parent.add(light);
+    }
+
+    // Label supply reel on top (axis along X).
+    const hub = new three.Mesh(new three.CylinderGeometry(4.6, 4.6, 6.4, 20), rollMat);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.set(0, 28.6, cz);
+    parent.add(hub);
+    for (const dx of [-3.4, 3.4]) {
+        const flange = new three.Mesh(new three.CylinderGeometry(4.9, 4.9, 0.5, 20), metalMat);
+        flange.rotation.z = Math.PI / 2;
+        flange.position.set(dx, 28.6, cz);
+        parent.add(flange);
+    }
+
+    // Status beacon.
+    const beaconBase = new three.Mesh(new three.CylinderGeometry(0.5, 0.5, 2, 10), metalMat);
+    beaconBase.position.set(8, 25.6, cz);
+    parent.add(beaconBase);
+    const beacon = new three.Mesh(
+        new three.CylinderGeometry(1, 1, 2.6, 12),
+        new three.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.9, transparent: true, opacity: 0.85 })
+    );
+    beacon.position.set(8, 27.9, cz);
+    parent.add(beacon);
+}
+
+// A white print-media texture with a barcode and optional caption — used for the label riding the tamp
+// pad and the label stamped onto the carton, so a "printed" label reads as real media, not a red square.
+function makeLabelTexture(caption) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillStyle = "#0f172a";
+    let x = 14;
+    while (x < 114) {
+        const w = 2 + Math.floor(Math.random() * 4);
+        ctx.fillRect(x, 18, w, 58);
+        x += w + 2 + Math.floor(Math.random() * 4);
+    }
+    if (caption) {
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "bold 26px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(caption), 64, 100);
+    }
+    const texture = new three.CanvasTexture(canvas);
+    texture.anisotropy = 4;
+    return texture;
+}
+
 // Build a print-and-apply station. A TOP station has an overhead gantry with a tamp arm that
 // extends DOWN onto the carton top; a SIDE station has a horizontal arm that extends IN toward
 // the carton's near (+z) face. Each station is placed statically at its printer-eye X.
@@ -154,26 +242,19 @@ function buildStation(printer) {
     const top = String(printer.orientation).toLowerCase() === "top";
     const group = new three.Group();
 
-    const bodyMat = new three.MeshStandardMaterial({ color: top ? 0x0f766e : 0x9333ea, roughness: 0.5, metalness: 0.2 });
     const frameMat = new three.MeshStandardMaterial({ color: 0x334155, roughness: 0.6, metalness: 0.4 });
     const tampMat = new three.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35, metalness: 0.2 });
-    const slotMat = new three.MeshStandardMaterial({ color: 0xfef3c7 });
 
     const tamp = new three.Group();
 
     if (top) {
-        // Body beside the belt at -z, gantry over the belt centre, vertical tamp arm.
-        const body = new three.Mesh(new three.BoxGeometry(22, 26, 14), bodyMat);
-        body.position.set(0, 16, -24);
-        group.add(body);
-        const slot = new three.Mesh(new three.BoxGeometry(10, 2, 1), slotMat);
-        slot.position.set(0, 12, -16.6);
-        group.add(slot);
-        const gantry = new three.Mesh(new three.BoxGeometry(3.5, 3.5, 34), frameMat);
-        gantry.position.set(0, 34, -8);
+        // Enclosure beside the belt at -z, gantry over the belt centre, vertical tamp arm.
+        addPrinterEnclosure(group, -24, 0x14b8a6);
+        const gantry = new three.Mesh(new three.BoxGeometry(3.5, 3.5, 40), frameMat);
+        gantry.position.set(0, 34, -6);
         group.add(gantry);
-        const column = new three.Mesh(new three.BoxGeometry(4, 40, 4), frameMat);
-        column.position.set(0, 20, -24);
+        const column = new three.Mesh(new three.BoxGeometry(4.5, 44, 4.5), frameMat);
+        column.position.set(0, 22, -24);
         group.add(column);
 
         const arm = new three.Mesh(new three.BoxGeometry(3, ARM_HALF * 2, 3), frameMat);
@@ -183,16 +264,8 @@ function buildStation(printer) {
         tamp.add(pad);
         tamp.position.set(0, REST_TAMP_Y, 0);
     } else {
-        // Body beside the belt at +z (camera-facing), horizontal arm extending in -z onto the side face.
-        const body = new three.Mesh(new three.BoxGeometry(22, 24, 14), bodyMat);
-        body.position.set(0, 14, 26);
-        group.add(body);
-        const slot = new three.Mesh(new three.BoxGeometry(10, 2, 1), slotMat);
-        slot.position.set(0, 12, 18.6);
-        group.add(slot);
-        const column = new three.Mesh(new three.BoxGeometry(4, 30, 4), frameMat);
-        column.position.set(0, 15, 26);
-        group.add(column);
+        // Enclosure beside the belt at +z (camera-facing), horizontal arm extending in -z onto the side face.
+        addPrinterEnclosure(group, 26, 0x6366f1);
 
         const arm = new three.Mesh(new three.BoxGeometry(3, 3, ARM_HALF * 2), frameMat);
         tamp.add(arm);
@@ -204,17 +277,17 @@ function buildStation(printer) {
 
     group.add(tamp);
 
-    // A "loaded" label riding the tamp pad: the SAME red label that gets stamped onto the carton, shown
+    // A "loaded" label riding the tamp pad: the SAME white label that gets stamped onto the carton, shown
     // on the pad's visible face from the moment the carton's leading edge hits the print point until it
     // is applied — so the operator watches the exact label print onto the head, travel, then transfer to
-    // the carton. Styled to match the applied label (red plane + dark border).
+    // the carton. Styled to match the applied label (white print media + dark border).
     const loaded = new three.Mesh(
         new three.PlaneGeometry(LABEL_W, LABEL_H),
-        new three.MeshBasicMaterial({ color: 0xdc2626, side: three.DoubleSide })
+        new three.MeshBasicMaterial({ map: makeLabelTexture(), side: three.DoubleSide })
     );
     const loadedBorder = new three.Mesh(
         new three.PlaneGeometry(LABEL_W + 0.6, LABEL_H + 0.6),
-        new three.MeshBasicMaterial({ color: 0x7f1d1d, side: three.DoubleSide })
+        new three.MeshBasicMaterial({ color: 0x334155, side: three.DoubleSide })
     );
     loadedBorder.position.z = -0.05;
     loaded.add(loadedBorder);
@@ -382,19 +455,26 @@ function syncEyes(nextEyes) {
 
 function makeEye() {
     const group = new three.Group();
-    const postMaterial = new three.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.45, metalness: 0.3 });
-    const post = new three.Mesh(new three.CylinderGeometry(0.8, 0.8, 18, 12), postMaterial);
-    post.position.set(0, 9, 16);
-    group.add(post);
-    const head = new three.Mesh(new three.BoxGeometry(5, 4, 4), postMaterial);
-    head.position.set(0, 18, 13);
-    group.add(head);
+    const bodyMaterial = new three.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.5, metalness: 0.45 });
+    const faceMaterial = new three.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.35, metalness: 0.2 });
+    // A compact photoelectric sensor planted on the near conveyor edge (like a real photo-eye), low to the
+    // belt, rather than a tall stalk. The beam still shoots across the belt and is recoloured on trip.
+    const foot = new three.Mesh(new three.BoxGeometry(3.6, 1.2, 4.4), bodyMaterial);
+    foot.position.set(0, 3.6, 12.6);
+    group.add(foot);
+    const housing = new three.Mesh(new three.BoxGeometry(2.6, 5.4, 3.4), bodyMaterial);
+    housing.position.set(0, 6.9, 12.6);
+    group.add(housing);
+    const lens = new three.Mesh(new three.CylinderGeometry(0.9, 0.9, 0.5, 16), faceMaterial);
+    lens.rotation.x = Math.PI / 2;
+    lens.position.set(0, 7.2, 10.8);
+    group.add(lens);
     const beam = new three.Mesh(
-        new three.BoxGeometry(1.1, 0.45, 30),
+        new three.BoxGeometry(0.7, 0.5, 26),
         new three.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0369a1, emissiveIntensity: 1.2 })
     );
     beam.name = "beam";
-    beam.position.set(0, 17.5, 0);
+    beam.position.set(0, 7.2, -1);
     group.add(beam);
     return group;
 }
@@ -410,7 +490,7 @@ function syncCartons(nextCartons) {
             root.add(group);
         }
         group.position.x = toSceneX(carton.positionInches + carton.lengthInches / 2);
-        group.userData.body.material.color.set(colorFor(carton.state));
+        updateCartonStatus(group, carton);
         syncLabels(group, carton);
     }
     for (const [id, group] of cartons) {
@@ -425,15 +505,41 @@ function makeCarton(carton) {
     const group = new three.Group();
     const body = new three.Mesh(
         new three.BoxGeometry(carton.lengthInches, carton.heightInches, carton.widthInches),
-        new three.MeshStandardMaterial({ color: colorFor(carton.state), roughness: 0.82 })
+        new three.MeshStandardMaterial({ color: CARTON_BROWN, roughness: 0.92, metalness: 0.02 })
     );
     body.position.y = BELT_TOP_Y + carton.heightInches / 2;
     group.add(body);
     group.userData.body = body;
+
+    // A strip of packing tape along the top seam, for a cardboard-carton read.
+    const tape = new three.Mesh(
+        new three.BoxGeometry(carton.lengthInches, 0.12, 2.6),
+        new three.MeshStandardMaterial({ color: 0xd9c08a, roughness: 0.7, metalness: 0.05 })
+    );
+    tape.position.y = BELT_TOP_Y + carton.heightInches + 0.06;
+    group.add(tape);
+
     group.userData.labels = new Map();
     group.userData.ruler = buildRuler(carton);
     group.add(group.userData.ruler);
+    group.userData.statusHeight = BELT_TOP_Y + carton.heightInches + 6;
     return group;
+}
+
+// Cartons stay cardboard-brown; their processing state is shown as a floating text badge above the box
+// (rebuilt only when the state actually changes) instead of recolouring the carton itself.
+function updateCartonStatus(group, carton) {
+    if (group.userData.statusText === carton.state) return;
+    group.userData.statusText = carton.state;
+    if (group.userData.status) {
+        group.remove(group.userData.status);
+        group.userData.status.material.map?.dispose();
+        group.userData.status.material.dispose();
+    }
+    const sprite = makeTextSprite(carton.state, 4.2, statusTextColor(carton.state), "rgba(15,23,42,0.92)");
+    sprite.position.set(0, group.userData.statusHeight ?? (BELT_TOP_Y + 12), 0);
+    group.add(sprite);
+    group.userData.status = sprite;
 }
 
 // A lengthwise inch ruler pinned to the carton's top-front edge. 0 sits at the trailing (upstream)
@@ -489,15 +595,15 @@ function syncLabels(group, carton) {
         if (!entry) {
             const plane = new three.Mesh(
                 new three.PlaneGeometry(LABEL_W, LABEL_H),
-                new three.MeshBasicMaterial({ color: 0xdc2626, side: three.DoubleSide })
+                new three.MeshBasicMaterial({ map: makeLabelTexture(label.applyPointNotation), side: three.DoubleSide })
             );
             const border = new three.Mesh(
                 new three.PlaneGeometry(LABEL_W + 0.5, LABEL_H + 0.5),
-                new three.MeshBasicMaterial({ color: 0x7f1d1d, side: three.DoubleSide })
+                new three.MeshBasicMaterial({ color: 0x334155, side: three.DoubleSide })
             );
             border.position.z = -0.02;
             plane.add(border);
-            const tag = makeTextSprite(label.applyPointNotation ?? "?", 3.4, "#f8fafc", "rgba(220,38,38,0.92)");
+            const tag = makeTextSprite(label.applyPointNotation ?? "?", 3.4, "#e2e8f0", "rgba(15,23,42,0.92)");
             const marker = new three.Mesh(new three.BoxGeometry(0.4, 3.2, 0.4), new three.MeshBasicMaterial({ color: 0xf472b6 }));
             entry = { plane, tag, marker };
             group.userData.labels.set(key, entry);
@@ -584,13 +690,14 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 
-function colorFor(state) {
-    if (state === "Verified") return 0x22c55e;
-    if (state === "Rejected") return 0xef4444;
-    if (state === "Applied") return 0x38bdf8;
-    if (state === "Printed") return 0x818cf8;
-    if (state === "Scanned") return 0xf59e0b;
-    return 0xc08457;
+// Carton processing state → text colour for the floating status badge (the carton body stays brown).
+function statusTextColor(state) {
+    if (state === "Verified") return "#4ade80";
+    if (state === "Rejected") return "#f87171";
+    if (state === "Applied") return "#38bdf8";
+    if (state === "Printed") return "#a5b4fc";
+    if (state === "Scanned") return "#fbbf24";
+    return "#e2e8f0";
 }
 
 function toSceneX(inches) {
