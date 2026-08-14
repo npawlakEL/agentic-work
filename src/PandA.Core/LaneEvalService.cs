@@ -122,7 +122,10 @@ public sealed class LaneEvalService
                 }
                 else if (online > policy.OnlineMin && usable > policy.OnlineMin)
                 {
-                    // Surplus online capacity — park the newest active printer as a spare.
+                    // Surplus online capacity — park the newest active printer as a spare. Like the source
+                    // (sdisp_PA_LaneEval demote branch has no GOTO TOPCURS), this demotes exactly ONE printer
+                    // per orientation per Evaluate call and converges across successive calls; only a
+                    // promotion restarts the pass. Do NOT set promoted here.
                     var demoted = DemoteActive(group, now);
                     if (demoted is not null)
                     {

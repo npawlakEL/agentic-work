@@ -7,7 +7,10 @@ namespace PandA.Core.Verification;
 /// </summary>
 public sealed class VerificationService : IVerificationService
 {
-    private static readonly HashSet<string> ContentOnlyTypes =
+    // Types that are ALWAYS verified, even when the content-label toggle is off (source: the
+    // VerifyContentLabel=0 branch keeps only 'Shipping'/'Exception'). Named for that role — it is NOT
+    // the set of "content" types; it is the content-toggle-exempt set.
+    private static readonly HashSet<string> AlwaysVerifiedTypes =
         new(StringComparer.OrdinalIgnoreCase) { "Shipping", "Exception" };
 
     /// <inheritdoc />
@@ -171,7 +174,7 @@ public sealed class VerificationService : IVerificationService
                 continue;
             }
 
-            if (!options.VerifyContentLabel && !ContentOnlyTypes.Contains(label.LabelType))
+            if (!options.VerifyContentLabel && !AlwaysVerifiedTypes.Contains(label.LabelType))
             {
                 continue;
             }
@@ -195,7 +198,7 @@ public sealed class VerificationService : IVerificationService
             return [.. scanned];
         }
 
-        return [.. scanned.Where(s => ContentOnlyTypes.Contains(s.LabelType))];
+        return [.. scanned.Where(s => AlwaysVerifiedTypes.Contains(s.LabelType))];
     }
 
     private sealed class ExpectedLabel(string labelType, string primary, HashSet<string> acceptable)

@@ -19,7 +19,9 @@ public sealed record LabelXref(string LabelType, string Barcode);
 /// <summary>Toggles governing a verify pass (source PandA attributes).</summary>
 /// <param name="VerifyEnabled">When false, verify is skipped: <see cref="Bypass"/> decides Ignore vs Fail.</param>
 /// <param name="Bypass">When verify is disabled, a bypassed carton is <see cref="VerifyOutcome.Ignore"/>.</param>
-/// <param name="VerifyContentLabel">When false, only Shipping/Exception labels are verified.</param>
+/// <param name="VerifyContentLabel">When false, only Shipping/Exception labels are verified (source
+/// setting <c>VerifyContentLabel=0</c>). Defaults to true here — this port verifies the content label
+/// unless explicitly told not to, which is stricter than the source's site-default of 0.</param>
 public sealed record VerifyOptions(
     bool VerifyEnabled = true,
     bool Bypass = false,
