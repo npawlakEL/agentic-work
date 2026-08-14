@@ -204,17 +204,27 @@ function buildStation(printer) {
 
     group.add(tamp);
 
-    // A "loaded" label riding the tamp pad: shown only between the print fire point and apply, so the
-    // operator watches the label print onto the head, travel, then get stamped onto the carton.
+    // A "loaded" label riding the tamp pad: the SAME red label that gets stamped onto the carton, shown
+    // on the pad's visible face from the moment the carton's leading edge hits the print point until it
+    // is applied — so the operator watches the exact label print onto the head, travel, then transfer to
+    // the carton. Styled to match the applied label (red plane + dark border).
     const loaded = new three.Mesh(
         new three.PlaneGeometry(LABEL_W, LABEL_H),
-        new three.MeshBasicMaterial({ color: 0xf87171, side: three.DoubleSide })
+        new three.MeshBasicMaterial({ color: 0xdc2626, side: three.DoubleSide })
     );
+    const loadedBorder = new three.Mesh(
+        new three.PlaneGeometry(LABEL_W + 0.6, LABEL_H + 0.6),
+        new three.MeshBasicMaterial({ color: 0x7f1d1d, side: three.DoubleSide })
+    );
+    loadedBorder.position.z = -0.05;
+    loaded.add(loadedBorder);
     if (top) {
+        // On the underside of the descending pad, facing the carton top.
         loaded.rotation.set(-Math.PI / 2, 0, 0);
-        loaded.position.set(0, -ARM_HALF - 0.3, 0);
+        loaded.position.set(0, -ARM_HALF - 0.85, 0);
     } else {
-        loaded.position.set(0, 0, -ARM_HALF - 0.3);
+        // Proud of the camera-facing (+z) face of the side pad so it reads clearly.
+        loaded.position.set(0, 0, -ARM_HALF + 0.85);
     }
     loaded.visible = false;
     tamp.add(loaded);

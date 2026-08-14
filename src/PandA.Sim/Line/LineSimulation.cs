@@ -297,7 +297,9 @@ public sealed class LineSimulation
     /// </summary>
     private void PrintLabelsAtFirePoint(SimCarton carton)
     {
-        var centre = carton.PositionInches + carton.LengthInches / 2;
+        // The label prints onto the tamp head when the carton's LEADING (downstream) edge reaches the
+        // print point. PositionInches is the trailing edge, so the leading edge is + LengthInches.
+        var leadingEdge = carton.PositionInches + carton.LengthInches;
         carton.MutateLabels(label =>
         {
             if (label.Applied || label.OnTamp)
@@ -306,8 +308,8 @@ public sealed class LineSimulation
             }
 
             // Level-triggered (not edge): a label created at the induct eye whose print point is already
-            // behind the carton centre still prints immediately, rather than missing the crossing tick.
-            if (centre >= label.PrintPoint.X)
+            // behind the carton's leading edge still prints immediately, rather than missing the tick.
+            if (leadingEdge >= label.PrintPoint.X)
             {
                 return label with { OnTamp = true };
             }

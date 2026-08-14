@@ -83,10 +83,10 @@ public sealed class LineSimulationPrintFlowTests
         await sim.StartAsync();
         await sim.SpawnCartonAsync();
 
-        double? centreAtPrint = null;
+        double? leadingAtPrint = null;
         double printX = 0;
         var appliedBeforePrint = false;
-        for (var i = 0; i < 400 && centreAtPrint is null; i++)
+        for (var i = 0; i < 400 && leadingAtPrint is null; i++)
         {
             await Task.Delay(5);
             var snap = await sim.GetSnapshotAsync();
@@ -97,23 +97,23 @@ public sealed class LineSimulationPrintFlowTests
                 continue;
             }
 
-            if (label.Applied && !label.OnTamp && centreAtPrint is null)
+            if (label.Applied && !label.OnTamp && leadingAtPrint is null)
             {
                 appliedBeforePrint = true;
             }
 
             if (label.OnTamp)
             {
-                centreAtPrint = carton.PositionInches + carton.LengthInches / 2;
+                leadingAtPrint = carton.PositionInches + carton.LengthInches;
                 printX = label.PrintPoint.X;
             }
         }
 
-        Assert.True(centreAtPrint is not null, "label should ride the tamp head within the run window");
+        Assert.True(leadingAtPrint is not null, "label should ride the tamp head within the run window");
         Assert.False(appliedBeforePrint, "label must print onto the tamp head before it is applied");
-        // onTamp fires as the carton centre reaches the label's print point, not at a discrete eye.
-        Assert.True(centreAtPrint!.Value >= printX - 1,
-            $"print should fire at/after the print point (centre {centreAtPrint:0.0} vs printX {printX:0.0})");
+        // onTamp fires as the carton's LEADING edge reaches the label's print point, not at a discrete eye.
+        Assert.True(leadingAtPrint!.Value >= printX - 1,
+            $"print should fire once the leading edge reaches the print point (leading {leadingAtPrint:0.0} vs printX {printX:0.0})");
     }
 
     [Fact]
