@@ -3,7 +3,6 @@
 @using System.Globalization
 @using PandA.UI.Contracts.Common
 @using PandA.UI.Contracts.Config
-@inject IConfigTreeQuery Tree
 @inject ISettingsEditor SettingsEditor
 @inject ILabelDefEditor LabelEditor
 @inject IMandaStationEditor StationEditor
@@ -15,321 +14,599 @@
 
 <PageTitle>PandA — Config Explorer</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true" data-testid="page-heading">Config Explorer</MudText>
-<MudText Typo="Typo.body1" Class="mb-4">Browse the PandA configuration tree and edit an entity on the right. Changes save through the pluggable editors.</MudText>
+<div class="cfg-head">
+    <MudText Typo="Typo.h4" data-testid="page-heading">Config Explorer</MudText>
+    <MudText Typo="Typo.body2" Class="cfg-sub">Pick a lane to edit its config, printers, fire points and maps, or switch tabs to manage label definitions, stations and system settings.</MudText>
+</div>
 
-<MudGrid>
-    <MudItem xs="12" md="4">
-        <MudPaper Class="pa-3" Elevation="1" data-testid="config-tree">
-            @if (_root is not null)
-            {
-                <ConfigTreeNodeView Node="_root" Depth="0" OnSelect="SelectAsync" />
-            }
-        </MudPaper>
-    </MudItem>
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="cfg-panel" Class="cfg-tabs" data-testid="config-tabs">
 
-    <MudItem xs="12" md="8">
-        <MudPaper Class="pa-4" Elevation="1" data-testid="detail-panel">
-            @if (_selected is null)
-            {
-                <MudText Typo="Typo.body2" data-testid="detail-empty">Select an entity in the tree to edit it.</MudText>
-            }
-            else
-            {
-                <div class="d-flex align-center mb-3">
-                    <MudText Typo="Typo.h6" data-testid="detail-title">@_selected.Label</MudText>
-                    <MudSpacer />
-                    @if (CreatableChildKind(_selected.Kind) is { } childKind)
-                    {
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="new-button"
-                                   OnClick="@(() => StartNew(childKind))">New @ChildLabel(childKind)</MudButton>
-                    }
-                    else
-                    {
-                        @if (_canDelete)
-                        {
-                            <MudButton Variant="Variant.Outlined" Color="Color.Error" data-testid="delete-button"
-                                       OnClick="DeleteAsync" Class="me-2">Delete</MudButton>
-                        }
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="save-button" OnClick="SaveAsync">Save</MudButton>
-                    }
+    @* ---------------------------------------------------------------- Lines *@
+    <MudTabPanel Text="Lines" Icon="@Icons.Material.Filled.ViewStream">
+        <div class="cfg-toolbar">
+            <MudSelect T="string" Label="Lane" Value="_laneId" ValueChanged="OnLaneChangedAsync"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="cfg-lane-select"
+                       Disabled="@(_lines.Count == 0)" data-testid="lane-select">
+                @foreach (var line in _lines)
+                {
+                    <MudSelectItem T="string" Value="@line.LineId">@line.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="AddLaneAsync" data-testid="add-lane">Add lane</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteOutline"
+                       OnClick="DeleteLaneAsync" Disabled="@(_laneDraft is null)" data-testid="delete-lane">Delete lane</MudButton>
+        </div>
+
+        @if (_laneDraft is null)
+        {
+            <div class="cfg-empty" data-testid="lane-empty">
+                <MudIcon Icon="@Icons.Material.Outlined.ViewStream" Size="Size.Large" />
+                <MudText Typo="Typo.subtitle1">No lane selected</MudText>
+                <MudText Typo="Typo.body2" Class="cfg-muted">Add a lane to configure its printers and fire points.</MudText>
+            </div>
+        }
+        else
+        {
+            <MudPaper Elevation="0" Class="cfg-card" data-testid="lane-detail">
+                <div class="cfg-card-head">
+                    <div>
+                        <MudText Typo="Typo.h6">@LaneTitle</MudText>
+                        <MudText Typo="Typo.caption" Class="cfg-muted">@(_laneDraft.Id ?? "unsaved")</MudText>
+                    </div>
+                    <div class="cfg-chips">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Icon="@Icons.Material.Filled.Print">@_printers.Count printers</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text" Icon="@Icons.Material.Filled.Map">@_maps.Count maps</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">@_laneDraft.ControlPolicy</MudChip>
+                    </div>
                 </div>
 
-                @switch (_selected.Kind)
-                {
-                    case ConfigNodeKind.SettingsGroup when _settings is not null:
-                        <MudNumericField T="double" @bind-Value="_settings.EncoderResolutionInchesPerPulse" Label="Encoder resolution (in/pulse)" />
-                        <MudNumericField T="int" @bind-Value="_settings.VerifyFailThreshold" Label="Verify fail threshold" />
-                        <MudNumericField T="int" @bind-Value="_settings.PostTripResetCount" Label="Post-trip reset count" />
-                        <MudCheckBox T="bool" @bind-Value="_settings.ReprintLabelsEnabled" Label="Reprint labels enabled" />
-                        <MudCheckBox T="bool" @bind-Value="_settings.LoadBalanceEnabled" Label="Load balancing" />
-                        <MudCheckBox T="bool" @bind-Value="_settings.TwoPrinterRuleEnabled" Label="Two-printer rule" />
-                        break;
-
-                    case ConfigNodeKind.LabelDefinition when _label is not null:
-                        <MudTextField @bind-Value="_label.Name" Label="Name" />
-                        <MudSelect T="string" @bind-Value="_label.Orientation" Label="Orientation">
-                            <MudSelectItem T="string" Value="@("Side")">Side</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Top")">Top</MudSelectItem>
-                        </MudSelect>
-                        <MudNumericField T="int" @bind-Value="_label.PrintPosition" Label="Print position" />
-                        break;
-
-                    case ConfigNodeKind.MandaStation when _station is not null:
-                        <MudTextField @bind-Value="_station.Name" Label="Name" />
-                        <MudTextField @bind-Value="_station.Ip" Label="IP" />
-                        <MudNumericField T="int" @bind-Value="_station.Port" Label="Port" />
-                        break;
-
-                    case ConfigNodeKind.Line when _line is not null:
-                        <MudTextField @bind-Value="_line.Name" Label="Name" />
-                        <MudTextField @bind-Value="_line.Zones" Label="Zones (comma-separated)" />
-                        <MudTextField @bind-Value="_line.TrackingDevices" Label="Tracking devices (comma-separated)" />
-                        <MudTextField @bind-Value="_line.BufferOrder" Label="Buffer order (comma-separated)" />
-                        <MudTextField @bind-Value="_line.ActiveMapId" Label="Active map id" />
-                        <MudSelect T="LineControlPolicy" @bind-Value="_line.ControlPolicy" Label="Control policy">
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="6"><MudTextField @bind-Value="_laneDraft.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="lane-name" /></MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="LineControlPolicy" @bind-Value="_laneDraft.ControlPolicy" Label="Control policy" Variant="Variant.Outlined" Margin="Margin.Dense">
                             @foreach (var p in Enum.GetValues<LineControlPolicy>())
                             {
                                 <MudSelectItem T="LineControlPolicy" Value="@p">@p</MudSelectItem>
                             }
                         </MudSelect>
-                        <MudNumericField T="int" @bind-Value="_line.OnlineMinimum" Label="Online minimum" />
-                        break;
+                    </MudItem>
+                    <MudItem xs="12" sm="6"><MudNumericField T="int" @bind-Value="_laneDraft.OnlineMinimum" Label="Online minimum" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" sm="6"><MudTextField @bind-Value="_laneDraft.ActiveMapId" Label="Active map id" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12"><MudTextField @bind-Value="_laneDraft.Zones" Label="Zones (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12"><MudTextField @bind-Value="_laneDraft.TrackingDevices" Label="Tracking devices (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12"><MudTextField @bind-Value="_laneDraft.BufferOrder" Label="Buffer order (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                </MudGrid>
+                <div class="cfg-actions">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveLaneAsync" data-testid="save-lane">Save lane</MudButton>
+                </div>
+            </MudPaper>
 
-                    case ConfigNodeKind.Printer when _printer is not null:
-                        <MudTextField @bind-Value="_printer.Name" Label="Name" />
-                        <MudTextField @bind-Value="_printer.LineId" Label="Line id" />
-                        <MudTextField @bind-Value="_printer.Ip" Label="IP" />
-                        <MudNumericField T="int" @bind-Value="_printer.Port" Label="Port" />
-                        <MudSelect T="string" @bind-Value="_printer.Orientation" Label="Orientation">
-                            <MudSelectItem T="string" Value="@("Side")">Side</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Top")">Top</MudSelectItem>
-                        </MudSelect>
-                        <MudTextField @bind-Value="_printer.LabelTypes" Label="Label types (comma-separated)" />
-                        <MudNumericField T="int" @bind-Value="_printer.ConfigOrder" Label="Config order" />
-                        <MudNumericField T="double" @bind-Value="_printer.EncoderResolutionInchesPerPulse" Label="Encoder resolution (in/pulse)" />
-                        <MudNumericField T="double" @bind-Value="_printer.LabelWidthInches" Label="Label width (in)" />
-                        <MudCheckBox T="bool" @bind-Value="_printer.SpareEligible" Label="Spare eligible" />
-                        <MudNumericField T="double" @bind-Value="_printer.TampMountHeightInches" Label="Tamp mount height (in)" />
-                        <MudNumericField T="double" @bind-Value="_printer.BeltSpeedInchesPerSecond" Label="Belt speed (in/s)" />
-                        <MudNumericField T="double" @bind-Value="_printer.TampSpeedInchesPerSecond" Label="Tamp speed (in/s)" />
-                        break;
-
-                    case ConfigNodeKind.FirePoint when _firePoint is not null:
-                        <MudTextField @bind-Value="_firePoint.PrinterId" Label="Printer id" data-testid="firepoint-printerid" />
-                        <MudTextField @bind-Value="_firePoint.LabelType" Label="Label type" />
-                        <MudTextField @bind-Value="_firePoint.PrintTrackingDevice" Label="Print tracking device" />
-                        <MudNumericField T="int" @bind-Value="_firePoint.PrintPoint" Label="Print point" />
-                        <MudTextField @bind-Value="_firePoint.ApplyTrackingDevice" Label="Apply tracking device" />
-                        <MudTextField @bind-Value="_firePoint.ApplyPointNotation" Label="Apply point (e.g. 1T, 1L, 0M)" />
-                        <MudCheckBox T="bool" @bind-Value="_firePoint.DynamicApply" Label="Dynamic apply" />
-                        break;
-
-                    case ConfigNodeKind.Map when _map is not null:
-                        <MudTextField @bind-Value="_map.Name" Label="Name" />
-                        <MudTextField @bind-Value="_map.LineId" Label="Line id" />
-                        <MudTextField @bind-Value="_map.FirePointIds" Label="Fire point ids (comma-separated)" />
-                        break;
-
-                    default:
-                        <MudText Typo="Typo.body2" data-testid="detail-readonly">This node is a grouping category. Select a child entity to edit.</MudText>
-                        break;
-                }
+            @* ---- Printers ---- *@
+            <div class="cfg-section-head">
+                <MudText Typo="Typo.subtitle1"><MudIcon Icon="@Icons.Material.Filled.Print" Size="Size.Small" Class="me-1" />Printers</MudText>
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddPrinter" data-testid="add-printer">Add printer</MudButton>
+            </div>
+            @if (_printers.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="printers-empty">No printers on this lane yet.</MudText>
             }
-        </MudPaper>
-    </MudItem>
-</MudGrid>
+            else
+            {
+                <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="cfg-panels">
+                    @foreach (var item in _printers)
+                    {
+                        <MudExpansionPanel data-testid="printer-panel">
+                            <TitleContent>
+                                <div class="cfg-panel-title">
+                                    <MudIcon Icon="@Icons.Material.Filled.Print" Size="Size.Small" />
+                                    <span>@(string.IsNullOrWhiteSpace(item.Draft.Name) ? "New printer" : item.Draft.Name)</span>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@OrientationColor(item.Draft.Orientation)">@item.Draft.Orientation</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">@item.FirePoints.Count fire points</MudChip>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="12" sm="6"><MudTextField @bind-Value="item.Draft.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="12" sm="6">
+                                        <MudSelect T="string" @bind-Value="item.Draft.Orientation" Label="Orientation" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                            <MudSelectItem T="string" Value="@("Side")">Side</MudSelectItem>
+                                            <MudSelectItem T="string" Value="@("Top")">Top</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" sm="6"><MudTextField @bind-Value="item.Draft.Ip" Label="IP" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="6" sm="3"><MudNumericField T="int" @bind-Value="item.Draft.Port" Label="Port" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="6" sm="3"><MudNumericField T="int" @bind-Value="item.Draft.ConfigOrder" Label="Config order" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="12"><MudTextField @bind-Value="item.Draft.LabelTypes" Label="Label types (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="item.Draft.LabelWidthInches" Label="Label width (in)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="item.Draft.TampMountHeightInches" Label="Tamp mount height (in)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="item.Draft.EncoderResolutionInchesPerPulse" Label="Encoder res (in/pulse)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="item.Draft.BeltSpeedInchesPerSecond" Label="Belt speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="item.Draft.TampSpeedInchesPerSecond" Label="Tamp speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="item.Draft.SpareEligible" Label="Spare eligible" /></MudItem>
+                                </MudGrid>
+                                <div class="cfg-actions">
+                                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SavePrinterAsync(item))" data-testid="save-printer">Save printer</MudButton>
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeletePrinterAsync(item))" data-testid="delete-printer">Delete</MudButton>
+                                </div>
+
+                                <MudDivider Class="my-3" />
+
+                                <div class="cfg-section-head cfg-sub-section">
+                                    <MudText Typo="Typo.subtitle2"><MudIcon Icon="@Icons.Material.Filled.GpsFixed" Size="Size.Small" Class="me-1" />Fire points</MudText>
+                                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                                               Disabled="@(item.Draft.Id is null)" OnClick="@(() => AddFirePoint(item))" data-testid="add-firepoint">Add fire point</MudButton>
+                                </div>
+                                @if (item.Draft.Id is null)
+                                {
+                                    <MudText Typo="Typo.caption" Class="cfg-muted">Save the printer first to add fire points.</MudText>
+                                }
+                                else if (item.FirePoints.Count == 0)
+                                {
+                                    <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty">No fire points configured.</MudText>
+                                }
+                                else
+                                {
+                                    @foreach (var fp in item.FirePoints)
+                                    {
+                                        <div class="cfg-firepoint" data-testid="firepoint-row">
+                                            <MudGrid Spacing="2">
+                                                <MudItem xs="12" sm="4"><MudTextField @bind-Value="fp.LabelType" Label="Label type" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                                <MudItem xs="12" sm="4"><MudTextField @bind-Value="fp.ApplyPointNotation" Label="Apply point (1T, 1L, 0M)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                                <MudItem xs="12" sm="4"><MudNumericField T="int" @bind-Value="fp.PrintPoint" Label="Print point" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                                <MudItem xs="12" sm="6"><MudTextField @bind-Value="fp.PrintTrackingDevice" Label="Print tracking device" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="firepoint-printtd" /></MudItem>
+                                                <MudItem xs="12" sm="6"><MudTextField @bind-Value="fp.ApplyTrackingDevice" Label="Apply tracking device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                                <MudItem xs="12" Class="d-flex align-center justify-space-between">
+                                                    <MudCheckBox T="bool" @bind-Value="fp.DynamicApply" Label="Dynamic apply" />
+                                                    <div class="cfg-actions cfg-actions-tight">
+                                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveFirePointAsync(fp))" data-testid="save-firepoint">Save</MudButton>
+                                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteFirePointAsync(item, fp))" data-testid="delete-firepoint">Delete</MudButton>
+                                                    </div>
+                                                </MudItem>
+                                            </MudGrid>
+                                        </div>
+                                    }
+                                }
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    }
+                </MudExpansionPanels>
+            }
+
+            @* ---- Maps ---- *@
+            <div class="cfg-section-head">
+                <MudText Typo="Typo.subtitle1"><MudIcon Icon="@Icons.Material.Filled.Map" Size="Size.Small" Class="me-1" />Maps</MudText>
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddMap" data-testid="add-map">Add map</MudButton>
+            </div>
+            @if (_maps.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="maps-empty">No maps on this lane yet.</MudText>
+            }
+            else
+            {
+                <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="cfg-panels">
+                    @foreach (var map in _maps)
+                    {
+                        <MudExpansionPanel data-testid="map-panel">
+                            <TitleContent>
+                                <div class="cfg-panel-title">
+                                    <MudIcon Icon="@Icons.Material.Filled.Map" Size="Size.Small" />
+                                    <span>@(string.IsNullOrWhiteSpace(map.Name) ? "New map" : map.Name)</span>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="12" sm="6"><MudTextField @bind-Value="map.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="12"><MudTextField @bind-Value="map.FirePointIds" Label="Fire point ids (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                </MudGrid>
+                                <div class="cfg-actions">
+                                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveMapAsync(map))" data-testid="save-map">Save map</MudButton>
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteMapAsync(map))" data-testid="delete-map">Delete</MudButton>
+                                </div>
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    }
+                </MudExpansionPanels>
+            }
+        }
+    </MudTabPanel>
+
+    @* ------------------------------------------------------- Label defs *@
+    <MudTabPanel Text="Label Definitions" Icon="@Icons.Material.Filled.Label">
+        <div class="cfg-section-head">
+            <MudText Typo="Typo.subtitle1">Label definitions</MudText>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="AddLabel" data-testid="add-label">Add label</MudButton>
+        </div>
+        @if (_labels.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="labels-empty">No label definitions yet.</MudText>
+        }
+        else
+        {
+            <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="cfg-panels">
+                @foreach (var label in _labels)
+                {
+                    <MudExpansionPanel Expanded="@(label.Id is null)" data-testid="label-panel">
+                        <TitleContent>
+                            <div class="cfg-panel-title">
+                                <MudIcon Icon="@Icons.Material.Filled.Label" Size="Size.Small" />
+                                <span>@(string.IsNullOrWhiteSpace(label.Name) ? "New label" : label.Name)</span>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@OrientationColor(label.Orientation)">@label.Orientation</MudChip>
+                            </div>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" sm="6"><MudTextField @bind-Value="label.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="label-name" /></MudItem>
+                                <MudItem xs="12" sm="3">
+                                    <MudSelect T="string" @bind-Value="label.Orientation" Label="Orientation" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                        <MudSelectItem T="string" Value="@("Side")">Side</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("Top")">Top</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" sm="3"><MudNumericField T="int" @bind-Value="label.PrintPosition" Label="Print position" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            </MudGrid>
+                            <div class="cfg-actions">
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveLabelAsync(label))" data-testid="save-label">Save label</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteLabelAsync(label))" data-testid="delete-label">Delete</MudButton>
+                            </div>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+            </MudExpansionPanels>
+        }
+    </MudTabPanel>
+
+    @* --------------------------------------------------- MandA stations *@
+    <MudTabPanel Text="MandA Stations" Icon="@Icons.Material.Filled.Dns">
+        <div class="cfg-section-head">
+            <MudText Typo="Typo.subtitle1">MandA stations</MudText>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="AddStation" data-testid="add-station">Add station</MudButton>
+        </div>
+        @if (_stations.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="stations-empty">No MandA stations yet.</MudText>
+        }
+        else
+        {
+            <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="cfg-panels">
+                @foreach (var station in _stations)
+                {
+                    <MudExpansionPanel Expanded="@(station.Id is null)" data-testid="station-panel">
+                        <TitleContent>
+                            <div class="cfg-panel-title">
+                                <MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Small" />
+                                <span>@(string.IsNullOrWhiteSpace(station.Name) ? "New station" : station.Name)</span>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">@station.Ip:@station.Port</MudChip>
+                            </div>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" sm="6"><MudTextField @bind-Value="station.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="station-name" /></MudItem>
+                                <MudItem xs="12" sm="4"><MudTextField @bind-Value="station.Ip" Label="IP" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                <MudItem xs="12" sm="2"><MudNumericField T="int" @bind-Value="station.Port" Label="Port" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            </MudGrid>
+                            <div class="cfg-actions">
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveStationAsync(station))" data-testid="save-station">Save station</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteStationAsync(station))" data-testid="delete-station">Delete</MudButton>
+                            </div>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+            </MudExpansionPanels>
+        }
+    </MudTabPanel>
+
+    @* -------------------------------------------------------- Settings *@
+    <MudTabPanel Text="Settings" Icon="@Icons.Material.Filled.Settings">
+        @if (_settings is not null)
+        {
+            <MudPaper Elevation="0" Class="cfg-card" data-testid="settings-detail">
+                <MudText Typo="Typo.h6" Class="mb-2">System settings</MudText>
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="4"><MudNumericField T="double" @bind-Value="_settings.EncoderResolutionInchesPerPulse" Label="Encoder resolution (in/pulse)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="6" sm="4"><MudNumericField T="int" @bind-Value="_settings.VerifyFailThreshold" Label="Verify fail threshold" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="6" sm="4"><MudNumericField T="int" @bind-Value="_settings.PostTripResetCount" Label="Post-trip reset count" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="_settings.ReprintLabelsEnabled" Label="Reprint labels enabled" /></MudItem>
+                    <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="_settings.LoadBalanceEnabled" Label="Load balancing" /></MudItem>
+                    <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="_settings.TwoPrinterRuleEnabled" Label="Two-printer rule" /></MudItem>
+                </MudGrid>
+                <div class="cfg-actions">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveSettingsAsync" data-testid="save-settings">Save settings</MudButton>
+                </div>
+            </MudPaper>
+        }
+    </MudTabPanel>
+</MudTabs>
+
+<style>
+    .cfg-head { margin-bottom: 12px; }
+    .cfg-sub { color: var(--mud-palette-text-secondary); max-width: 70ch; }
+    .cfg-tabs { --mud-elevation-0: none; }
+    .cfg-panel { padding-top: 20px; }
+    .cfg-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+    .cfg-lane-select { min-width: 260px; max-width: 360px; }
+    .cfg-card { border: 1px solid var(--mud-palette-lines-default); border-radius: 12px; padding: 20px; margin-bottom: 8px; background: var(--mud-palette-surface); }
+    .cfg-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .cfg-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .cfg-section-head { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 10px; }
+    .cfg-sub-section { margin: 8px 0 6px; }
+    .cfg-panels { border: 1px solid var(--mud-palette-lines-default); border-radius: 12px; overflow: hidden; }
+    .cfg-panel-title { display: flex; align-items: center; gap: 10px; }
+    .cfg-firepoint { border: 1px solid var(--mud-palette-lines-default); border-radius: 10px; padding: 12px; margin-bottom: 10px; background: var(--mud-palette-background-gray); }
+    .cfg-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .cfg-actions-tight { margin-top: 0; }
+    .cfg-muted { color: var(--mud-palette-text-secondary); }
+    .cfg-inline-empty { padding: 12px 4px; }
+    .cfg-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 48px 16px; color: var(--mud-palette-text-secondary); text-align: center; }
+</style>
 
 @code {
-    private ConfigTreeNode? _root;
-    private ConfigTreeNode? _selected;
-    private bool _canDelete;
+    private List<LineDto> _lines = [];
+    private string? _laneId;
+    private LineDraft? _laneDraft;
+    private List<PrinterEditItem> _printers = [];
+    private List<MapDraft> _maps = [];
 
+    private List<LabelDraft> _labels = [];
+    private List<StationDraft> _stations = [];
     private SettingsDraft? _settings;
-    private LabelDraft? _label;
-    private StationDraft? _station;
-    private LineDraft? _line;
-    private PrinterDraft? _printer;
-    private FirePointDraft? _firePoint;
-    private MapDraft? _map;
 
-    protected override async Task OnInitializedAsync() => await ReloadTreeAsync();
+    private string LaneTitle => string.IsNullOrWhiteSpace(_laneDraft?.Name) ? "Untitled lane" : _laneDraft!.Name;
 
-    private async Task ReloadTreeAsync()
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLinesAsync();
+        await LoadLabelsAsync();
+        await LoadStationsAsync();
+        await LoadSettingsAsync();
+    }
+
+    // ---- Loading ----
+
+    private async Task LoadSettingsAsync()
+    {
+        try { _settings = SettingsDraft.From(await SettingsEditor.GetAsync()); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Fail("settings", ex); }
+    }
+
+    private async Task LoadLabelsAsync()
     {
         try
         {
-            _root = await Tree.GetTreeAsync();
+            var list = await LabelEditor.ListAsync();
+            _labels = list.OrderBy(l => l.Name, StringComparer.Ordinal).Select(LabelDraft.From).ToList();
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Snackbar.Add($"Failed to load config tree: {ex.Message}", Severity.Error);
-        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Fail("labels", ex); }
     }
 
-    private async Task SelectAsync(ConfigTreeNode node)
+    private async Task LoadStationsAsync()
     {
-        _selected = node;
-        _canDelete = false;
-        _settings = null; _label = null; _station = null; _line = null; _printer = null; _firePoint = null; _map = null;
+        try
+        {
+            var list = await StationEditor.ListAsync();
+            _stations = list.OrderBy(s => s.Name, StringComparer.Ordinal).Select(StationDraft.From).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Fail("stations", ex); }
+    }
+
+    private async Task LoadLinesAsync(string? prefer = null)
+    {
+        try
+        {
+            var list = await LineEditor.ListAsync();
+            _lines = list.OrderBy(l => l.Name, StringComparer.Ordinal).ToList();
+            var ids = _lines.Select(l => l.LineId).ToList();
+            if (prefer is not null && ids.Contains(prefer)) { _laneId = prefer; }
+            else if (_laneId is null || !ids.Contains(_laneId)) { _laneId = ids.FirstOrDefault(); }
+            await LoadLaneAsync(_laneId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Fail("lanes", ex); }
+    }
+
+    private async Task LoadLaneAsync(string? id)
+    {
+        _laneDraft = null;
+        _printers = [];
+        _maps = [];
+        if (id is null) { return; }
 
         try
         {
-            switch (node.Kind)
+            if (await LineEditor.GetAsync(id) is { } line) { _laneDraft = LineDraft.From(line); }
+            if (_laneDraft is null) { return; }
+
+            var printers = await PrinterEditor.ListForLineAsync(id);
+            var items = new List<PrinterEditItem>();
+            foreach (var p in printers.OrderBy(p => p.ConfigOrder))
             {
-                case ConfigNodeKind.SettingsGroup:
-                    _settings = SettingsDraft.From(await SettingsEditor.GetAsync());
-                    break;
-                case ConfigNodeKind.LabelDefinition when node.EntityId is { } id:
-                    if (await LabelEditor.GetAsync(id) is { } l) { _label = LabelDraft.From(l); _canDelete = true; }
-                    break;
-                case ConfigNodeKind.MandaStation when node.EntityId is { } id:
-                    if (await StationEditor.GetAsync(id) is { } s) { _station = StationDraft.From(s); _canDelete = true; }
-                    break;
-                case ConfigNodeKind.Line when node.EntityId is { } id:
-                    if (await LineEditor.GetAsync(id) is { } ln) { _line = LineDraft.From(ln); _canDelete = true; }
-                    break;
-                case ConfigNodeKind.Printer when node.EntityId is { } id:
-                    if (await PrinterEditor.GetAsync(id) is { } pr) { _printer = PrinterDraft.From(pr); _canDelete = true; }
-                    break;
-                case ConfigNodeKind.FirePoint when node.EntityId is { } id:
-                    if (await FirePointEditor.GetAsync(id) is { } fp) { _firePoint = FirePointDraft.From(fp); _canDelete = true; }
-                    break;
-                case ConfigNodeKind.Map when node.EntityId is { } id:
-                    if (await MapEditor.GetAsync(id) is { } mp) { _map = MapDraft.From(mp); _canDelete = true; }
-                    break;
-                default:
-                    break;
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Snackbar.Add($"Failed to load entity: {ex.Message}", Severity.Error);
-        }
-    }
-
-    private void StartNew(ConfigNodeKind childKind)
-    {
-        _canDelete = false;
-        _settings = null; _label = null; _station = null; _line = null; _printer = null; _firePoint = null; _map = null;
-
-        switch (childKind)
-        {
-            case ConfigNodeKind.LabelDefinition: _label = new LabelDraft(); break;
-            case ConfigNodeKind.MandaStation: _station = new StationDraft(); break;
-            case ConfigNodeKind.Line: _line = new LineDraft(); break;
-            case ConfigNodeKind.Printer: _printer = new PrinterDraft(); break;
-            case ConfigNodeKind.FirePoint: _firePoint = new FirePointDraft(); break;
-            case ConfigNodeKind.Map: _map = new MapDraft(); break;
-            default: return;
-        }
-
-        // A synthetic, unsaved node (null EntityId) drives the same detail form; Save creates it.
-        _selected = new ConfigTreeNode(childKind, $"New {ChildLabel(childKind)}", null, []);
-    }
-
-    private static ConfigNodeKind? CreatableChildKind(ConfigNodeKind groupKind) => groupKind switch
-    {
-        ConfigNodeKind.LabelDefinitions => ConfigNodeKind.LabelDefinition,
-        ConfigNodeKind.MandaStations => ConfigNodeKind.MandaStation,
-        ConfigNodeKind.Lines => ConfigNodeKind.Line,
-        ConfigNodeKind.Printers => ConfigNodeKind.Printer,
-        ConfigNodeKind.FirePoints => ConfigNodeKind.FirePoint,
-        ConfigNodeKind.Maps => ConfigNodeKind.Map,
-        _ => null,
-    };
-
-    private static string ChildLabel(ConfigNodeKind childKind) => childKind switch
-    {
-        ConfigNodeKind.LabelDefinition => "Label",
-        ConfigNodeKind.MandaStation => "Station",
-        ConfigNodeKind.Line => "Line",
-        ConfigNodeKind.Printer => "Printer",
-        ConfigNodeKind.FirePoint => "Fire Point",
-        ConfigNodeKind.Map => "Map",
-        _ => "Entity",
-    };
-
-    private async Task SaveAsync()
-    {
-        if (_selected is null)
-        {
-            return;
-        }
-
-        try
-        {
-            CommandResult result = _selected.Kind switch
-            {
-                ConfigNodeKind.SettingsGroup when _settings is not null => await SettingsEditor.SaveAsync(_settings.ToDto()),
-                ConfigNodeKind.LabelDefinition when _label is not null => await LabelEditor.SaveAsync(_label.ToDto()),
-                ConfigNodeKind.MandaStation when _station is not null => await StationEditor.SaveAsync(_station.ToDto()),
-                ConfigNodeKind.Line when _line is not null => await LineEditor.SaveAsync(_line.ToDto()),
-                ConfigNodeKind.Printer when _printer is not null => await PrinterEditor.SaveAsync(_printer.ToDto()),
-                ConfigNodeKind.FirePoint when _firePoint is not null => await FirePointEditor.SaveAsync(_firePoint.ToDto()),
-                ConfigNodeKind.Map when _map is not null => await MapEditor.SaveAsync(_map.ToDto()),
-                _ => CommandResult.Fail("Nothing to save for this node."),
-            };
-
-            Snackbar.Add(result.Message ?? (result.Success ? "Saved." : "Save failed."),
-                result.Success ? Severity.Success : Severity.Error);
-            if (result.Success)
-            {
-                var kind = _selected.Kind;
-                var entityId = _selected.EntityId;
-                await ReloadTreeAsync();
-                if (entityId is null)
+                var fps = p.PrinterId is { } pid
+                    ? await FirePointEditor.ListForPrinterAsync(pid)
+                    : (IReadOnlyList<FirePointDto>)[];
+                items.Add(new PrinterEditItem
                 {
-                    // A newly-created entity: its id isn't known here, so clear the detail; the new node
-                    // is now in the refreshed tree for the operator to select.
-                    _selected = null;
-                }
-                else if (_root is not null && FindNode(_root, kind, entityId) is { } refreshed)
-                {
-                    // Re-point the selection at the freshly-built tree so the title/label isn't stale.
-                    _selected = refreshed;
-                }
+                    Draft = PrinterDraft.From(p),
+                    FirePoints = fps.OrderBy(f => f.LabelType, StringComparer.Ordinal).Select(FirePointDraft.From).ToList(),
+                });
             }
+            _printers = items;
+
+            var maps = await MapEditor.ListForLineAsync(id);
+            _maps = maps.OrderBy(m => m.Name, StringComparer.Ordinal).Select(MapDraft.From).ToList();
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Snackbar.Add($"Save failed: {ex.Message}", Severity.Error);
-        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Fail("lane", ex); }
     }
 
-    private async Task DeleteAsync()
+    // ---- Lanes ----
+
+    private async Task OnLaneChangedAsync(string? id)
     {
-        if (_selected?.EntityId is not { } id)
-        {
-            return;
-        }
+        _laneId = id;
+        await LoadLaneAsync(id);
+    }
 
-        try
+    private async Task AddLaneAsync()
+    {
+        var before = _lines.Select(l => l.LineId).Where(id => id is not null).ToHashSet(StringComparer.Ordinal)!;
+        var result = await LineEditor.SaveAsync(new LineDraft { Name = "New Lane" }.ToDto());
+        Notify(result, "Lane added.");
+        if (result.Success)
         {
-            CommandResult result = _selected.Kind switch
-            {
-                ConfigNodeKind.LabelDefinition => await LabelEditor.DeleteAsync(id),
-                ConfigNodeKind.MandaStation => await StationEditor.DeleteAsync(id),
-                ConfigNodeKind.Line => await LineEditor.DeleteAsync(id),
-                ConfigNodeKind.Printer => await PrinterEditor.DeleteAsync(id),
-                ConfigNodeKind.FirePoint => await FirePointEditor.DeleteAsync(id),
-                ConfigNodeKind.Map => await MapEditor.DeleteAsync(id),
-                _ => CommandResult.Fail("This node cannot be deleted."),
-            };
-
-            Snackbar.Add(result.Message ?? (result.Success ? "Deleted." : "Delete failed."),
-                result.Success ? Severity.Success : Severity.Error);
-            if (result.Success)
-            {
-                _selected = null;
-                await ReloadTreeAsync();
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error);
+            var list = await LineEditor.ListAsync();
+            var added = list.FirstOrDefault(l => l.LineId is not null && !before.Contains(l.LineId));
+            await LoadLinesAsync(added?.LineId);
         }
     }
+
+    private async Task DeleteLaneAsync()
+    {
+        if (_laneId is null) { return; }
+        var result = await LineEditor.DeleteAsync(_laneId);
+        Notify(result, "Lane deleted.");
+        if (result.Success) { _laneId = null; await LoadLinesAsync(); }
+    }
+
+    private async Task SaveLaneAsync()
+    {
+        if (_laneDraft is null) { return; }
+        var result = await LineEditor.SaveAsync(_laneDraft.ToDto());
+        Notify(result, "Lane saved.");
+        if (result.Success) { await LoadLinesAsync(_laneId); }
+    }
+
+    // ---- Printers ----
+
+    private void AddPrinter()
+    {
+        if (_laneId is null) { return; }
+        _printers.Add(new PrinterEditItem { Draft = new PrinterDraft { LineId = _laneId, Name = "New Printer", Orientation = "Side" } });
+    }
+
+    private async Task SavePrinterAsync(PrinterEditItem item)
+    {
+        item.Draft.LineId = _laneId ?? item.Draft.LineId;
+        var result = await PrinterEditor.SaveAsync(item.Draft.ToDto());
+        Notify(result, "Printer saved.");
+        if (result.Success) { await LoadLaneAsync(_laneId); }
+    }
+
+    private async Task DeletePrinterAsync(PrinterEditItem item)
+    {
+        if (item.Draft.Id is null) { _printers.Remove(item); return; }
+        var result = await PrinterEditor.DeleteAsync(item.Draft.Id);
+        Notify(result, "Printer deleted.");
+        if (result.Success) { await LoadLaneAsync(_laneId); }
+    }
+
+    // ---- Fire points ----
+
+    private void AddFirePoint(PrinterEditItem item)
+    {
+        if (item.Draft.Id is null) { return; }
+        item.FirePoints.Add(new FirePointDraft { PrinterId = item.Draft.Id, LabelType = "Content", ApplyPointNotation = "0M" });
+    }
+
+    private async Task SaveFirePointAsync(FirePointDraft fp)
+    {
+        var result = await FirePointEditor.SaveAsync(fp.ToDto());
+        Notify(result, "Fire point saved.");
+        if (result.Success) { await LoadLaneAsync(_laneId); }
+    }
+
+    private async Task DeleteFirePointAsync(PrinterEditItem item, FirePointDraft fp)
+    {
+        if (fp.Id is null) { item.FirePoints.Remove(fp); return; }
+        var result = await FirePointEditor.DeleteAsync(fp.Id);
+        Notify(result, "Fire point deleted.");
+        if (result.Success) { await LoadLaneAsync(_laneId); }
+    }
+
+    // ---- Maps ----
+
+    private void AddMap()
+    {
+        if (_laneId is null) { return; }
+        _maps.Add(new MapDraft { LineId = _laneId, Name = "New Map" });
+    }
+
+    private async Task SaveMapAsync(MapDraft map)
+    {
+        map.LineId = _laneId ?? map.LineId;
+        var result = await MapEditor.SaveAsync(map.ToDto());
+        Notify(result, "Map saved.");
+        if (result.Success) { await LoadLaneAsync(_laneId); }
+    }
+
+    private async Task DeleteMapAsync(MapDraft map)
+    {
+        if (map.Id is null) { _maps.Remove(map); return; }
+        var result = await MapEditor.DeleteAsync(map.Id);
+        Notify(result, "Map deleted.");
+        if (result.Success) { await LoadLaneAsync(_laneId); }
+    }
+
+    // ---- Labels ----
+
+    private void AddLabel() => _labels.Add(new LabelDraft { Orientation = "Side" });
+
+    private async Task SaveLabelAsync(LabelDraft label)
+    {
+        var result = await LabelEditor.SaveAsync(label.ToDto());
+        Notify(result, "Label saved.");
+        if (result.Success) { await LoadLabelsAsync(); }
+    }
+
+    private async Task DeleteLabelAsync(LabelDraft label)
+    {
+        if (label.Id is null) { _labels.Remove(label); return; }
+        var result = await LabelEditor.DeleteAsync(label.Id);
+        Notify(result, "Label deleted.");
+        if (result.Success) { await LoadLabelsAsync(); }
+    }
+
+    // ---- Stations ----
+
+    private void AddStation() => _stations.Add(new StationDraft { Port = 9100 });
+
+    private async Task SaveStationAsync(StationDraft station)
+    {
+        var result = await StationEditor.SaveAsync(station.ToDto());
+        Notify(result, "Station saved.");
+        if (result.Success) { await LoadStationsAsync(); }
+    }
+
+    private async Task DeleteStationAsync(StationDraft station)
+    {
+        if (station.Id is null) { _stations.Remove(station); return; }
+        var result = await StationEditor.DeleteAsync(station.Id);
+        Notify(result, "Station deleted.");
+        if (result.Success) { await LoadStationsAsync(); }
+    }
+
+    // ---- Settings ----
+
+    private async Task SaveSettingsAsync()
+    {
+        if (_settings is null) { return; }
+        var result = await SettingsEditor.SaveAsync(_settings.ToDto());
+        Notify(result, "Settings saved.");
+    }
+
+    // ---- Helpers ----
+
+    private static Color OrientationColor(string? orientation) =>
+        string.Equals(orientation, "Top", StringComparison.OrdinalIgnoreCase) ? Color.Secondary : Color.Info;
+
+    private void Notify(CommandResult result, string okFallback)
+    {
+        Snackbar.Add(result.Message ?? (result.Success ? okFallback : "Operation failed."),
+            result.Success ? Severity.Success : Severity.Error);
+    }
+
+    private void Fail(string what, Exception ex) => Snackbar.Add($"Failed to load {what}: {ex.Message}", Severity.Error);
 
     private static string Join(IReadOnlyList<string> items) => string.Join(", ", items);
 
@@ -351,22 +628,10 @@
         return parts;
     }
 
-    private static ConfigTreeNode? FindNode(ConfigTreeNode node, ConfigNodeKind kind, string? entityId)
+    private sealed class PrinterEditItem
     {
-        if (node.Kind == kind && string.Equals(node.EntityId, entityId, StringComparison.Ordinal))
-        {
-            return node;
-        }
-
-        foreach (var child in node.Children)
-        {
-            if (FindNode(child, kind, entityId) is { } match)
-            {
-                return match;
-            }
-        }
-
-        return null;
+        public PrinterDraft Draft { get; set; } = new();
+        public List<FirePointDraft> FirePoints { get; set; } = [];
     }
 
     private sealed class SettingsDraft

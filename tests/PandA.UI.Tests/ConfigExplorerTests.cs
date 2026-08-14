@@ -27,30 +27,31 @@ public sealed class ConfigExplorerTests : TestContext
     }
 
     [Fact]
-    public void Renders_heading_and_tree()
+    public void Renders_heading_and_tabs()
     {
         RenderComponent<MudBlazor.MudPopoverProvider>();
         var cut = RenderComponent<ConfigExplorer>();
 
         Assert.Equal("Config Explorer", cut.Find("[data-testid=page-heading]").TextContent.Trim());
-        Assert.NotNull(cut.Find("[data-testid=config-tree]"));
-        Assert.NotEmpty(cut.FindAll("[data-testid=tree-node]"));
-        Assert.NotNull(cut.Find("[data-testid=detail-empty]"));
+        Assert.NotNull(cut.Find("[data-testid=config-tabs]"));
+
+        var tabs = cut.FindAll(".mud-tab").Select(t => t.TextContent).ToList();
+        Assert.Contains(tabs, t => t.Contains("Lines", StringComparison.Ordinal));
+        Assert.Contains(tabs, t => t.Contains("Label Definitions", StringComparison.Ordinal));
+        Assert.Contains(tabs, t => t.Contains("Settings", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Selecting_settings_shows_form_and_saves()
+    public void Settings_tab_saves_roundtrip()
     {
         RenderComponent<MudBlazor.MudPopoverProvider>();
         var cut = RenderComponent<ConfigExplorer>();
 
-        // First tree node is the "Settings" node (Root is disabled but Settings is clickable).
-        var settingsNode = cut.FindAll("[data-testid=tree-node]")
-            .First(n => n.TextContent.Contains("Settings", StringComparison.Ordinal));
-        settingsNode.Click();
+        cut.FindAll(".mud-tab")
+            .First(t => t.TextContent.Contains("Settings", StringComparison.Ordinal))
+            .Click();
 
-        Assert.NotNull(cut.Find("[data-testid=detail-title]"));
-        cut.Find("[data-testid=save-button]").Click();
+        cut.Find("[data-testid=save-settings]").Click();
 
         Assert.Equal(1, _config.SettingsSaves);
         // Round-trip integrity: the draft->DTO mapping must carry the loaded values through Save.
@@ -61,26 +62,24 @@ public sealed class ConfigExplorerTests : TestContext
     }
 
     [Fact]
-    public void Creating_a_new_label_saves_with_null_id()
+    public void Adding_a_new_label_saves_with_null_id()
     {
         RenderComponent<MudBlazor.MudPopoverProvider>();
         var cut = RenderComponent<ConfigExplorer>();
 
-        // Select the "Label Definitions" group node, then click "New Label".
-        var group = cut.FindAll("[data-testid=tree-node]")
-            .First(n => n.TextContent.Contains("Label Definitions", StringComparison.Ordinal));
-        group.Click();
+        cut.FindAll(".mud-tab")
+            .First(t => t.TextContent.Contains("Label Definitions", StringComparison.Ordinal))
+            .Click();
 
-        cut.Find("[data-testid=new-button]").Click();
-
-        // A blank editor opens; save creates it (null id → the editor allocates one).
-        cut.Find("[data-testid=save-button]").Click();
+        // "Add label" appends a blank, expanded editor card; fill the name and save.
+        cut.Find("[data-testid=add-label]").Click();
+        cut.FindAll("[data-testid=label-panel] input").First().Change("New Label");
+        cut.Find("[data-testid=save-label]").Click();
 
         Assert.Equal(1, _config.LabelSaves);
         Assert.NotNull(_config.LastSavedLabel);
+        // A brand-new entity saves with a null id — the editor allocates the real one.
         Assert.Null(_config.LastSavedLabel!.LabelDefId);
-        // After a create, the detail returns to the empty state (new id unknown here).
-        Assert.NotNull(cut.Find("[data-testid=detail-empty]"));
     }
 
     private sealed class FakeConfig

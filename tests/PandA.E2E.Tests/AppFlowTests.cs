@@ -91,22 +91,22 @@ public sealed class AppFlowTests(DemoHostFixture fixture)
         await page.GotoAsync(fixture.BaseUrl + "/config", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
         await page.Locator("[data-testid=page-heading]").WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
 
-        // Select the "Label Definitions" group, add a new label, fill the name, and save.
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Label Definitions" }).ClickAsync();
+        // Switch to the "Label Definitions" tab, add a blank label, fill the name, and save.
+        await page.Locator(".mud-tab", new PageLocatorOptions { HasTextString = "Label Definitions" }).ClickAsync();
 
-        var newButton = page.Locator("[data-testid=new-button]");
-        await newButton.WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
-        await newButton.ClickAsync();
+        var addLabel = page.Locator("[data-testid=add-label]");
+        await addLabel.WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
+        await addLabel.ClickAsync();
 
-        var name = page.Locator("[data-testid=detail-panel] input").First;
+        // The new, blank label card is appended and expanded; fill its name (first input) and save it.
+        var name = page.Locator("[data-testid=label-panel]").Last.Locator("input").First;
         await name.WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
         await name.FillAsync("E2E Test Label");
 
-        await page.Locator("[data-testid=save-button]").ClickAsync();
+        await page.Locator("[data-testid=save-label]").Last.ClickAsync();
 
-        // On success the detail returns to the empty state and the new label appears in the tree.
-        await page.Locator("[data-testid=detail-empty]").WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
-        await Assertions.Expect(page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "E2E Test Label" }))
+        // On success the label persists and its panel title reflects the saved name.
+        await Assertions.Expect(page.GetByText("E2E Test Label").First)
             .ToBeVisibleAsync(new() { Timeout = 10_000 });
         Assert.False(await page.Locator("#blazor-error-ui").IsVisibleAsync());
     }
