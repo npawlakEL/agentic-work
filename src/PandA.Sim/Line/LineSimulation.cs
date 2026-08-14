@@ -220,6 +220,10 @@ public sealed class LineSimulation
         }
 
         _clock.Advance(TimeSpan.FromSeconds(dt));
+        var stationX = PrinterStations()
+            .GroupBy(s => s.PrinterId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().PositionInches, StringComparer.OrdinalIgnoreCase);
+
         foreach (var carton in _cartons.ToList())
         {
             carton.PreviousPositionInches = carton.PositionInches;
@@ -235,6 +239,8 @@ public sealed class LineSimulation
                 carton.MarkCrossed(eye.Id);
                 await OnTrackingEyeAsync(carton, eye).ConfigureAwait(false);
             }
+
+            ApplyLabelsAtFullExtension(carton, stationX);
         }
 
         _cartons.RemoveAll(c => c.PositionInches > ConveyorLengthInches + 40);
@@ -278,44 +284,73 @@ public sealed class LineSimulation
             return;
         }
 
-        // Intermediate eye: print the label onto the tamp head (its print eye) and/or fire the TAMP for
-        // labels whose apply eye is this one. Each label transitions on its own printer's eyes.
-        var appliedHere = UpdateLabelStates(carton, eye);
-        if (appliedHere)
-        {
-            carton.State = SimCartonState.Applied;
-            _lastEvent = $"{carton.BlindLabel} TAMP apply fired at {eye.Id}";
-        }
+        // Intermediate eye: print the label onto the tamp head when the carton reaches a printer's print
+        // eye. The TAMP apply itself is fired later, at the applicator's fullest extension (see
+        // ApplyLabelsAtFullExtension), not at a discrete eye crossing.
+        UpdateLabelStates(carton, eye);
     }
 
     /// <summary>
-    /// Advances each label's own print/apply state as the carton crosses <paramref name="eye"/>: a label
-    /// rides onto its printer's tamp head at its print eye, then is deposited on the carton at its apply
-    /// eye. Returns true if any label was applied at this eye.
+    /// Advances each label onto its printer's tamp head as the carton crosses <paramref name="eye"/>:
+    /// a label rides onto its printer's tamp head at its print eye. The apply (deposit-on-carton)
+    /// transition is handled separately by <see cref="ApplyLabelsAtFullExtension"/>.
     /// </summary>
-    private bool UpdateLabelStates(SimCarton carton, TrackingEye eye)
+    private void UpdateLabelStates(SimCarton carton, TrackingEye eye)
     {
-        var appliedHere = false;
         carton.MutateLabels(label =>
         {
-            var (printEye, applyEye) = PrinterEyeIds(label.PrinterId);
-            var next = label;
-            if (!next.Applied && !next.OnTamp && string.Equals(printEye, eye.Id, StringComparison.OrdinalIgnoreCase))
+            var (printEye, _) = PrinterEyeIds(label.PrinterId);
+            if (!label.Applied && !label.OnTamp && string.Equals(printEye, eye.Id, StringComparison.OrdinalIgnoreCase))
             {
-                next = next with { OnTamp = true };
+                return label with { OnTamp = true };
             }
 
-            if (!next.Applied && string.Equals(applyEye, eye.Id, StringComparison.OrdinalIgnoreCase))
+            return label;
+        });
+    }
+
+    /// <summary>
+    /// Deposits each on-tamp label onto the carton at the instant the applicator reaches its fullest
+    /// extension and begins to retract — i.e. when the carton's centre passes under the printer's tamp
+    /// station. This decouples the visible apply from the downstream apply-eye crossing so the label
+    /// appears on the box exactly as the arm extends over it, not when the trailing edge later reaches
+    /// the eye.
+    /// </summary>
+    private void ApplyLabelsAtFullExtension(SimCarton carton, IReadOnlyDictionary<string, double> stationX)
+    {
+        var prevCentre = carton.PreviousPositionInches + carton.LengthInches / 2;
+        var centre = carton.PositionInches + carton.LengthInches / 2;
+        var appliedHere = false;
+
+        carton.MutateLabels(label =>
+        {
+            if (label.Applied || !label.OnTamp)
             {
-                next = next with { Applied = true, OnTamp = false };
+                return label;
+            }
+
+            var x = stationX.TryGetValue(label.PrinterId, out var sx)
+                ? sx
+                : EyePosition(PrinterApplyDevice(label.PrinterId));
+
+            if (prevCentre < x && centre >= x)
+            {
                 appliedHere = true;
+                return label with { Applied = true, OnTamp = false };
             }
 
-            return next;
+            return label;
         });
 
-        return appliedHere;
+        if (appliedHere)
+        {
+            carton.State = SimCartonState.Applied;
+            _lastEvent = $"{carton.BlindLabel} TAMP apply fired at full extension";
+        }
     }
+
+    private int PrinterApplyDevice(string printerId) =>
+        Math.Max(1, _printers.FirstOrDefault(p => string.Equals(p.PrinterId, printerId, StringComparison.OrdinalIgnoreCase))?.ApplyTrackingDevice ?? 2);
 
     private void AttachNewPrintJobs(SimCarton carton)
     {
