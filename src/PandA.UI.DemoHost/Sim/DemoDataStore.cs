@@ -244,7 +244,7 @@ public sealed class DemoCarton
     public required string VerifyResult { get; set; }
     public DateTimeOffset? VerifiedUtc { get; set; }
     public int PrintedCount { get; set; }
-    public required string ProfileName { get; init; }
+    public required string ProfileName { get; set; }
     public required string PassFailDestination { get; init; }
     public required string WaveId { get; init; }
     public bool IsHeld { get; set; }

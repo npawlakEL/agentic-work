@@ -68,6 +68,39 @@ public sealed class MessageConsoleServiceTests
     }
 
     [Fact]
+    public async Task Advise_names_the_cartons_real_profile_in_the_transcript()
+    {
+        var store = new DemoDataStore();
+        var console = new MessageConsoleService(store);
+        var lineId = console.DefaultLineId;
+
+        // CTN1000 carries the line's map name as its ProfileName; the advise transcript now names it
+        // (not "line default") and the run still prints + verifies through the named-profile lookup.
+        var profileName = store.Cartons["CTN1000"].ProfileName;
+        var result = await console.RunAsync(lineId, "CTN1000");
+
+        Assert.True(result.Success, $"Expected a verified run, got {result.FinalStatus}.\n{Dump(result)}");
+        Assert.Contains(result.Entries, e =>
+            e.Kind == ConsoleEntryKind.Info && e.Text.Contains($"profile {profileName}"));
+    }
+
+    [Fact]
+    public async Task Unknown_profile_prints_nothing_and_fails()
+    {
+        var store = new DemoDataStore();
+
+        // Advise a profile name the line's registry doesn't know (PROFSW/F19): induct resolves NoProfile
+        // and prints nothing, so the run stops before verify and fails.
+        store.Cartons["CTN1000"].ProfileName = "Nonexistent Profile";
+
+        var console = new MessageConsoleService(store);
+        var result = await console.RunAsync(console.DefaultLineId, "CTN1000");
+
+        Assert.False(result.Success, $"Expected a failed run, got {result.FinalStatus}.\n{Dump(result)}");
+        Assert.DoesNotContain(result.Entries, e => e.Kind == ConsoleEntryKind.OutboundPrint);
+    }
+
+    [Fact]
     public void Describe_returns_advised_label_data_for_a_barcode()
     {
         var store = new DemoDataStore();

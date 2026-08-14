@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using PandA.Core;
+using PandA.Core.Advice;
 using PandA.Core.Settings;
 using PandA.Core.Verification;
 using PandA.Sim;
@@ -114,13 +115,22 @@ public sealed class MessageConsoleService
             .OrderBy(p => p.ConfigOrder)
             .ToList();
 
+        // The line's default fire-point profile (built from its active map). Register it by name so a
+        // carton that advises a ProfileName resolves through the real named-profile lookup (PROFSW/F19)
+        // instead of silently falling back — a carton requesting an unregistered name prints nothing.
+        var activeProfile = LineSimulationFactory.BuildProfile(_store, line);
+        var profileRegistry = activeProfile is { } prof
+            ? new Dictionary<string, FirePointProfile>(StringComparer.OrdinalIgnoreCase) { [prof.Name] = prof }
+            : null;
+
         var config = new LineConfig(
             line.LineId!,
             printers.Select(LineSimulationFactory.ToPrinterConfig),
             loadBalance: _store.Settings.LoadBalanceEnabled,
             bufferOrder: new LabelBufferOrder(line.BufferOrder.Select((labelType, index) => new LabelBufferPosition(index + 1, labelType))),
-            activeProfile: LineSimulationFactory.BuildProfile(_store, line),
-            encoderResolution: (decimal)_store.Settings.EncoderResolutionInchesPerPulse);
+            activeProfile: activeProfile,
+            encoderResolution: (decimal)_store.Settings.EncoderResolutionInchesPerPulse,
+            profileRegistry: profileRegistry);
 
         var lineProvider = new InMemoryLineProvider().Add(config, printers.Select(p =>
         {
@@ -159,10 +169,16 @@ public sealed class MessageConsoleService
             clock,
             loggerFactory.CreateLogger<VerifyStationService>());
 
-        // 0) Advise — create the transport order from the barcode's advised label slots.
+        // 0) Advise — create the transport order from the barcode's advised label slots, carrying the
+        // carton's real WaveId and ProfileName so the induct step resolves the named profile (not the
+        // silent line default). Empty values stay null → induct falls back to the line's active profile.
         var labelSet = new PandaLabelSet(carton.Slots.Select(s => new Label(s.LabelType, s.Lpn, s.Zpl)));
-        await advice.AdviseAsync(line.LineId!, blindLabel, labelSet);
-        entries.Add(new ConsoleEntry(ConsoleEntryKind.Info, $"Advised carton {blindLabel} on line {line.Name} with {labelSet.Labels.Count} label(s)."));
+        var waveId = string.IsNullOrWhiteSpace(carton.WaveId) ? null : carton.WaveId;
+        var profileName = string.IsNullOrWhiteSpace(carton.ProfileName) ? null : carton.ProfileName;
+        await advice.AdviseAsync(new AdviceMessage(line.LineId!, blindLabel, labelSet, WaveId: waveId, ProfileName: profileName));
+        var profileLabel = profileName is null ? "line default" : profileName;
+        entries.Add(new ConsoleEntry(ConsoleEntryKind.Info,
+            $"Advised carton {blindLabel} on line {line.Name} with {labelSet.Labels.Count} label(s); wave {waveId ?? "(none)"}, profile {profileLabel}."));
 
         // 1) Inbound 281 induct scan → print.
         var scan = new InductScanMessage(SourceMode, SorterNumber, SorterMode, InductDeviceId, SeqNum: 1, LabelStatus: 0, BlindLabel: blindLabel);
