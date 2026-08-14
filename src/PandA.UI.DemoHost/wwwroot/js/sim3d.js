@@ -223,8 +223,10 @@ function buildStation(printer) {
         loaded.rotation.set(-Math.PI / 2, 0, 0);
         loaded.position.set(0, -ARM_HALF - 0.85, 0);
     } else {
-        // Proud of the camera-facing (+z) face of the side pad so it reads clearly.
-        loaded.position.set(0, 0, -ARM_HALF + 0.85);
+        // On the carton-facing (-z) face of the side pad — the face that presses onto the box — so it
+        // reads as the label about to be stamped, not one stuck to the printer body.
+        loaded.rotation.set(0, Math.PI, 0);
+        loaded.position.set(0, 0, -ARM_HALF - 0.85);
     }
     loaded.visible = false;
     tamp.add(loaded);
