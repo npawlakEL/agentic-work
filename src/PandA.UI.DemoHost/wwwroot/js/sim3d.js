@@ -260,14 +260,23 @@ function animateStation(group, cartonList) {
     const printerId = group.userData.printerId;
     const loaded = group.userData.loaded;
 
+    // Pick the job this printer is actively serving: among cartons carrying a label for this printer
+    // that is NOT yet applied, choose the one whose centre is nearest this station. Picking blindly the
+    // first carton would leave the pad blank for an approaching carton whenever an already-applied
+    // carton is still on the line ahead of it.
     let serving = null;
+    let bestDist = Infinity;
     for (const carton of cartonList ?? []) {
         const label = (carton.labels ?? []).find(l => l.printerId === printerId);
-        if (!label) {
+        if (!label || label.applied) {
             continue;
         }
-        serving = { carton, label };
-        break;
+        const centerX = toSceneX(carton.positionInches + carton.lengthInches / 2);
+        const dist = Math.abs(centerX - group.position.x);
+        if (dist < bestDist) {
+            bestDist = dist;
+            serving = { carton, label };
+        }
     }
 
     // The printed label sits on the pad from its print fire point until it's applied.
