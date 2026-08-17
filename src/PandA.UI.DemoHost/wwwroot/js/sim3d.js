@@ -232,9 +232,15 @@ function makeLabelTexture(caption) {
     }
     if (caption) {
         ctx.fillStyle = "#0f172a";
-        ctx.font = "bold 26px system-ui, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
+        // Shrink the font so a longer LPN still fits within the label media.
+        let fontPx = 26;
+        do {
+            ctx.font = `bold ${fontPx}px system-ui, sans-serif`;
+            if (ctx.measureText(String(caption)).width <= 116 || fontPx <= 12) break;
+            fontPx -= 2;
+        } while (true);
         ctx.fillText(String(caption), 64, 100);
     }
     const texture = new three.CanvasTexture(canvas);
@@ -602,7 +608,7 @@ function syncLabels(group, carton) {
         if (!entry) {
             const plane = new three.Mesh(
                 new three.PlaneGeometry(LABEL_W, LABEL_H),
-                new three.MeshBasicMaterial({ map: makeLabelTexture(label.applyPointNotation), side: three.DoubleSide })
+                new three.MeshBasicMaterial({ map: makeLabelTexture(label.lpn), side: three.DoubleSide })
             );
             const border = new three.Mesh(
                 new three.PlaneGeometry(LABEL_W + 0.5, LABEL_H + 0.5),
