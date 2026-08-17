@@ -203,7 +203,7 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
     - Their relevant project files (spec, taskboard, architecture-log, etc.)
     - Agents do NOT rely on "remembering" from a previous invocation. They reload every time.
 3. **Each agent operates within its defined scope.** The coder does not gather requirements. The reviewer does not write features. The Senior Coder does not write production code.
-4. **Skills are mandatory reading.** Every agent MUST read the `.agent/skills/` folder before starting work and follow any applicable skills during execution. If a skill exists for a task, the agent uses it — no reinventing.
+4. **Skills are mandatory reading and AUTO-LOAD by description match.** At the START of every invocation, every agent scans the frontmatter (`name` + `description` + `load_when`) of every file in `.agent/skills/` — reading just the frontmatter is cheap. For every skill whose description/`load_when` matches the task at hand, the agent **loads the full skill body and follows it** automatically — no waiting to be told, no reinventing. If a skill covers the task, using it is not optional. New skills must ship with frontmatter (see `.agent/skills/README.md`) so they fire when they should.
 5. **Learnings are mandatory.** Every completed project must produce at least one learning entry.
 6. **No pushing during Coder ↔ Senior Coder ↔ Reviewer loop.** All work stays local until user approves (Gate 2.5).
 7. **Spec must be rock solid before handoff.** No open items, no unanswered questions in `.project/planner-tasks.md` when the spec goes to the Senior Coder/Coder. If questions remain, they must be answered first.
@@ -281,6 +281,8 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
     - **Reviewer** independently re-runs the full relevant suites (unit + driver) and confirms green before signing off. A partial or skipped run is a blocking issue logged to `reviewer-log/`.
     - If a change is genuinely untestable by the existing suites, the Senior Coder says so explicitly and the gap becomes a test-to-add item — it is never silently skipped.
     - Evidence over claims: the actual test command and its summarized output are recorded (Coder in the story handoff, Reviewer in `reviewer-log/`). "Tests pass" without a run is not accepted.
+
+22. **No Orchestrator drift — delegation does not decay over long sessions.** The Orchestrator is a router, not a doer; it produces coordination, not work products. It must NEVER write application code/tests/config, make architecture or feasibility calls, draft or reshape the spec, or judge QA itself — those belong to the Coder, Senior Coder, Planner, and Reviewer respectively. The failure mode this prevents: late in a long session the Orchestrator "already has the context" and starts doing everything inline instead of handing off. That is a violation. Before writing any substantive content, the Orchestrator applies the delegation tripwire (see `orchestrator.agent.md` → "Long-Session Discipline"): if an agent owns the content, invoke that agent and announce the handoff — "I already know the answer" is never an excuse to skip the agent. The Orchestrator periodically re-anchors by re-reading these constraints and the current workflow state; the workflow is re-loaded, not remembered.
 
 ## Parallel Execution Model
 

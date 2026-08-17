@@ -1,3 +1,14 @@
+---
+name: commit-and-push
+description: >
+  Use when committing or pushing code/docs to a branch, or when deciding
+  whether a push is allowed under the current gate. Covers push timing, the
+  single-push-per-cycle rule, and Gate 2.5 approval before any remote push.
+load_when: >
+  Any task that commits, pushes, or reasons about when to push.
+  Match keywords: commit, push, remote, branch, Gate 2.5, approval.
+upstream: true
+---
 # Skill: Commit and Push
 
 ## Trigger

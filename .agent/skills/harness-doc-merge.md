@@ -1,4 +1,17 @@
-<!-- UPSTREAM: true -->
+---
+name: harness-doc-merge
+description: >
+  Use when merging or rebasing two branches whose divergent edits land in
+  agent-harness documentation (.project/** or .agent/**) rather than code —
+  including when the user asks to "intuitively merge/combine" harness docs.
+  Combines parallel workstreams into one coherent doc instead of dropping a
+  side or dumping raw conflict hunks.
+load_when: >
+  Any merge/rebase touching .project/** or .agent/** docs, or a request to
+  combine/reconcile spec/vision/backlog/taskboard/log differences.
+  Match keywords: merge, rebase, conflict, combine docs, spec, vision.
+upstream: true
+---
 # Skill: Intuitive Harness-Doc Merge
 
 ## Trigger
