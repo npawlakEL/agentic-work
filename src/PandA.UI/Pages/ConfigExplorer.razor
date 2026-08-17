@@ -54,7 +54,36 @@
                     <MudItem xs="12" sm="6"><MudNumericField T="double" @bind-Value="_builderLane.EncoderResolutionInchesPerPulse" Label="Encoder resolution (in/pulse)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" sm="6"><MudNumericField T="double" @bind-Value="_builderLane.BeltSpeedInchesPerSecond" Label="Belt speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12"><MudTextField @bind-Value="_builderLane.Zones" Label="Zones (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12"><MudTextField @bind-Value="_builderLane.BufferOrder" Label="Buffer order (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.subtitle2" Class="mb-1">Buffer order</MudText>
+                        <MudText Typo="Typo.caption" Class="cfg-muted mb-2 d-block">Drag tags to set label-type priority. Add new tags below.</MudText>
+                        <MudDropContainer T="string" @ref="_builderBufferContainer" Items="_builderLane.BufferTags"
+                                          ItemsSelector="@((i, z) => true)"
+                                          ItemDropped="@(info => OnBufferDropped(_builderLane, info, _builderBufferContainer))"
+                                          Class="cfg-buffer-wrap" data-testid="builder-buffer">
+                            <ChildContent>
+                                <MudDropZone T="string" Identifier="buffer" AllowReorder="true" Class="cfg-buffer-zone" />
+                            </ChildContent>
+                            <ItemRenderer>
+                                <MudPaper Elevation="1" Class="cfg-buffer-item">
+                                    <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small" />
+                                    <span>@context</span>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                   OnClick="@(() => RemoveBufferTag(_builderLane, context, _builderBufferContainer))" />
+                                </MudPaper>
+                            </ItemRenderer>
+                        </MudDropContainer>
+                        @if (_builderLane.BufferTags.Count == 0)
+                        {
+                            <MudText Typo="Typo.caption" Class="cfg-muted">No buffer tags yet — add one below.</MudText>
+                        }
+                        <div class="d-flex gap-2 mt-2 align-center">
+                            <MudTextField @bind-Value="_builderNewBufferTag" Label="New buffer tag" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="builder-buffer-newtag" />
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                                       OnClick="@(() => { if (AddBufferTag(_builderLane, _builderNewBufferTag, _builderBufferContainer)) { _builderNewBufferTag = string.Empty; } })"
+                                       data-testid="builder-buffer-add">Add tag</MudButton>
+                        </div>
+                    </MudItem>
                     <MudItem xs="12"><MudText Typo="Typo.caption" Class="cfg-muted">Per-orientation online minimums are seeded automatically and editable after the lane is created. Tracking devices are inferred from the print/apply devices.</MudText></MudItem>
                 </MudGrid>
             }
@@ -186,7 +215,36 @@
                     <MudItem xs="12" sm="6"><MudNumericField T="double" @bind-Value="_laneDraft.BeltSpeedInchesPerSecond" Label="Belt speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" sm="6"><MudTextField Value="@ActiveMapDisplay" Label="Active map (managed on Maps &amp; Fire Points)" Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="true" Disabled="true" data-testid="lane-activemap" /></MudItem>
                     <MudItem xs="12"><MudTextField @bind-Value="_laneDraft.Zones" Label="Zones (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12"><MudTextField @bind-Value="_laneDraft.BufferOrder" Label="Buffer order (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.subtitle2" Class="mb-1">Buffer order</MudText>
+                        <MudText Typo="Typo.caption" Class="cfg-muted mb-2 d-block">Drag tags to reorder the label-type priority for this lane. Add new tags below.</MudText>
+                        <MudDropContainer T="string" @ref="_laneBufferContainer" Items="_laneDraft.BufferTags"
+                                          ItemsSelector="@((i, z) => true)"
+                                          ItemDropped="@(info => OnBufferDropped(_laneDraft, info, _laneBufferContainer))"
+                                          Class="cfg-buffer-wrap" data-testid="lane-buffer">
+                            <ChildContent>
+                                <MudDropZone T="string" Identifier="buffer" AllowReorder="true" Class="cfg-buffer-zone" />
+                            </ChildContent>
+                            <ItemRenderer>
+                                <MudPaper Elevation="1" Class="cfg-buffer-item">
+                                    <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small" />
+                                    <span>@context</span>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                   OnClick="@(() => RemoveBufferTag(_laneDraft, context, _laneBufferContainer))" />
+                                </MudPaper>
+                            </ItemRenderer>
+                        </MudDropContainer>
+                        @if (_laneDraft.BufferTags.Count == 0)
+                        {
+                            <MudText Typo="Typo.caption" Class="cfg-muted">No buffer tags yet — add one below.</MudText>
+                        }
+                        <div class="d-flex gap-2 mt-2 align-center">
+                            <MudTextField @bind-Value="_laneNewBufferTag" Label="New buffer tag" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="lane-buffer-newtag" />
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                                       OnClick="@(() => { if (AddBufferTag(_laneDraft, _laneNewBufferTag, _laneBufferContainer)) { _laneNewBufferTag = string.Empty; } })"
+                                       data-testid="lane-buffer-add">Add tag</MudButton>
+                        </div>
+                    </MudItem>
                     <MudItem xs="12"><MudText Typo="Typo.caption" Class="cfg-muted">Tracking devices are inferred from each printer's print/apply devices (plus the scanner) — no manual entry needed.</MudText></MudItem>
                 </MudGrid>
 
@@ -654,6 +712,11 @@
     .cfg-step.done { color: var(--mud-palette-success); border-color: var(--mud-palette-success); background: transparent; }
     .cfg-builder-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 16px; }
     .cfg-actions-right { display: flex; gap: 8px; }
+    .cfg-buffer-wrap { margin-top: 4px; }
+    .cfg-buffer-zone { display: flex; flex-wrap: wrap; gap: 8px; min-height: 52px; padding: 10px; border: 1px dashed var(--mud-palette-lines-default); border-radius: 8px; background: var(--mud-palette-background-gray); }
+    .cfg-buffer-item { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px; cursor: grab; user-select: none; background: var(--mud-palette-surface); border: 1px solid var(--mud-palette-lines-default); }
+    .cfg-buffer-item:active { cursor: grabbing; }
+    .mud-drop-item-preview { opacity: 0.5; }
 </style>
 
 @code {
@@ -677,6 +740,12 @@
     // Line-level bulk print-point action.
     private int _bulkPrintPoint;
     private string _bulkPrintDevice = "";
+
+    // Buffer-order drag/drop editors (one for the current lane, one for the builder wizard).
+    private MudDropContainer<string>? _laneBufferContainer;
+    private MudDropContainer<string>? _builderBufferContainer;
+    private string _laneNewBufferTag = "";
+    private string _builderNewBufferTag = "";
 
     // Lane builder (step-by-step wizard) state.
     private bool _builderOpen;
@@ -1136,6 +1205,38 @@
     private int SeedMinimum(string orientationId) =>
         _printers.Any(p => p.Draft.OrientationId == orientationId) ? 1 : 0;
 
+    // ---- Buffer order (drag-to-reorder + add/remove tags) ----
+
+    private static void OnBufferDropped(LineDraft lane, MudItemDropInfo<string> info, MudDropContainer<string>? container)
+    {
+        var item = info.Item;
+        if (string.IsNullOrEmpty(item)) { return; }
+        lane.BufferTags.Remove(item);
+        var index = Math.Clamp(info.IndexInZone, 0, lane.BufferTags.Count);
+        lane.BufferTags.Insert(index, item);
+        container?.Refresh();
+    }
+
+    private bool AddBufferTag(LineDraft lane, string tag, MudDropContainer<string>? container)
+    {
+        tag = (tag ?? string.Empty).Trim();
+        if (tag.Length == 0) { return false; }
+        if (lane.BufferTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)))
+        {
+            Snackbar.Add($"Buffer tag \"{tag}\" already exists on this lane.", Severity.Warning);
+            return false;
+        }
+        lane.BufferTags.Add(tag);
+        container?.Refresh();
+        return true;
+    }
+
+    private static void RemoveBufferTag(LineDraft lane, string tag, MudDropContainer<string>? container)
+    {
+        lane.BufferTags.Remove(tag);
+        container?.Refresh();
+    }
+
     private string ActiveMapDisplay
     {
         get
@@ -1265,7 +1366,7 @@
         public string? Id { get; set; }
         public string Name { get; set; } = "";
         public string Zones { get; set; } = "";
-        public string BufferOrder { get; set; } = "";
+        public List<string> BufferTags { get; set; } = [];
         public string? ActiveMapId { get; set; }
         public LineControlPolicy ControlPolicy { get; set; }
         public double EncoderResolutionInchesPerPulse { get; set; } = 0.25;
@@ -1275,13 +1376,13 @@
         public static LineDraft From(LineDto d) => new()
         {
             Id = d.LineId, Name = d.Name, Zones = Join(d.Zones),
-            BufferOrder = Join(d.BufferOrder), ActiveMapId = d.ActiveMapId, ControlPolicy = d.ControlPolicy,
+            BufferTags = d.BufferOrder.ToList(), ActiveMapId = d.ActiveMapId, ControlPolicy = d.ControlPolicy,
             EncoderResolutionInchesPerPulse = d.EncoderResolutionInchesPerPulse,
             BeltSpeedInchesPerSecond = d.BeltSpeedInchesPerSecond,
             OnlineMinimums = d.OnlineMinimums.ToList(),
         };
 
-        public LineDto ToDto() => new(Id, Name, Split(Zones), Split(BufferOrder),
+        public LineDto ToDto() => new(Id, Name, Split(Zones), BufferTags.ToList(),
             string.IsNullOrWhiteSpace(ActiveMapId) ? null : ActiveMapId, ControlPolicy,
             OnlineMinimums, EncoderResolutionInchesPerPulse, BeltSpeedInchesPerSecond);
     }
