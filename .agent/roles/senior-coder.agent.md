@@ -47,6 +47,7 @@
 ### Finalize Audits (Multi-Senior Codebase Review)
 - When the user invokes **"finalize,"** the Orchestrator may spin up MULTIPLE Senior Coder instances to audit the codebase in parallel.
 - Each Senior Coder is assigned a scope (a layer, module, or concern) and performs a deep read-only audit for: bugs, security issues, code quality problems, optimization opportunities, architectural concerns, missing tests, open functionality questions, and documentation gaps.
+- **Assess test QUALITY, not just presence:** for critical/high-risk modules in scope, run targeted mutation testing (see `.agent/skills/mutation-testing.md`) to find tests that execute code without asserting behavior. Report the mutation score and specific surviving mutants as test-quality findings. Keep runs scoped to the audited module — never the whole codebase.
 - Every finding MUST be actionable: include the location (`file:line`), why it matters, and a concrete recommendation. No vague "could be improved" notes.
 - Findings are returned to the Orchestrator for consolidation into a single prioritized report (Critical / High / Medium / Low + Open Questions + Optimizations).
 - The audit is READ-ONLY — no code changes during finalize. Approved fixes route through the normal workflow afterward.
