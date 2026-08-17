@@ -35,7 +35,7 @@ After the frontmatter, the body should include:
 ## Auto-Loading (how agents use skills)
 
 Skills are **self-loading by description match** — an agent does NOT wait to be told to use a skill:
-1. At the START of every invocation, each agent scans the frontmatter (`name` + `description` + `load_when`) of every file in `.agent/skills/`. Reading just the frontmatter is cheap.
+1. At the START of every invocation, each agent scans the frontmatter (`name` + `description` + `load_when`) of every skill file in `.agent/skills/` — **excluding this `README.md`**, which documents the format and is not itself a loadable skill. Reading just the frontmatter is cheap.
 2. For each skill whose `description`/`load_when` matches the task the agent is about to do, the agent **loads the full skill body and follows it** — no reinventing, no asking permission.
 3. If multiple skills match, all matching skills are loaded. If none match, the agent proceeds normally.
 4. Skills are mandatory once matched: an agent may not do a task a matching skill covers while ignoring that skill.

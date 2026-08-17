@@ -4,9 +4,14 @@ A reusable agentic development framework for software projects. Clone this into 
 
 ## Quick Start
 
-1. Clone or copy this repo's contents into your project
-2. The Orchestrator (your AI assistant) will prompt you to create a vision document
-3. From there, the full workflow kicks in automatically
+Drop the harness into your repo and let the Orchestrator ingest it:
+
+1. **Copy the harness in** — clone this repo, or copy `.agent/`, `.project/`, `.client-docs/`, and `CHANGELOG.md` into your existing project.
+2. **Run `boot` first** — tell your AI assistant (the Orchestrator) `boot`. It deep-reads the entire harness, detects the repo type, runs an integrity check, and replies with a Boot Report plus an explicit commitment to follow the workflow. **Always do this before anything else** — dropping the files in does not guarantee the workflow gets followed; `boot` is what makes it stick.
+3. **Create the vision** — the Planner walks you through `.project/vision.md` (the whiteboard).
+4. **Work the flow** — describe what you want; the gated workflow (Planner → Senior Coder → Coder → Reviewer → Learner) kicks in automatically.
+
+> Re-run `boot` anytime the workflow feels like it's slipping — it re-anchors the Orchestrator.
 
 ## Agent Roster
 
@@ -26,17 +31,20 @@ A reusable agentic development framework for software projects. Clone this into 
 │   ├── agents.md        ← Master workflow (gates, constraints, protocols)
 │   ├── model-config.md  ← Per-agent model recommendations
 │   ├── roles/           ← Agent definitions with personalities
-│   ├── skills/          ← Reusable skills (grows over time)
-│   └── vision/          ← Product vision (co-created with user)
+│   ├── skills/          ← Reusable skills (auto-load by description match)
+│   └── tools/           ← Harness utilities (e.g. integrity check)
 ├── .project/            ← Project tracking & logs
+│   ├── vision.md        ← Product vision / whiteboard (co-created with user)
 │   ├── spec.md          ← Requirements specification
 │   ├── planner-tasks.md ← Planning task tracker
+│   ├── STATE.md         ← Live "where are we" snapshot (Orchestrator-maintained)
 │   ├── planning-sessions/ ← Q&A session logs
 │   ├── taskboard/       ← Story breakdowns (Senior Coder)
 │   ├── architecture-log/← Architectural decisions & issues
 │   ├── reviewer-log/    ← Review findings & accountability
+│   ├── backlog/         ← Out-of-scope ideas (auto-captured)
 │   └── learnings/       ← Post-project learnings
-├── .client-docs/                ← Public documentation
+├── .client-docs/        ← Public documentation
 │   ├── technical/       ← For developers
 │   └── operator/        ← For end users
 └── CHANGELOG.md         ← Semantic versioning log

@@ -20,7 +20,16 @@
 
 ## [Unreleased]
 
-_(Next cycle's changes will be logged here by the Learner.)_
+### Added
+- `.project/STATE.md` — a live "where are we" snapshot (current gate, in-flight story, branch, last milestone) the Orchestrator maintains and `boot` reads first, so context recovery is instant instead of reconstructed from git log.
+- `.agent/tools/harness-check.mjs` — a zero-dependency, cross-platform integrity checker (mode↔routing parity, skill frontmatter, referenced-path existence, contiguous constraint numbering). Wired into Boot and Nightwatch.
+- README "Adopt this harness" quickstart — explicit *copy in → run `boot` first → vision → work the flow* onboarding.
+- Categorized index over the Constraints list (by theme) without renumbering, so references stay stable as the list grows.
+
+### Changed
+- Finalize now treats **security** as a first-class audit dimension (injection, authz, secrets, unsafe deserialization, SSRF/path-traversal, supply-chain, sensitive-data exposure) in both `agents.md` and the Senior Coder role — was a single thin bullet.
+- Skill auto-load scan now explicitly **excludes `README.md`** (it documents the format; it is not a loadable skill) in Constraint #4 and the skills README.
+- Fixed the stale README structure diagram (removed a dead `.agent/vision/` path; added `.project/vision.md`, `STATE.md`, `backlog/`, and `.agent/tools/`).
 
 ---
 
