@@ -121,22 +121,26 @@ Every pass through the Coder ↔ Reviewer loop MUST produce written records. Thi
 **Run this FIRST, right after cloning the harness into a project** — the user says **"boot"** (or "boot up," "ingest the workflow"). Its purpose: force the Orchestrator to do a deep dive and FULLY internalize what this harness is and how it must behave, BEFORE doing any work. This exists because dropping the harness into a repo does not guarantee the workflow is followed — Boot makes ingestion explicit and verifiable.
 
 **The Orchestrator performs a deep read (not a skim):**
+0. **Detect repo type FIRST:** is this a **harness-authoring repo** (the repo IS the harness — blank `.project` templates are by design, not gaps) or a **downstream product repo** (harness cloned into a real project — filled planning docs + app code + tests are expected)? Announce which; the Boot Report's "gaps" are judged against that type.
 1. **Read the whole harness:** `agents.md` (all gates, all constraints, all modes), every file in `.agent/roles/`, `.agent/model-config.md`, and the frontmatter **and bodies** of every skill in `.agent/skills/`.
-2. **Read the project state:** `.project/vision/vision.md` (the whiteboard), `.project/spec.md`, `.project/planner-tasks.md`, `.project/taskboard/`, and the latest entries in `architecture-log/`, `reviewer-log/`, `learnings/`, `backlog/`.
-3. **Survey the actual codebase:** top-level structure, stack/build files, test setup, and how code is organized — enough to know what it's about to steward. It does NOT start changing anything.
-4. **Self-verify and report back** with a concise "Boot Report" that proves ingestion:
+2. **Run a harness integrity check:** every mode with a section in `agents.md` has a routing-table entry in `orchestrator.agent.md` and vice-versa; every skill has complete frontmatter (`name`/`description`/`load_when`/`upstream`) with `name` matching its filename (no dupes); every referenced `.project/` and `.client-docs/` path exists; constraint numbering is contiguous. Flag mismatches as gaps.
+3. **Read the project state:** `.project/vision.md` (the whiteboard), `.project/spec.md`, `.project/planner-tasks.md`, `.project/taskboard/`, and the latest entries in `architecture-log/`, `reviewer-log/`, `learnings/`, `backlog/`.
+4. **Survey the actual codebase:** top-level structure, stack/build files, test setup, and how code is organized — enough to know what it's about to steward. It does NOT start changing anything.
+5. **Self-verify and report back** with a concise "Boot Report" that proves ingestion:
    ```
    🚀 BOOT COMPLETE — harness ingested
+   Repo type: [harness-authoring | downstream product]
    Who I am: [Orchestrator identity + personality in one line]
    Workflow: [the gate sequence 1 → 1.5 → 2 → 2.5 → 2.75 → 3, one line]
    Non-negotiables: [top constraints — no gate skips, user is merge gate, auto-engage Senior Coder, no drift, never weaken a test]
+   Integrity: [modes↔routing OK · skills frontmatter OK · paths OK — or list gaps]
    Modes available: hot-path, finalize, nightwatch, retro, grill me, regroup
    Skills loaded: [count + the ones most likely to fire here]
    Project state: [what this project is, current phase, what's in flight]
-   Gaps/risks: [anything missing, stale, or misconfigured — or "none"]
+   Gaps/risks: [anything missing, stale, or misconfigured — judged vs. repo type — or "none"]
    Ready. What are we building?
    ```
-5. **Commit to enforcement:** Boot ends with the Orchestrator explicitly affirming it will run the workflow (gates, delegation, visibility) — not freelance.
+6. **Commit to enforcement:** Boot ends with the Orchestrator explicitly affirming it will run the workflow (gates, delegation, visibility) — not freelance.
 
 **Key rules:**
 - Boot is **read-only** — it ingests and reports; it makes no code changes.
@@ -275,7 +279,7 @@ The user says **"retro"** to run a retrospective on the *process itself* (not th
 
 1. **No agent skips a gate.** Coder cannot begin without Senior Coder's handoff. Reviewer cannot start without Senior Coder's sign-off. Learner cannot run until both Senior Coder and Reviewer pass.
 2. **Agents are stateless between invocations — MUST reload context.** All context must be passed explicitly (via files or prompts). At the START of every invocation, every agent MUST read:
-    - `.project/vision/vision.md` — the whiteboard (project direction, user preferences, conventions)
+    - `.project/vision.md` — the whiteboard (project direction, user preferences, conventions)
     - `.agent/skills/` — applicable skills for the task
     - Their relevant project files (spec, taskboard, architecture-log, etc.)
     - Agents do NOT rely on "remembering" from a previous invocation. They reload every time.
@@ -335,7 +339,7 @@ The user says **"retro"** to run a retrospective on the *process itself* (not th
     - The user decides. Their decision is final and logged in `.project/architecture-log/`
     - Neither agent overrides the other — the user is the tiebreaker
 18. **Vision document is the whiteboard — ALL agents read it.**
-    - `.project/vision/vision.md` is the project's source of truth for direction, goals, preferences, and conventions
+    - `.project/vision.md` is the project's source of truth for direction, goals, preferences, and conventions
     - Every agent reads it at the START of every invocation — no exceptions
     - If a question is answered in the vision doc, agents follow it without re-asking the user
     - The Planner updates the vision doc whenever the user states a new preference or convention
