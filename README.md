@@ -73,7 +73,9 @@ Say these keywords to trigger special modes:
 
 | Command | Who runs it | What it does |
 |---------|-------------|--------------|
+| **boot** | Orchestrator | Run FIRST after cloning the harness into a repo — deep-dive read of all harness docs + project state + codebase, then a self-verifying Boot Report and a commitment to follow the workflow. Re-runnable anytime the workflow feels like it's slipping |
 | **grill me** | Planner | Systematically interrogates you with deep requirement questions before any work begins |
 | **regroup** | Planner + Senior Coder | Joint review of the current state to surface additional questions, risks, and concerns |
 | **finalize** | Senior Coder(s) | Read-only parallel codebase audit — bugs, security, quality, optimizations, open questions, doc gaps → prioritized report |
 | **run nightwatch** | Senior Coder + Coder + Reviewer | Scheduled (nightly) trunk guardian — full suite + mutation testing on unchanged `master`, drafts fixes for real regressions (never merges, never weakens a test), posts a morning digest |
+| **retro** | Orchestrator + Learner | Process retrospective that trains the harness — mines logs + your corrections, then curates skills (add sharp ones, prune sprawl, upstream universal ones) |

@@ -116,6 +116,33 @@ Every pass through the Coder ↔ Reviewer loop MUST produce written records. Thi
 - **Upstream Skill Push:** The Orchestrator scans `.agent/skills/` for any files marked `<!-- UPSTREAM: true -->`. These universal skills are pushed back to the `agent-harness` branch (source of truth) so all future projects inherit them.
 - **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `.client-docs/technical/`. Operator doc in `.client-docs/operator/`. Architecture updated if applicable. CHANGELOG updated. Universal skills upstreamed.
 
+## 🚀 "Boot" Mode (Ingest & Internalize the Harness)
+
+**Run this FIRST, right after cloning the harness into a project** — the user says **"boot"** (or "boot up," "ingest the workflow"). Its purpose: force the Orchestrator to do a deep dive and FULLY internalize what this harness is and how it must behave, BEFORE doing any work. This exists because dropping the harness into a repo does not guarantee the workflow is followed — Boot makes ingestion explicit and verifiable.
+
+**The Orchestrator performs a deep read (not a skim):**
+1. **Read the whole harness:** `agents.md` (all gates, all constraints, all modes), every file in `.agent/roles/`, `.agent/model-config.md`, and the frontmatter **and bodies** of every skill in `.agent/skills/`.
+2. **Read the project state:** `.project/vision/vision.md` (the whiteboard), `.project/spec.md`, `.project/planner-tasks.md`, `.project/taskboard/`, and the latest entries in `architecture-log/`, `reviewer-log/`, `learnings/`, `backlog/`.
+3. **Survey the actual codebase:** top-level structure, stack/build files, test setup, and how code is organized — enough to know what it's about to steward. It does NOT start changing anything.
+4. **Self-verify and report back** with a concise "Boot Report" that proves ingestion:
+   ```
+   🚀 BOOT COMPLETE — harness ingested
+   Who I am: [Orchestrator identity + personality in one line]
+   Workflow: [the gate sequence 1 → 1.5 → 2 → 2.5 → 2.75 → 3, one line]
+   Non-negotiables: [top constraints — no gate skips, user is merge gate, auto-engage Senior Coder, no drift, never weaken a test]
+   Modes available: hot-path, finalize, nightwatch, retro, grill me, regroup
+   Skills loaded: [count + the ones most likely to fire here]
+   Project state: [what this project is, current phase, what's in flight]
+   Gaps/risks: [anything missing, stale, or misconfigured — or "none"]
+   Ready. What are we building?
+   ```
+5. **Commit to enforcement:** Boot ends with the Orchestrator explicitly affirming it will run the workflow (gates, delegation, visibility) — not freelance.
+
+**Key rules:**
+- Boot is **read-only** — it ingests and reports; it makes no code changes.
+- If required harness files are missing or malformed, Boot flags them as gaps rather than silently proceeding.
+- Boot can be re-run anytime the Orchestrator feels drift creeping in, or the user senses the workflow slipping — it's a re-anchor, not just a one-time init.
+
 ## Hot-Path (Small Fixes / Bug Patches)
 
 For trivial changes that don't warrant the full 6-gate flow (one-line fixes, typos, small bug patches):
@@ -192,6 +219,7 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
 - Finalize can be run at any time: before a release, at a milestone, or whenever the user wants a health check.
 - Every finding must be **actionable** — vague "could be better" notes are not allowed; each needs a location, a reason, and a recommendation.
 - Findings the user approves for fixing STILL go through the full workflow — Finalize surfaces work, it doesn't bypass gates.
+- **Skill/log hygiene:** Finalize also flags process gaps — patterns in `reviewer-log/`/`architecture-log/` that recur but were never promoted to skills, and skills that appear stale or contradictory. These are surfaced as candidates for **Retro** to act on (Finalize doesn't rewrite skills itself).
 
 ## 🌙 "Nightwatch" Mode (Scheduled Trunk Guardian)
 
@@ -218,6 +246,28 @@ Nightwatch is an **unattended, scheduled** run (typically nightly) that guards t
 - **Fixes go through the gates**, just asynchronously — no shortcut because it's unattended.
 - **Bounded and honest.** If a fix can't be made cleanly within the normal escalation limits (see Failure Escalation Protocol), Nightwatch stops, leaves it red, and reports it in the digest rather than forcing a hacky patch.
 - **Setup is per-project.** The schedule and the actual test/mutation commands are wired per repo (see `.agent/skills/nightwatch.md`), since they depend on the project's stack.
+- **Skill/log hygiene pass:** while on trunk, Nightwatch also does a lightweight check for unpromoted patterns — recurring issues in `reviewer-log/`/`architecture-log/` that should become skills, and skills that never fired or now conflict. It surfaces these in the digest as candidates (it does not rewrite skills itself — that's the Orchestrator via Retro).
+
+## 🔁 "Retro" Mode (Process Retrospective — Train the Harness)
+
+The user says **"retro"** to run a retrospective on the *process itself* (not the code). Where Finalize audits the codebase, Retro audits the **harness's memory** and turns scattered feedback into curated, durable skills. This is the main mechanism for "training" the harness over time.
+
+**The Orchestrator (with the Learner, and Senior Coder for technical patterns) does the following:**
+1. **Mine the feedback data:**
+   - `reviewer-log/` and `architecture-log/` — recurring issues, same bug appearing 2+ times, repeated triage decisions.
+   - `learnings/` — captured lessons not yet promoted into skills.
+   - **This session's user corrections** — every time the user overrode or corrected an agent (see the Correction-Capture reflex, Constraint #23). These are the richest signal.
+2. **Propose skill changes** as a concrete diff-style list:
+   - **NEW skills** — recurring patterns that should auto-load next time (with a sharp `description`/`load_when` so they actually fire, and a citation to the incident, e.g. `reviewer-log/007`).
+   - **UPDATED skills** — existing skills that were wrong, vague, or incomplete.
+   - **STALE skills** — skills that never fired or now contradict another; recommend prune/merge.
+3. **Get user sign-off**, then the Orchestrator writes the approved skills (it is the only skill-writer), flags universal ones `upstream: true`, and pushes universal ones to `agent-harness`.
+4. **Log the retro** to `.project/learnings/` (dated) so the training history is itself recorded.
+
+**Key rules:**
+- Retro produces **curated memory, not sprawl** — quality over count. Merging/pruning is as valuable as adding.
+- Every proposed skill should, where possible, **cite the evidence** (log entry or correction) that motivated it — evidence-backed skills are trusted and survive pruning.
+- Retro can run on demand, at milestones, or as the process-side complement to Finalize.
 
 ## Constraints & Guardrails
 
@@ -311,6 +361,8 @@ Nightwatch is an **unattended, scheduled** run (typically nightly) that guards t
     - Evidence over claims: the actual test command and its summarized output are recorded (Coder in the story handoff, Reviewer in `reviewer-log/`). "Tests pass" without a run is not accepted.
 
 22. **No Orchestrator drift — delegation does not decay over long sessions.** The Orchestrator is a router, not a doer; it produces coordination, not work products. It must NEVER write application code/tests/config, make architecture or feasibility calls, draft or reshape the spec, or judge QA itself — those belong to the Coder, Senior Coder, Planner, and Reviewer respectively. The failure mode this prevents: late in a long session the Orchestrator "already has the context" and starts doing everything inline instead of handing off. That is a violation. Before writing any substantive content, the Orchestrator applies the delegation tripwire (see `orchestrator.agent.md` → "Long-Session Discipline"): if an agent owns the content, invoke that agent and announce the handoff — "I already know the answer" is never an excuse to skip the agent. The Orchestrator periodically re-anchors by re-reading these constraints and the current workflow state; the workflow is re-loaded, not remembered.
+
+23. **Corrections are training data — capture them automatically.** Every time the user overrides, corrects, or redirects an agent ("no, do it this way," "that's wrong," "I keep telling you to X"), that is the richest possible signal and MUST NOT be thrown away. The Orchestrator immediately treats it as a skill/learning candidate: it acknowledges the correction, applies it now, and records it (with the context that triggered it) so it can be promoted into a durable skill at the next **Retro**. The user should never have to give the same correction twice for the same reason — if they do, the harness failed to capture it. Repeated corrections on the same theme are escalated to an immediate skill, not deferred. This is how the harness learns; see the "Correction-Capture" reflex in `orchestrator.agent.md`.
 
 ## Parallel Execution Model
 

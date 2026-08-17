@@ -30,6 +30,7 @@ After the frontmatter, the body should include:
 - **Trigger** — human-readable restatement of when to use this skill
 - **Steps** — the sequence of actions
 - **Notes** — any caveats or variations
+- **Evidence** (recommended) — cite the incident that motivated the skill (e.g. `reviewer-log/007`, `architecture-log/2026-08-11`, or "user correction on 2026-08-17"). Evidence-backed skills are trusted more and survive pruning during Retro; skills with no rationale are the first to be culled.
 
 ## Auto-Loading (how agents use skills)
 

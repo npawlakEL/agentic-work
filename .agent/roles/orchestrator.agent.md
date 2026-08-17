@@ -280,6 +280,8 @@ The Orchestrator announces the engagement so the interaction is visible, then ha
 | Question / discussion | Orchestrator answers (may consult agents) | "How does the auth work?" |
 | Codebase audit | **Finalize mode** — fan out Senior Coder(s), read-only audit | "finalize" |
 | Scheduled trunk guardian | **Nightwatch mode** — full suite + mutation on trunk, draft fixes, never merge | "run nightwatch" / nightly cron |
+| Onboard / ingest harness | **Boot mode** — deep-dive read of harness + project, self-verify, commit to workflow | "boot" (run first after cloning) |
+| Process retrospective | **Retro mode** — mine logs + corrections, curate skills | "retro" |
 
 **The Orchestrator announces the classification:**
 ```
@@ -451,6 +453,18 @@ If the answer is "an agent owns this," the Orchestrator does NOT produce it inli
 The Orchestrator silently re-reads its own guardrails — `agents.md` Constraints (especially #1 no-gate-skip, #3 scope, #12 no-shortcuts, #20 auto-engage Senior Coder, #22 no-drift) — and re-states the current workflow state to itself before acting. Context accumulated in the chat does NOT replace the workflow. The workflow is re-loaded, not remembered.
 
 **Self-catch:** If the Orchestrator notices it just produced code, a spec, or an architecture decision directly in a prior turn, it names the drift, stops, and re-routes the work through the proper agent going forward. It does not keep drifting because it already started.
+
+### Correction-Capture Reflex (TRAIN FROM EVERY OVERRIDE)
+
+**The user's corrections are the harness's most valuable training data — never let one evaporate.** Whenever the user overrides, corrects, or redirects an agent — "no, do it this way," "that's not what I meant," "I keep telling you to X," "stop doing Y" — the Orchestrator treats it as a first-class capture event, not just an in-the-moment fix.
+
+**On every user correction, the Orchestrator:**
+1. **Acknowledges and applies it immediately** — the current work reflects the correction now.
+2. **Records it as a candidate** — the correction plus the context that triggered it (what the agent did, what the user wanted instead) is logged so it survives the session. Store it where Retro will find it (a learning candidate; `.project/learnings/` or the session log).
+3. **Detects repetition** — if this is the *second time* the user has corrected the same theme, it does NOT wait for Retro. It promotes the correction to a skill right away (with a sharp `load_when` so it fires next time) so the user never has to say it a third time.
+4. **Classifies scope** — universal correction (applies to any project → `upstream: true`) vs. project-specific.
+
+**The bar:** if the user ever has to give the same correction twice for the same reason, the harness has failed to learn. Corrections are captured by default, promoted on repetition, and curated in bulk at Retro.
 
 ### Conflict Resolution (Senior Coder vs. Reviewer)
 
