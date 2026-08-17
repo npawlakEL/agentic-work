@@ -22,6 +22,8 @@ Per-agent model recommendations for the harness. Different agents have different
 
 The three reasoning agents set direction; the three execution agents carry it out. Spend your best model on the agents that make decisions.
 
+- **Fleet economics:** when Fleet mode auto-scales to many parallel loops, the horizontally-scaled agents are the **execution** ones (Coder/Reviewer on Sonnet-tier), while the single shared **Senior Coder stays Opus-tier** as the architectural authority across all loops. This keeps a large fleet economical without weakening the reasoning that matters.
+
 ## Cost/Quality Tradeoffs
 
 - If minimizing cost: only Senior Coder strictly needs Opus 4.8. Planner and Orchestrator can run Sonnet-tier acceptably, though questioning and enforcement quality soften slightly.

@@ -87,3 +87,11 @@ Say these keywords to trigger special modes:
 | **finalize** | Senior Coder(s) | Read-only parallel codebase audit — bugs, security, quality, optimizations, open questions, doc gaps → prioritized report |
 | **run nightwatch** | Senior Coder + Coder + Reviewer | Scheduled (nightly) trunk guardian — full suite + mutation testing on unchanged `master`, drafts fixes for real regressions (never merges, never weakens a test), posts a morning digest |
 | **retro** | Orchestrator + Learner | Process retrospective that trains the harness — mines logs + your corrections, then curates skills (add sharp ones, prune sprawl, upstream universal ones) |
+
+## Automatic Behaviors (no command needed)
+
+The Orchestrator does these on its own — you never have to ask:
+
+- **Fleet auto-scaling** — for large *and* shardable work (codebase deep-dive, big Finalize, broad refactor/migration, test backfill, multi-repo), the Orchestrator automatically spins up **N parallel Coder ↔ Reviewer loops** with exclusive file ownership and draft-PR-only rails. Small or tightly-coupled work stays single-track. Coupling, not size, decides. (`.agent/skills/fleet.md`, Constraint #25)
+- **Auto-engage Senior Coder** — anything touching code pulls in the Senior Coder automatically. (Constraint #20)
+- **Correction capture** — when you correct the agents, it's captured and promoted into a durable skill. (Constraint #23)
