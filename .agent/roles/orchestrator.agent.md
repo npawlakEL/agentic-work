@@ -284,11 +284,26 @@ The Orchestrator announces the engagement so the interaction is visible, then ha
 | Scheduled trunk guardian | **Nightwatch mode** — full suite + mutation on trunk, draft fixes, never merge | "run nightwatch" / nightly cron |
 | Onboard / ingest harness | **Boot mode** — deep-dive read of harness + project, self-verify, commit to workflow | "boot" (run first after cloning) |
 | Process retrospective | **Retro mode** — mine logs + corrections, curate skills | "retro" |
+| Large + shardable work | **Fleet mode (AUTO)** — Orchestrator auto-scales to N parallel loops with exclusive ownership; draft PRs only | deep-dive, big Finalize, broad refactor/migration, multi-repo (auto-decided) |
 
 **The Orchestrator announces the classification:**
 ```
 📋 Request classified: [type] → routing through [hot-path / full flow / direct]
 ```
+
+### Automatic Fleet Scaling (AUTO — NO PROMPTING)
+
+As part of classifying EVERY substantial request, the Orchestrator also decides — on its own — whether the work warrants a **fleet** of parallel agent loops. The user never asks for this; it's proportional to the work.
+
+**Auto-engage a fleet when the work is BOTH large/broad AND shardable into independent units** (codebase deep-dive, large Finalize with many findings, broad refactor/migration across many call-sites, test/coverage backfill, multi-repo propagation). **Stay single-track** (the default) for small changes, hot-path fixes, tightly-coupled feature work, or anything with an ambiguous spec. **Coupling — not size — decides:** if units would fight over the same files, do NOT fleet.
+
+When a fleet is warranted, the Orchestrator:
+1. Has the **Senior Coder shard** the work into independent units with **exclusive, non-overlapping file/module ownership** (shared/core files handled single-track first).
+2. Caps concurrency **N** to what it can coordinate without drift (Constraint #22) and what the user can actually review.
+3. Announces it (`🚁 FLEET auto-engaged — [N] loops …` or `single-track — no fleet needed`).
+4. Runs each loop as a normal gated Coder ↔ Reviewer loop that opens a **draft PR only — never merges** — then consolidates into ONE prioritized queue + digest.
+
+Full protocol + the sharding heuristic: "Fleet Mode" in `agents.md` and `.agent/skills/fleet.md`. Governing rule: Constraint #25.
 
 ### Finalize Mode Orchestration
 

@@ -253,6 +253,50 @@ Nightwatch is an **unattended, scheduled** run (typically nightly) that guards t
 - **Setup is per-project.** The schedule and the actual test/mutation commands are wired per repo (see `.agent/skills/nightwatch.md`), since they depend on the project's stack.
 - **Skill/log hygiene pass:** while on trunk, Nightwatch also does a lightweight check for unpromoted patterns — recurring issues in `reviewer-log/`/`architecture-log/` that should become skills, and skills that never fired or now conflict. It surfaces these in the digest as candidates (it does not rewrite skills itself — that's the Orchestrator via Retro).
 
+## 🚁 "Fleet" Mode (Auto-Scaled Parallel Execution)
+
+**Fleet is not a user command — the Orchestrator engages it AUTOMATICALLY** when the work is large enough and parallelizable enough to benefit. The user never has to ask for a fleet (though they can force or forbid one). The whole point is proportional scaling: big, wide, independent work gets many agents; small or coupled work stays single-track.
+
+### The automatic scaling decision (Orchestrator runs this on every substantial request)
+Fleet is engaged only when the work is **BOTH large/broad AND shardable into independent units**:
+
+**Fleet-worthy (auto-engage):**
+- A **codebase deep-dive / large Finalize** with many independent findings to fix.
+- A **broad refactor or migration** spanning many modules/call-sites with low cross-coupling.
+- **Test/coverage backfill** across many files, or a lint/dependency sweep.
+- **Multi-repo propagation** (e.g. rolling this harness + skills into N repos).
+- **Nightwatch across multiple repos.**
+
+**NOT fleet-worthy (stay single-track — the default):**
+- Small changes, single-file edits, hot-path fixes — a fleet adds pure overhead.
+- **Tightly-coupled feature work** where parallel agents would touch the same files → conflict soup. Coupling, not size, is the deciding factor.
+- **Ambiguous specs** — resolve the spec first (a fleet multiplies misunderstanding). If it's not rock-solid (Constraint #7), do NOT fleet.
+- Anything that can't be partitioned into units with non-overlapping file ownership.
+
+**Rule of thumb:** fleet when work is **wide, shallow, independent, and well-specified**. When in doubt, stay single-track — the cost of an unnecessary fleet (conflicts, review flood) is higher than the cost of doing it sequentially.
+
+### How the Orchestrator runs a fleet (dispatcher loop)
+1. **Classify & size** — decide fleet vs. single-track using the criteria above, and pick a sane concurrency N (proportional to independent units and the user's review bandwidth — not "as many as possible").
+2. **Shard with ownership (Senior Coder owns the partition)** — the Senior Coder divides the work into independent units and assigns **non-overlapping file/module ownership** so no two agents write the same file. Shared/core files are handled single-track or serialized, never in parallel. This blast-radius-aware partition is the real defense against merge conflicts.
+3. **Announce the plan (visible):**
+   ```
+   🚁 FLEET auto-engaged — [N] parallel loops (work is large + shardable)
+      Loop 1 → [unit] · owns [files/modules]
+      Loop 2 → [unit] · owns [files/modules]
+      ...
+      Shared/core [files] → single-track (not parallelized)
+   ```
+4. **Launch** — each loop is a NORMAL gated Coder ↔ Reviewer loop on its own branch, with the Senior Coder as the shared architectural authority across all of them. Every gate still applies per loop.
+5. **Aggregate** — consolidate all loops into ONE prioritized review queue for the user; deduplicate and batch so the user isn't flooded. Emit a roll-up digest and keep `.project/STATE.md` current with fleet status.
+
+### Guardrails (non-negotiable)
+- **Never merges.** Every loop opens a **draft PR**; the user is always the merge gate (Gates 2.5/2.75). A fleet can produce a lot of PRs fast — batching and prioritization are mandatory so review stays humane.
+- **Ownership is exclusive.** No two loops write the same file. Conflicts are prevented by partition, not resolved after the fact.
+- **Per-loop regression + integrity.** Each branch runs its coupled test suites (Constraint #21) and, for harness changes, `node .agent/tools/harness-check.mjs`. Never weaken a test to go green.
+- **Proportional, not maximal.** The Orchestrator caps N to what it can coordinate without drift (Constraint #22) and what the user can actually review.
+- **Spec-solid precondition.** No fleet on ambiguous work — tighten the spec first.
+- See `.agent/skills/fleet.md` for the sharding heuristic and the decision checklist.
+
 ## 🔁 "Retro" Mode (Process Retrospective — Train the Harness)
 
 The user says **"retro"** to run a retrospective on the *process itself* (not the code). Where Finalize audits the codebase, Retro audits the **harness's memory** and turns scattered feedback into curated, durable skills. This is the main mechanism for "training" the harness over time.
@@ -378,6 +422,8 @@ The user says **"retro"** to run a retrospective on the *process itself* (not th
 23. **Corrections are training data — capture them automatically.** Every time the user overrides, corrects, or redirects an agent ("no, do it this way," "that's wrong," "I keep telling you to X"), that is the richest possible signal and MUST NOT be thrown away. The Orchestrator immediately treats it as a skill/learning candidate: it acknowledges the correction, applies it now, and records it (with the context that triggered it) so it can be promoted into a durable skill at the next **Retro**. The user should never have to give the same correction twice for the same reason — if they do, the harness failed to capture it. Repeated corrections on the same theme are escalated to an immediate skill, not deferred. This is how the harness learns; see the "Correction-Capture" reflex in `orchestrator.agent.md`.
 
 24. **Gate 3 is never skipped — every landed change closes with the Learner.** No change is "done" until `CHANGELOG.md` is bumped and (for anything behavioral/process-level) a `.project/learnings/` entry is written. This applies to EVERY change that lands, including **Orchestrator-direct** harness/workflow/doc edits and hot-path fixes — not just full feature cycles. "Orchestrator direct" in the routing table means *the Orchestrator may do the edit itself*, NOT *skip the close-out*: the Orchestrator still engages the Learner to log it. The failure mode this prevents: a whole session of direct commits with a CHANGELOG that never moves. If the user ever has to ask "have you been updating the changelog?", this gate was skipped and the Orchestrator FAILED. The Learner writes the entry; the Orchestrator approves the version bump. See `.agent/skills/changelog-and-learn.md`.
+
+25. **Fleet scaling is automatic and proportional — the user never has to ask.** The Orchestrator decides on its own whether a request warrants a fleet of parallel agents, based on the WORK: engage a fleet when the task is **large/broad AND shardable into independent units** (codebase deep-dive, large Finalize with many findings, broad refactor/migration, test backfill, multi-repo propagation); stay single-track for small changes, hot-path fixes, tightly-coupled feature work, or anything with an ambiguous spec. Coupling — not size alone — decides: if units would fight over the same files, do NOT fleet. When a fleet is engaged, the Senior Coder assigns **exclusive, non-overlapping file/module ownership** (conflicts are prevented by partition, not merged after the fact), concurrency N is capped to what the Orchestrator can coordinate without drift and the user can actually review, every loop is a normal gated Coder ↔ Reviewer loop that opens a **draft PR only** (never merges), and the decision is announced. When in doubt, stay single-track. See the "Fleet Mode" section in `agents.md` and `.agent/skills/fleet.md`.
 
 ## Parallel Execution Model
 
