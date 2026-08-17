@@ -29,6 +29,9 @@ public interface IConfigEditor<TDto>
 /// <summary>CRUD for label definitions.</summary>
 public interface ILabelDefEditor : IConfigEditor<LabelDefDto>;
 
+/// <summary>CRUD for apply orientations (user-defined, attached to printers).</summary>
+public interface IOrientationEditor : IConfigEditor<OrientationDto>;
+
 /// <summary>CRUD for MandA stations.</summary>
 public interface IMandaStationEditor : IConfigEditor<MandaStationDto>;
 

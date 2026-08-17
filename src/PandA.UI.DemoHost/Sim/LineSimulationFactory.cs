@@ -32,11 +32,11 @@ internal static class LineSimulationFactory
         var profile = BuildProfile(store, line);
         var config = new LineConfig(
             line.LineId!,
-            printers.Select(ToPrinterConfig),
+            printers.Select(p => ToPrinterConfig(store, p)),
             loadBalance: store.Settings.LoadBalanceEnabled,
             bufferOrder: new LabelBufferOrder(line.BufferOrder.Select((labelType, index) => new LabelBufferPosition(index + 1, labelType))),
             activeProfile: profile,
-            encoderResolution: (decimal)store.Settings.EncoderResolutionInchesPerPulse);
+            encoderResolution: (decimal)line.EncoderResolutionInchesPerPulse);
 
         var lineProvider = new InMemoryLineProvider().Add(config, printers.Select(p =>
         {
@@ -79,8 +79,15 @@ internal static class LineSimulationFactory
 
         var stationDevices = printers.ToDictionary(
             p => p.PrinterId!,
-            p => ResolveStationDevices(store, line, p),
+            ResolveStationDevices,
             StringComparer.OrdinalIgnoreCase);
+
+        // Tracking eyes are inferred from the printers' print + apply devices (plus the induct scanner),
+        // never a hand-entered line field. Floor at 3 (print eye, apply eye, scanner).
+        var trackingEyeCount = Math.Max(3, printers
+            .SelectMany(p => new[] { ParseTrackingDevice(p.PrintDevice), ParseTrackingDevice(p.ApplyDevice) })
+            .Distinct()
+            .Count());
 
         return new LineSimulation(
             line.LineId!,
@@ -93,9 +100,9 @@ internal static class LineSimulationFactory
             store.Settings.VerifyFailThreshold,
             new LineSimulationSettings
             {
-                TrackingEyeCount = Math.Max(3, line.TrackingDevices.Count),
-                EncoderResolutionInchesPerPulse = store.Settings.EncoderResolutionInchesPerPulse,
-                BeltSpeedInchesPerSecond = printers.FirstOrDefault()?.BeltSpeedInchesPerSecond ?? 24,
+                TrackingEyeCount = trackingEyeCount,
+                EncoderResolutionInchesPerPulse = line.EncoderResolutionInchesPerPulse,
+                BeltSpeedInchesPerSecond = line.BeltSpeedInchesPerSecond,
                 DefaultApplyDistanceInches = 1,
                 PrinterCount = Math.Max(1, printers.Count),
             },
@@ -104,29 +111,16 @@ internal static class LineSimulationFactory
                 var (printDevice, applyDevice, printPulses) = stationDevices[p.PrinterId!];
                 return new SimPrinterStation(
                     p.PrinterId!,
-                    string.Equals(p.Orientation, "Top", StringComparison.OrdinalIgnoreCase) ? "Top" : "Side",
+                    MotionString(store, p),
                     printDevice,
                     applyDevice,
                     printPulses);
             }).ToList());
     }
 
-    /// <summary>Reads the printer's fire point from the line's active map to recover its print/apply tracking devices.</summary>
-    private static (int PrintDevice, int ApplyDevice, int PrintPulses) ResolveStationDevices(DemoDataStore store, LineDto line, PrinterDto printer)
-    {
-        var fp = line.ActiveMapId is not null && store.Maps.TryGetValue(line.ActiveMapId, out var map)
-            ? map.FirePointIds
-                .Select(id => store.FirePoints.TryGetValue(id, out var f) ? f : null)
-                .FirstOrDefault(f => f is not null && string.Equals(f.PrinterId, printer.PrinterId, StringComparison.OrdinalIgnoreCase))
-            : null;
-
-        if (fp is null)
-        {
-            return (1, 2, 0);
-        }
-
-        return (ParseTrackingDevice(fp.PrintTrackingDevice), ParseTrackingDevice(fp.ApplyTrackingDevice), Math.Max(0, fp.PrintPoint));
-    }
+    /// <summary>Reads the printer's own print/apply devices and static print point.</summary>
+    private static (int PrintDevice, int ApplyDevice, int PrintPulses) ResolveStationDevices(PrinterDto printer) =>
+        (ParseTrackingDevice(printer.PrintDevice), ParseTrackingDevice(printer.ApplyDevice), Math.Max(0, printer.PrintPoint));
 
     internal static FirePointProfile? BuildProfile(DemoDataStore store, LineDto line)
     {
@@ -135,17 +129,34 @@ internal static class LineSimulationFactory
             return null;
         }
 
-        var firePoints = map.FirePointIds
-            .Select(id => store.FirePoints.TryGetValue(id, out var fp) ? fp : null)
-            .Where(fp => fp is not null)
-            .Select(fp => ((fp!.PrinterId, fp.LabelType), ToFirePoint(fp)))
-            .ToList();
+        var firePoints = new List<((string PrinterId, string LabelType) Key, FirePoint FirePoint)>();
+        foreach (var id in map.FirePointIds)
+        {
+            if (!store.FirePoints.TryGetValue(id, out var fp) ||
+                !store.Printers.TryGetValue(fp.PrinterId, out var printer))
+            {
+                continue;
+            }
+
+            var labelType = LabelTypeName(store, fp.LabelDefId);
+            firePoints.Add(((fp.PrinterId, labelType), ToFirePoint(printer, fp)));
+        }
 
         return firePoints.Count == 0 ? null : new FirePointProfile(map.Name, firePoints);
     }
 
-    private static FirePoint ToFirePoint(FirePointDto fp) =>
-        new(ParseTrackingDevice(fp.PrintTrackingDevice), fp.PrintPoint, ParseTrackingDevice(fp.ApplyTrackingDevice), ApplyPoint.Parse(fp.ApplyPointNotation));
+    private static FirePoint ToFirePoint(PrinterDto printer, FirePointDto fp) =>
+        new(ParseTrackingDevice(printer.PrintDevice), printer.PrintPoint, ParseTrackingDevice(printer.ApplyDevice), ApplyPoint.Parse(fp.ApplyPointNotation));
+
+    private static string LabelTypeName(DemoDataStore store, string labelDefId) =>
+        store.LabelDefs.TryGetValue(labelDefId, out var def) ? def.Name : labelDefId;
+
+    /// <summary>Sim applicator motion string for a printer, resolved from its orientation entity's motion kind.</summary>
+    private static string MotionString(DemoDataStore store, PrinterDto printer)
+    {
+        var kind = store.Orientations.TryGetValue(printer.OrientationId, out var o) ? o.MotionKind : ApplyMotionKind.Side;
+        return kind == ApplyMotionKind.Top ? "Top" : "Side"; // Front maps to the closest existing motion for now.
+    }
 
     internal static int ParseTrackingDevice(string trackingDevice)
     {
@@ -153,13 +164,16 @@ internal static class LineSimulationFactory
         return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0 ? parsed : 1;
     }
 
-    internal static PrinterConfig ToPrinterConfig(PrinterDto printer) =>
-        new(
+    internal static PrinterConfig ToPrinterConfig(DemoDataStore store, PrinterDto printer)
+    {
+        var kind = store.Orientations.TryGetValue(printer.OrientationId, out var o) ? o.MotionKind : ApplyMotionKind.Side;
+        var orientation = kind == ApplyMotionKind.Top ? ApplyOrientation.Top : ApplyOrientation.Side;
+        return new(
             printer.PrinterId!,
             printer.Ip,
             printer.Port,
             printer.LabelTypes,
-            string.Equals(printer.Orientation, "Top", StringComparison.OrdinalIgnoreCase) ? ApplyOrientation.Top : ApplyOrientation.Side,
+            orientation,
             printer.ConfigOrder);
-
+    }
 }

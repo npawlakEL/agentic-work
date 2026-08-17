@@ -22,6 +22,7 @@ public sealed class DemoDataStore
         PostTripResetCount: 5);
 
     public ConcurrentDictionary<string, LabelDefDto> LabelDefs { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public ConcurrentDictionary<string, OrientationDto> Orientations { get; } = new(StringComparer.OrdinalIgnoreCase);
     public ConcurrentDictionary<string, MandaStationDto> Stations { get; } = new(StringComparer.OrdinalIgnoreCase);
     public ConcurrentDictionary<string, LineDto> Lines { get; } = new(StringComparer.OrdinalIgnoreCase);
     public ConcurrentDictionary<string, PrinterDto> Printers { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -33,6 +34,10 @@ public sealed class DemoDataStore
 
     private int _idSeq = 1000;
 
+    private string _sideOrientationId = "";
+    private string _topOrientationId = "";
+    private readonly Dictionary<string, string> _labelDefIdByName = new(StringComparer.OrdinalIgnoreCase);
+
     public string NextId(string prefix) => $"{prefix}-{Interlocked.Increment(ref _idSeq)}";
 
     public DemoDataStore()
@@ -42,16 +47,23 @@ public sealed class DemoDataStore
 
     private void Seed()
     {
-        // Label definitions
-        foreach (var (name, orient, pos) in new[]
+        // Orientations (user-definable; seeded with the two built-ins).
+        _sideOrientationId = NextId("orient");
+        Orientations[_sideOrientationId] = new OrientationDto(_sideOrientationId, "Side", ApplyMotionKind.Side);
+        _topOrientationId = NextId("orient");
+        Orientations[_topOrientationId] = new OrientationDto(_topOrientationId, "Top", ApplyMotionKind.Top);
+
+        // Label definitions (identity only: name, description, physical width).
+        foreach (var (name, description, width) in new[]
                  {
-                     ("Shipping", "Side", 1),
-                     ("Content", "Top", 0),
-                     ("Return", "Side", 2),
+                     ("Shipping", "Primary shipping label", 4.0),
+                     ("Content", "Top-apply content/manifest label", 4.0),
+                     ("Return", "Return / RMA label", 4.0),
                  })
         {
             var id = NextId("label");
-            LabelDefs[id] = new LabelDefDto(id, name, orient, pos);
+            LabelDefs[id] = new LabelDefDto(id, name, description, width);
+            _labelDefIdByName[name] = id;
         }
 
         // MandA stations
@@ -84,7 +96,8 @@ public sealed class DemoDataStore
         for (var i = 0; i < printerNames.Length; i++)
         {
             var pName = printerNames[i];
-            var orientation = pName.StartsWith("Cont", StringComparison.OrdinalIgnoreCase) ? "Top" : "Side";
+            var isTop = pName.StartsWith("Cont", StringComparison.OrdinalIgnoreCase);
+            var orientationId = isTop ? _topOrientationId : _sideOrientationId;
             var printerId = NextId("printer");
             printerIds.Add(printerId);
 
@@ -95,8 +108,8 @@ public sealed class DemoDataStore
             var hasSameOrientationPeerEarlier = false;
             for (var j = 0; j < i; j++)
             {
-                var peerOrientation = printerNames[j].StartsWith("Cont", StringComparison.OrdinalIgnoreCase) ? "Top" : "Side";
-                if (peerOrientation == orientation)
+                var peerIsTop = printerNames[j].StartsWith("Cont", StringComparison.OrdinalIgnoreCase);
+                if (peerIsTop == isTop)
                 {
                     hasSameOrientationPeerEarlier = true;
                     break;
@@ -110,28 +123,26 @@ public sealed class DemoDataStore
                 Name: $"{tag}-{pName}",
                 Ip: $"10.10.{(tag == "L1" ? 1 : 2)}.{10 + i}",
                 Port: 9100,
-                Orientation: orientation,
-                LabelTypes: orientation == "Top" ? ["Content"] : ["Shipping", "Return"],
+                OrientationId: orientationId,
+                LabelTypes: isTop ? ["Content"] : ["Shipping", "Return"],
                 ConfigOrder: i,
-                EncoderResolutionInchesPerPulse: 0.25,
-                LabelWidthInches: 4,
+                PrintDevice: "TD1",
+                ApplyDevice: isTop ? "TD3" : "TD2",
+                PrintPoint: isTop ? 60 : 40,
+                DynamicApply: isTop,
                 SpareEligible: isSpare,
                 TampMountHeightInches: 12,
-                BeltSpeedInchesPerSecond: 24,
                 TampSpeedInchesPerSecond: 30);
 
-            var labelType = orientation == "Top" ? "Content" : "Shipping";
+            var labelName = isTop ? "Content" : "Shipping";
             var fpId = NextId("fp");
             firePointIds.Add(fpId);
             FirePoints[fpId] = new FirePointDto(
                 FirePointId: fpId,
                 PrinterId: printerId,
-                LabelType: labelType,
-                PrintTrackingDevice: "TD1",
-                PrintPoint: orientation == "Top" ? 60 : 40,
-                ApplyTrackingDevice: orientation == "Top" ? "TD3" : "TD2",
-                ApplyPointNotation: orientation == "Top" ? "0M" : "1T",
-                DynamicApply: orientation == "Top");
+                LabelDefId: _labelDefIdByName[labelName],
+                ApplyEdge: isTop ? "Middle" : "Trailing",
+                ApplyInches: isTop ? 0 : 1);
 
             PrinterRuntime[printerId] = new DemoPrinterRuntime
             {
@@ -148,11 +159,12 @@ public sealed class DemoDataStore
             LineId: lineId,
             Name: name,
             Zones: ["Z1"],
-            TrackingDevices: ["TD1", "TD2", "TD3"],
             BufferOrder: ["Shipping", "Content", "Return"],
             ActiveMapId: mapId,
             ControlPolicy: LineControlPolicy.AllowDegraded,
-            OnlineMinimum: 1);
+            OnlineMinimums: [new OrientationMinimum(_sideOrientationId, 1), new OrientationMinimum(_topOrientationId, 1)],
+            EncoderResolutionInchesPerPulse: Settings.EncoderResolutionInchesPerPulse,
+            BeltSpeedInchesPerSecond: 24);
     }
 
     private void SeedCartons()

@@ -60,8 +60,8 @@ public sealed class DemoConfigTreeQuery(DemoDataStore store) : IConfigTreeQuery
     {
         var firePoints = store.FirePoints.Values
             .Where(f => string.Equals(f.PrinterId, printer.PrinterId, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(f => f.LabelType, StringComparer.Ordinal)
-            .Select(f => new ConfigTreeNode(ConfigNodeKind.FirePoint, $"{f.LabelType} ({f.ApplyPointNotation})", f.FirePointId, []))
+            .OrderBy(f => LabelName(f.LabelDefId), StringComparer.Ordinal)
+            .Select(f => new ConfigTreeNode(ConfigNodeKind.FirePoint, $"{LabelName(f.LabelDefId)} ({f.ApplyPointNotation})", f.FirePointId, []))
             .ToList();
 
         return new ConfigTreeNode(ConfigNodeKind.Printer, printer.Name, printer.PrinterId,
@@ -69,6 +69,9 @@ public sealed class DemoConfigTreeQuery(DemoDataStore store) : IConfigTreeQuery
             ConfigTreeNode.Group(ConfigNodeKind.FirePoints, "Fire Points", firePoints),
         ]);
     }
+
+    private string LabelName(string labelDefId) =>
+        store.LabelDefs.TryGetValue(labelDefId, out var def) ? def.Name : labelDefId;
 }
 
 /// <summary>Sim settings editor (single record).</summary>
@@ -85,6 +88,16 @@ public sealed class DemoSettingsEditor(DemoDataStore store) : ISettingsEditor
         }
 
         store.Settings = settings;
+
+        // Global encoder resolution propagates to every line (lines default from the global value).
+        foreach (var line in store.Lines.Values.ToList())
+        {
+            if (Math.Abs(line.EncoderResolutionInchesPerPulse - settings.EncoderResolutionInchesPerPulse) > double.Epsilon)
+            {
+                store.Lines[line.LineId!] = line with { EncoderResolutionInchesPerPulse = settings.EncoderResolutionInchesPerPulse };
+            }
+        }
+
         return Task.FromResult(CommandResult.Ok("Settings saved."));
     }
 }
@@ -135,6 +148,14 @@ public sealed class DemoLabelDefEditor(DemoDataStore store)
     protected override string? GetId(LabelDefDto e) => e.LabelDefId;
 
     protected override LabelDefDto WithId(LabelDefDto e, string id) => e with { LabelDefId = id };
+}
+
+public sealed class DemoOrientationEditor(DemoDataStore store)
+    : DemoConfigEditor<OrientationDto>(store.Orientations, "orient", store), IOrientationEditor
+{
+    protected override string? GetId(OrientationDto e) => e.OrientationId;
+
+    protected override OrientationDto WithId(OrientationDto e, string id) => e with { OrientationId = id };
 }
 
 public sealed class DemoMandaStationEditor(DemoDataStore store)

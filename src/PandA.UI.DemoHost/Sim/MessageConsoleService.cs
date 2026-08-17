@@ -125,11 +125,11 @@ public sealed class MessageConsoleService
 
         var config = new LineConfig(
             line.LineId!,
-            printers.Select(LineSimulationFactory.ToPrinterConfig),
+            printers.Select(p => LineSimulationFactory.ToPrinterConfig(_store, p)),
             loadBalance: _store.Settings.LoadBalanceEnabled,
             bufferOrder: new LabelBufferOrder(line.BufferOrder.Select((labelType, index) => new LabelBufferPosition(index + 1, labelType))),
             activeProfile: activeProfile,
-            encoderResolution: (decimal)_store.Settings.EncoderResolutionInchesPerPulse,
+            encoderResolution: (decimal)line.EncoderResolutionInchesPerPulse,
             profileRegistry: profileRegistry);
 
         var lineProvider = new InMemoryLineProvider().Add(config, printers.Select(p =>

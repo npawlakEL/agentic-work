@@ -24,6 +24,7 @@ public sealed class ConfigExplorerTests : TestContext
         Services.AddSingleton<IPrinterEditor>(_config);
         Services.AddSingleton<IFirePointEditor>(_config);
         Services.AddSingleton<IMapEditor>(_config);
+        Services.AddSingleton<IOrientationEditor>(_config);
     }
 
     [Fact]
@@ -73,8 +74,9 @@ public sealed class ConfigExplorerTests : TestContext
 
         // "Add label" appends a blank, expanded editor card; fill the name and save.
         cut.Find("[data-testid=add-label]").Click();
-        cut.FindAll("[data-testid=label-panel] input").First().Change("New Label");
-        cut.Find("[data-testid=save-label]").Click();
+        var newPanel = cut.FindAll("[data-testid=label-panel]").Last();
+        newPanel.QuerySelector("input")!.Change("New Label");
+        cut.FindAll("[data-testid=save-label]").Last().Click();
 
         Assert.Equal(1, _config.LabelSaves);
         Assert.NotNull(_config.LastSavedLabel);
@@ -146,7 +148,7 @@ public sealed class ConfigExplorerTests : TestContext
 
     private sealed class FakeConfig
         : IConfigTreeQuery, ISettingsEditor, ILabelDefEditor, IMandaStationEditor,
-          ILineEditor, IPrinterEditor, IFirePointEditor, IMapEditor
+          ILineEditor, IPrinterEditor, IFirePointEditor, IMapEditor, IOrientationEditor
     {
         public int SettingsSaves { get; private set; }
         public SettingsDto? LastSavedSettings { get; private set; }
@@ -183,9 +185,9 @@ public sealed class ConfigExplorerTests : TestContext
 
         // Label
         Task<IReadOnlyList<LabelDefDto>> IConfigEditor<LabelDefDto>.ListAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<LabelDefDto>>([]);
+            Task.FromResult<IReadOnlyList<LabelDefDto>>([new LabelDefDto("label-1", "Shipping", "Ship label", 4)]);
         Task<LabelDefDto?> IConfigEditor<LabelDefDto>.GetAsync(string id, CancellationToken ct) =>
-            Task.FromResult<LabelDefDto?>(new LabelDefDto(id, "Shipping", "Side", 0));
+            Task.FromResult<LabelDefDto?>(new LabelDefDto(id, "Shipping", "Ship label", 4));
         Task<CommandResult> IConfigEditor<LabelDefDto>.SaveAsync(LabelDefDto e, CancellationToken ct)
         {
             LabelSaves++;
@@ -209,7 +211,7 @@ public sealed class ConfigExplorerTests : TestContext
         Task<IReadOnlyList<LineDto>> IConfigEditor<LineDto>.ListAsync(CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<LineDto>>([]);
         Task<LineDto?> IConfigEditor<LineDto>.GetAsync(string id, CancellationToken ct) =>
-            Task.FromResult<LineDto?>(new LineDto(id, "L", [], [], [], null, LineControlPolicy.AllowDegraded, 1));
+            Task.FromResult<LineDto?>(new LineDto(id, "L", [], [], null, LineControlPolicy.AllowDegraded, [], 0.25, 24));
         Task<CommandResult> IConfigEditor<LineDto>.SaveAsync(LineDto e, CancellationToken ct)
         {
             LineSaves++;
@@ -221,9 +223,9 @@ public sealed class ConfigExplorerTests : TestContext
 
         // Printer
         Task<IReadOnlyList<PrinterDto>> IConfigEditor<PrinterDto>.ListAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<PrinterDto>>([new PrinterDto("PR1", "L1", "Printer 1", "1.1.1.1", 9100, "Side", [], 0, 0.25, 4, true, 0, 0, 0)]);
+            Task.FromResult<IReadOnlyList<PrinterDto>>([new PrinterDto("PR1", "L1", "Printer 1", "1.1.1.1", 9100, "side-orient", [], 0, "", "", 0, false, true, 0, 0)]);
         Task<PrinterDto?> IConfigEditor<PrinterDto>.GetAsync(string id, CancellationToken ct) =>
-            Task.FromResult<PrinterDto?>(new PrinterDto(id, "L1", "P", "1.1.1.1", 9100, "Side", [], 0, 0.25, 4, true, 0, 0, 0));
+            Task.FromResult<PrinterDto?>(new PrinterDto(id, "L1", "P", "1.1.1.1", 9100, "side-orient", [], 0, "", "", 0, false, true, 0, 0));
         Task<CommandResult> IConfigEditor<PrinterDto>.SaveAsync(PrinterDto e, CancellationToken ct) =>
             Task.FromResult(CommandResult.Ok());
         Task<CommandResult> IConfigEditor<PrinterDto>.DeleteAsync(string id, CancellationToken ct) =>
@@ -235,7 +237,7 @@ public sealed class ConfigExplorerTests : TestContext
         Task<IReadOnlyList<FirePointDto>> IConfigEditor<FirePointDto>.ListAsync(CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<FirePointDto>>([]);
         Task<FirePointDto?> IConfigEditor<FirePointDto>.GetAsync(string id, CancellationToken ct) =>
-            Task.FromResult<FirePointDto?>(new FirePointDto(id, "P1", "Shipping", "TD1", 0, "TD2", "0M", false));
+            Task.FromResult<FirePointDto?>(new FirePointDto(id, "P1", "label-1", "Middle", 0));
         Task<CommandResult> IConfigEditor<FirePointDto>.SaveAsync(FirePointDto e, CancellationToken ct)
         {
             FirePointSaves++;
@@ -258,5 +260,15 @@ public sealed class ConfigExplorerTests : TestContext
             Task.FromResult(CommandResult.Ok());
         Task<IReadOnlyList<MapDto>> IMapEditor.ListForLineAsync(string lineId, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<MapDto>>([]);
+
+        // Orientation
+        Task<IReadOnlyList<OrientationDto>> IConfigEditor<OrientationDto>.ListAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<OrientationDto>>([new OrientationDto("side-orient", "Side", ApplyMotionKind.Side)]);
+        Task<OrientationDto?> IConfigEditor<OrientationDto>.GetAsync(string id, CancellationToken ct) =>
+            Task.FromResult<OrientationDto?>(new OrientationDto(id, "Side", ApplyMotionKind.Side));
+        Task<CommandResult> IConfigEditor<OrientationDto>.SaveAsync(OrientationDto e, CancellationToken ct) =>
+            Task.FromResult(CommandResult.Ok());
+        Task<CommandResult> IConfigEditor<OrientationDto>.DeleteAsync(string id, CancellationToken ct) =>
+            Task.FromResult(CommandResult.Ok());
     }
 }

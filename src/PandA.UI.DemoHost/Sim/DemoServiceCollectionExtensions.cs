@@ -51,6 +51,7 @@ public static class DemoServiceCollectionExtensions
         services.AddSingleton<IConfigTreeQuery, DemoConfigTreeQuery>();
         services.AddSingleton<ISettingsEditor, DemoSettingsEditor>();
         services.AddSingleton<ILabelDefEditor, DemoLabelDefEditor>();
+        services.AddSingleton<IOrientationEditor, DemoOrientationEditor>();
         services.AddSingleton<IMandaStationEditor, DemoMandaStationEditor>();
         services.AddSingleton<ILineEditor, DemoLineEditor>();
         services.AddSingleton<IPrinterEditor, DemoPrinterEditor>();

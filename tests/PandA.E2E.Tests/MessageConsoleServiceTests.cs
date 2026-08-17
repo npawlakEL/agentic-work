@@ -55,9 +55,11 @@ public sealed class MessageConsoleServiceTests
 
         // Take the default line's only Content (Top) printer offline so its label can't print. Shipping
         // still prints, so the carton prints partially and the verify scan — reading only what printed — fails.
+        var topOrientationId = store.Orientations.Values
+            .First(o => o.MotionKind == PandA.UI.Contracts.Config.ApplyMotionKind.Top).OrientationId;
         var offline = store.Printers.Values.First(p =>
             string.Equals(p.LineId, lineId, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(p.Orientation, "Top", StringComparison.OrdinalIgnoreCase));
+            string.Equals(p.OrientationId, topOrientationId, StringComparison.OrdinalIgnoreCase));
         store.PrinterRuntime[offline.PrinterId!].Online = false;
 
         var result = await console.RunAsync(lineId, "CTN1000");
