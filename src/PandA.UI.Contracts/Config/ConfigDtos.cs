@@ -3,15 +3,11 @@ namespace PandA.UI.Contracts.Config;
 /// <summary>Global settings (flags/thresholds) edited as a single form. These are site-wide.</summary>
 /// <param name="EncoderResolutionInchesPerPulse">Global default encoder resolution; seeds/propagates to lines.</param>
 /// <param name="ReprintLabelsEnabled">Master "Reprint Labels" allow flag.</param>
-/// <param name="LoadBalanceEnabled">Round-robin printer load balancing.</param>
-/// <param name="TwoPrinterRuleEnabled">Legacy 2-printer degraded policy toggle.</param>
 /// <param name="VerifyFailThreshold">Consecutive verify failures before a line pauses.</param>
 /// <param name="PostTripResetCount">Successful verifies required to clear a paused line.</param>
 public sealed record SettingsDto(
     double EncoderResolutionInchesPerPulse,
     bool ReprintLabelsEnabled,
-    bool LoadBalanceEnabled,
-    bool TwoPrinterRuleEnabled,
     int VerifyFailThreshold,
     int PostTripResetCount);
 
@@ -59,6 +55,7 @@ public sealed record OrientationMinimum(string OrientationId, int Minimum);
 /// <summary>A line: zones, buffer order, active Map, control policy, per-orientation minimums, belt/encoder.</summary>
 /// <param name="LineId">Identifier (null when creating).</param>
 /// <param name="Name">Display name.</param>
+/// <param name="PlcNumber">The line's PLC number (base-1); the PLC tracks lines by this number.</param>
 /// <param name="Zones">Zone identifiers on the line.</param>
 /// <param name="BufferOrder">Per-position label-type buffer order.</param>
 /// <param name="ActiveMapId">The currently active fire-point Map.</param>
@@ -66,31 +63,33 @@ public sealed record OrientationMinimum(string OrientationId, int Minimum);
 /// <param name="OnlineMinimums">Per-orientation minimum online printers (policy = OnlineMinimum).</param>
 /// <param name="EncoderResolutionInchesPerPulse">Line encoder resolution (defaults from global settings).</param>
 /// <param name="BeltSpeedInchesPerSecond">Line belt speed.</param>
+/// <param name="LoadBalanceEnabled">Round-robin printer load balancing on this line.</param>
+/// <param name="TwoPrinterRuleEnabled">Two-printer degraded policy on this line.</param>
 public sealed record LineDto(
     string? LineId,
     string Name,
+    int PlcNumber,
     IReadOnlyList<string> Zones,
     IReadOnlyList<string> BufferOrder,
     string? ActiveMapId,
     LineControlPolicy ControlPolicy,
     IReadOnlyList<OrientationMinimum> OnlineMinimums,
     double EncoderResolutionInchesPerPulse,
-    double BeltSpeedInchesPerSecond);
+    double BeltSpeedInchesPerSecond,
+    bool LoadBalanceEnabled,
+    bool TwoPrinterRuleEnabled);
 
-/// <summary>A printer on a line. Owns its orientation, print/apply devices, print point and dynamic-apply toggle.</summary>
+/// <summary>A printer on a line. Owns its orientation, print/apply devices and print point.</summary>
 /// <param name="PrinterId">Identifier (null when creating).</param>
 /// <param name="LineId">Owning line.</param>
 /// <param name="Name">Display name.</param>
 /// <param name="Ip">Printer IP.</param>
 /// <param name="Port">Printer port.</param>
 /// <param name="OrientationId">Orientation entity this printer applies with.</param>
-/// <param name="LabelTypes">Label types this printer can print.</param>
-/// <param name="ConfigOrder">Tie-break ordering for selection.</param>
+/// <param name="PlcNumber">The printer's PLC number (base-1); the PLC tracks printers by this number. Also the selection tie-break.</param>
 /// <param name="PrintDevice">Tracking device where printing starts (auto-fills fire points).</param>
 /// <param name="ApplyDevice">Tracking device where applying starts (auto-fills fire points).</param>
 /// <param name="PrintPoint">Static print fire point (integer position); line can bulk-set this.</param>
-/// <param name="DynamicApply">Whether dynamic apply-point adjustment is enabled.</param>
-/// <param name="SpareEligible">Whether the printer can act as a spare.</param>
 /// <param name="TampMountHeightInches">Top-apply kinematics: tamp mount height.</param>
 /// <param name="TampSpeedInchesPerSecond">Top-apply kinematics: tamp speed.</param>
 public sealed record PrinterDto(
@@ -100,13 +99,10 @@ public sealed record PrinterDto(
     string Ip,
     int Port,
     string OrientationId,
-    IReadOnlyList<string> LabelTypes,
-    int ConfigOrder,
+    int PlcNumber,
     string PrintDevice,
     string ApplyDevice,
     int PrintPoint,
-    bool DynamicApply,
-    bool SpareEligible,
     double TampMountHeightInches,
     double TampSpeedInchesPerSecond);
 

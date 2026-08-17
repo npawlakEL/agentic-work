@@ -27,9 +27,10 @@ public sealed class DemoRejectCartonQuery(DemoDataStore store) : IRejectCartonQu
             q = q.Where(c => string.Equals(c.LineId, filter.LineId, StringComparison.OrdinalIgnoreCase));
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.ReasonContains))
+        if (filter.Reasons is { Count: > 0 } reasons)
         {
-            q = q.Where(c => c.RejectReason.Contains(filter.ReasonContains, StringComparison.OrdinalIgnoreCase));
+            var set = new HashSet<string>(reasons, StringComparer.OrdinalIgnoreCase);
+            q = q.Where(c => set.Contains(c.RejectReason));
         }
 
         var ordered = q.OrderByDescending(c => c.RejectedUtc).ToList();
@@ -47,4 +48,12 @@ public sealed class DemoRejectCartonQuery(DemoDataStore store) : IRejectCartonQu
 
         return Task.FromResult(new PagedResult<RejectCartonRow>(page, total, filter.Page, filter.PageSize));
     }
+
+    public Task<IReadOnlyList<string>> GetReasonsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<string>>(store.Cartons.Values
+            .Where(c => c.RejectedUtc is not null && !string.IsNullOrWhiteSpace(c.RejectReason))
+            .Select(c => c.RejectReason)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(r => r, StringComparer.OrdinalIgnoreCase)
+            .ToList());
 }

@@ -23,14 +23,14 @@ public sealed record RejectCartonRow(
 /// <param name="FromUtc">Rejection window start.</param>
 /// <param name="ToUtc">Rejection window end.</param>
 /// <param name="LineId">Restrict to a line.</param>
-/// <param name="ReasonContains">Free-text match on the reject reason.</param>
+/// <param name="Reasons">Restrict to these exact reject reasons (empty/null = all reasons).</param>
 /// <param name="Page">Zero-based page index.</param>
 /// <param name="PageSize">Page size.</param>
 public sealed record RejectCartonFilter(
     DateTimeOffset? FromUtc = null,
     DateTimeOffset? ToUtc = null,
     string? LineId = null,
-    string? ReasonContains = null,
+    IReadOnlyList<string>? Reasons = null,
     int Page = 0,
     int PageSize = 100);
 
@@ -38,4 +38,7 @@ public sealed record RejectCartonFilter(
 public interface IRejectCartonQuery
 {
     Task<PagedResult<RejectCartonRow>> QueryAsync(RejectCartonFilter filter, CancellationToken ct = default);
+
+    /// <summary>All distinct reject reasons known to the system, for the reason checklist.</summary>
+    Task<IReadOnlyList<string>> GetReasonsAsync(CancellationToken ct = default);
 }

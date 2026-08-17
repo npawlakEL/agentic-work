@@ -26,14 +26,14 @@ internal static class LineSimulationFactory
             : store.Lines.Values.First(l => string.Equals(l.LineId, lineId, StringComparison.OrdinalIgnoreCase));
         var printers = store.Printers.Values
             .Where(p => string.Equals(p.LineId, line.LineId, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p.ConfigOrder)
+            .OrderBy(p => p.PlcNumber)
             .ToList();
 
         var profile = BuildProfile(store, line);
         var config = new LineConfig(
             line.LineId!,
-            printers.Select(p => ToPrinterConfig(store, p)),
-            loadBalance: store.Settings.LoadBalanceEnabled,
+            printers.Select(p => ToPrinterConfig(store, line, p)),
+            loadBalance: line.LoadBalanceEnabled,
             bufferOrder: new LabelBufferOrder(line.BufferOrder.Select((labelType, index) => new LabelBufferPosition(index + 1, labelType))),
             activeProfile: profile,
             encoderResolution: (decimal)line.EncoderResolutionInchesPerPulse);
@@ -171,7 +171,7 @@ internal static class LineSimulationFactory
         return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0 ? parsed : 1;
     }
 
-    internal static PrinterConfig ToPrinterConfig(DemoDataStore store, PrinterDto printer)
+    internal static PrinterConfig ToPrinterConfig(DemoDataStore store, LineDto line, PrinterDto printer)
     {
         var kind = store.Orientations.TryGetValue(printer.OrientationId, out var o) ? o.MotionKind : ApplyMotionKind.Side;
         var orientation = kind == ApplyMotionKind.Top ? ApplyOrientation.Top : ApplyOrientation.Side;
@@ -179,8 +179,28 @@ internal static class LineSimulationFactory
             printer.PrinterId!,
             printer.Ip,
             printer.Port,
-            printer.LabelTypes,
+            LabelTypesForPrinter(store, line, printer.PrinterId!),
             orientation,
-            printer.ConfigOrder);
+            printer.PlcNumber);
+    }
+
+    /// <summary>
+    /// A printer's printable label types are derived from the line's active map: the label definition
+    /// of every fire point assigned to that printer. Printers no longer own a label-type list.
+    /// </summary>
+    internal static IReadOnlyList<string> LabelTypesForPrinter(DemoDataStore store, LineDto line, string printerId)
+    {
+        if (line.ActiveMapId is null || !store.Maps.TryGetValue(line.ActiveMapId, out var map))
+        {
+            return [];
+        }
+
+        return map.Assignments
+            .Where(a => a.PrinterIds.Contains(printerId, StringComparer.OrdinalIgnoreCase))
+            .Select(a => store.FirePoints.TryGetValue(a.FirePointId, out var fp) ? LabelTypeName(store, fp.LabelDefId) : null)
+            .Where(name => !string.IsNullOrEmpty(name))
+            .Select(name => name!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }

@@ -16,8 +16,6 @@ public sealed class DemoDataStore
     public SettingsDto Settings { get; set; } = new(
         EncoderResolutionInchesPerPulse: 0.25,
         ReprintLabelsEnabled: true,
-        LoadBalanceEnabled: true,
-        TwoPrinterRuleEnabled: false,
         VerifyFailThreshold: 3,
         PostTripResetCount: 5);
 
@@ -41,6 +39,7 @@ public sealed class DemoDataStore
     // Normalized, printer-independent fire points (a map binds them to printers).
     private string _shippingFirePointId = "";
     private string _contentFirePointId = "";
+    private string _returnFirePointId = "";
 
     public string NextId(string prefix) => $"{prefix}-{Interlocked.Increment(ref _idSeq)}";
 
@@ -86,6 +85,8 @@ public sealed class DemoDataStore
         FirePoints[_shippingFirePointId] = new FirePointDto(_shippingFirePointId, _labelDefIdByName["Shipping"], "Trailing", 1);
         _contentFirePointId = NextId("fp");
         FirePoints[_contentFirePointId] = new FirePointDto(_contentFirePointId, _labelDefIdByName["Content"], "Middle", 0);
+        _returnFirePointId = NextId("fp");
+        FirePoints[_returnFirePointId] = new FirePointDto(_returnFirePointId, _labelDefIdByName["Return"], "Leading", 2);
 
         // Lines + printers + fire points + maps
         SeedLine("Line 1", "L1", ["Ship1", "Ship2", "Cont1"]);
@@ -113,10 +114,9 @@ public sealed class DemoDataStore
             printerIds.Add(printerId);
             (isTop ? topPrinterIds : sidePrinterIds).Add(printerId);
 
-            // Spare eligibility is redundancy within an orientation group: a printer may be held as a
-            // spare only when an earlier printer of the SAME orientation already covers its label types.
-            // The sole printer of an orientation (e.g. the one Top/Content printer) is never a spare, so
-            // top-apply labels always have a live printer to route to.
+            // Spare behavior is derived at runtime from the online-minimum rules, not a config flag:
+            // a printer acts as a spare only when an earlier printer of the SAME orientation already
+            // covers its label types. The sole printer of an orientation is never a spare.
             var hasSameOrientationPeerEarlier = false;
             for (var j = 0; j < i; j++)
             {
@@ -136,13 +136,10 @@ public sealed class DemoDataStore
                 Ip: $"10.10.{(tag == "L1" ? 1 : 2)}.{10 + i}",
                 Port: 9100,
                 OrientationId: orientationId,
-                LabelTypes: isTop ? ["Content"] : ["Shipping", "Return"],
-                ConfigOrder: i,
+                PlcNumber: i + 1,
                 PrintDevice: "TD1",
                 ApplyDevice: isTop ? "TD3" : "TD2",
                 PrintPoint: isTop ? 60 : 40,
-                DynamicApply: isTop,
-                SpareEligible: isSpare,
                 TampMountHeightInches: 12,
                 TampSpeedInchesPerSecond: 30);
 
@@ -156,11 +153,12 @@ public sealed class DemoDataStore
         }
 
         // The map binds each normalized fire point to every printer of the matching orientation:
-        // both side printers share the one Shipping (1T) fire point; the top printer gets Content (0M).
+        // both side printers share the Shipping (1T) and Return (2L) fire points; the top printer gets Content (0M).
         var assignments = new List<FirePointAssignment>();
         if (sidePrinterIds.Count > 0)
         {
             assignments.Add(new FirePointAssignment(_shippingFirePointId, sidePrinterIds));
+            assignments.Add(new FirePointAssignment(_returnFirePointId, sidePrinterIds));
         }
         if (topPrinterIds.Count > 0)
         {
@@ -172,13 +170,16 @@ public sealed class DemoDataStore
         Lines[lineId] = new LineDto(
             LineId: lineId,
             Name: name,
+            PlcNumber: int.TryParse(new string(tag.Where(char.IsDigit).ToArray()), System.Globalization.CultureInfo.InvariantCulture, out var plc) ? plc : 1,
             Zones: ["Z1"],
             BufferOrder: ["Shipping", "Content", "Return"],
             ActiveMapId: mapId,
             ControlPolicy: LineControlPolicy.AllowDegraded,
             OnlineMinimums: [new OrientationMinimum(_sideOrientationId, 1), new OrientationMinimum(_topOrientationId, 1)],
             EncoderResolutionInchesPerPulse: Settings.EncoderResolutionInchesPerPulse,
-            BeltSpeedInchesPerSecond: 24);
+            BeltSpeedInchesPerSecond: 24,
+            LoadBalanceEnabled: true,
+            TwoPrinterRuleEnabled: false);
     }
 
     private void SeedCartons()

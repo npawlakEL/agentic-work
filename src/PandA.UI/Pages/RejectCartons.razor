@@ -15,11 +15,26 @@
 
 <MudPaper Class="pa-4 mb-4" Elevation="1">
     <MudGrid>
-        <MudItem xs="12" md="6">
-            <MudTextField @bind-Value="_reason" Label="Reason contains"
-                          data-testid="reason-filter" Immediate="false" />
+        <MudItem xs="12" md="8">
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Reject reasons</MudText>
+            @if (_allReasons.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="rej-muted">No reject reasons recorded.</MudText>
+            }
+            else
+            {
+                <div class="rej-reasons" data-testid="reason-checklist">
+                    @foreach (var reason in _allReasons)
+                    {
+                        <MudCheckBox T="bool" Dense="true" Label="@reason"
+                                     Value="_selectedReasons.Contains(reason)"
+                                     ValueChanged="@((bool v) => ToggleReason(reason, v))" />
+                    }
+                </div>
+                <MudText Typo="Typo.caption" Class="rej-muted">@(_selectedReasons.Count == 0 ? "Showing all reasons." : $"Filtering to {_selectedReasons.Count} reason(s).")</MudText>
+            }
         </MudItem>
-        <MudItem xs="8" md="4">
+        <MudItem xs="8" md="3">
             <MudSelect T="string" @bind-Value="_lineId" Label="Line" Clearable="true" data-testid="line-filter">
                 @foreach (var l in _lines)
                 {
@@ -27,7 +42,7 @@
                 }
             </MudSelect>
         </MudItem>
-        <MudItem xs="4" md="2" Class="d-flex align-center">
+        <MudItem xs="4" md="1" Class="d-flex align-center">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="apply-filters" OnClick="ReloadAsync">Apply</MudButton>
         </MudItem>
     </MudGrid>
@@ -68,15 +83,45 @@
     <MudAlert Severity="Severity.Success" Class="mt-4" data-testid="empty-state">No rejected cartons match the filter.</MudAlert>
 }
 
+<style>
+    .rej-reasons { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+    .rej-muted { color: var(--mud-palette-text-secondary); }
+</style>
+
 @code {
     private IReadOnlyList<RejectCartonRow> _rows = [];
     private IReadOnlyList<string> _lines = [];
+    private IReadOnlyList<string> _allReasons = [];
+    private readonly HashSet<string> _selectedReasons = new(StringComparer.OrdinalIgnoreCase);
     private int _total;
 
-    private string? _reason;
     private string? _lineId;
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _allReasons = await Query.GetReasonsAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to load reject reasons: {ex.Message}", Severity.Error);
+        }
+
+        await ReloadAsync();
+    }
+
+    private void ToggleReason(string reason, bool selected)
+    {
+        if (selected)
+        {
+            _selectedReasons.Add(reason);
+        }
+        else
+        {
+            _selectedReasons.Remove(reason);
+        }
+    }
 
     private async Task ReloadAsync()
     {
@@ -84,7 +129,7 @@
         {
             var filter = new RejectCartonFilter(
                 LineId: _lineId,
-                ReasonContains: _reason,
+                Reasons: _selectedReasons.Count > 0 ? _selectedReasons.ToList() : null,
                 PageSize: 200);
             var page = await Query.QueryAsync(filter);
             _rows = page.Items;

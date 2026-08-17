@@ -112,7 +112,7 @@ public sealed class MessageConsoleService
         // Compose the real Core services over fresh in-memory adapters seeded from this line's config.
         var printers = _store.Printers.Values
             .Where(p => string.Equals(p.LineId, line.LineId, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p.ConfigOrder)
+            .OrderBy(p => p.PlcNumber)
             .ToList();
 
         // The line's default fire-point profile (built from its active map). Register it by name so a
@@ -125,8 +125,8 @@ public sealed class MessageConsoleService
 
         var config = new LineConfig(
             line.LineId!,
-            printers.Select(p => LineSimulationFactory.ToPrinterConfig(_store, p)),
-            loadBalance: _store.Settings.LoadBalanceEnabled,
+            printers.Select(p => LineSimulationFactory.ToPrinterConfig(_store, line, p)),
+            loadBalance: line.LoadBalanceEnabled,
             bufferOrder: new LabelBufferOrder(line.BufferOrder.Select((labelType, index) => new LabelBufferPosition(index + 1, labelType))),
             activeProfile: activeProfile,
             encoderResolution: (decimal)line.EncoderResolutionInchesPerPulse,

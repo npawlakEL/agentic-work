@@ -8,58 +8,63 @@
 <PageTitle>PandA — Dashboard</PageTitle>
 
 <MudText Typo="Typo.h4" GutterBottom="true" data-testid="page-heading">Dashboard</MudText>
-<MudText Typo="Typo.body1" Class="mb-4">Live health of every line and printer. Updates in real time.</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">Live health of every line and its printers. Updates in real time.</MudText>
 
-<MudText Typo="Typo.h6" Class="mb-2">Lines</MudText>
-<MudGrid Class="mb-6">
-    @foreach (var line in _lines)
-    {
-        <MudItem xs="12" sm="6" md="4">
-            <MudCard Elevation="2" data-testid="line-card">
-                <MudCardHeader>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.subtitle1">@line.Name</MudText>
-                        <MudText Typo="Typo.caption">Map: @line.ActiveMapName</MudText>
-                    </CardHeaderContent>
-                    <CardHeaderActions>
-                        <MudChip T="string" Color="@LineColor(line.RunState)" Size="Size.Small">@line.RunState</MudChip>
-                    </CardHeaderActions>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudText Typo="Typo.body2">Printers online: @line.OnlinePrinterCount / @line.PrinterCount</MudText>
-                    @if (!string.IsNullOrEmpty(line.Reason))
-                    {
-                        <MudText Typo="Typo.body2" Color="Color.Warning">@line.Reason</MudText>
-                    }
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-    }
-</MudGrid>
+@foreach (var line in _lines)
+{
+    var linePrinters = PrintersFor(line.LineId);
+    <MudPaper Elevation="2" Class="mb-4 pa-0" data-testid="line-card">
+        <div class="line-head">
+            <div>
+                <MudText Typo="Typo.h6">@line.Name</MudText>
+                <MudText Typo="Typo.caption" Class="dash-muted">Map: @line.ActiveMapName</MudText>
+            </div>
+            <div class="line-head-meta">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.Print">@line.OnlinePrinterCount / @line.PrinterCount online</MudChip>
+                @if (!string.IsNullOrEmpty(line.Reason))
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Warning">@line.Reason</MudChip>
+                }
+                <MudChip T="string" Color="@LineColor(line.RunState)" Size="Size.Small">@line.RunState</MudChip>
+            </div>
+        </div>
 
-<MudText Typo="Typo.h6" Class="mb-2">Printers</MudText>
-<MudTable Items="_printers" Dense="true" Hover="true" data-testid="printer-table" Elevation="2">
-    <HeaderContent>
-        <MudTh>Printer</MudTh>
-        <MudTh>Line</MudTh>
-        <MudTh>State</MudTh>
-        <MudTh>Orientation</MudTh>
-        <MudTh>Verify Fails</MudTh>
-        <MudTh>Label Types</MudTh>
-        <MudTh>Last Printed</MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Printer">@context.Name</MudTd>
-        <MudTd DataLabel="Line">@context.LineId</MudTd>
-        <MudTd DataLabel="State">
-            <MudChip T="string" Size="Size.Small" Color="@PrinterColor(context)">@PrinterStateText(context)</MudChip>
-        </MudTd>
-        <MudTd DataLabel="Orientation">@context.Orientation</MudTd>
-        <MudTd DataLabel="Verify Fails">@context.VerifyFailCount / @context.VerifyFailThreshold</MudTd>
-        <MudTd DataLabel="Label Types">@string.Join(", ", context.LabelTypes)</MudTd>
-        <MudTd DataLabel="Last Printed">@(context.LastPrintedUtc?.LocalDateTime.ToString("HH:mm:ss") ?? "—")</MudTd>
-    </RowTemplate>
-</MudTable>
+        @if (linePrinters.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="dash-muted pa-4" data-testid="line-no-printers">No printers configured on this line.</MudText>
+        }
+        else
+        {
+            <MudTable Items="linePrinters" Dense="true" Hover="true" Elevation="0" Class="line-printers" data-testid="printer-table">
+                <HeaderContent>
+                    <MudTh>Printer</MudTh>
+                    <MudTh>State</MudTh>
+                    <MudTh>Orientation</MudTh>
+                    <MudTh>Verify Fails</MudTh>
+                    <MudTh>Label Types</MudTh>
+                    <MudTh>Last Printed</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Printer">@context.Name</MudTd>
+                    <MudTd DataLabel="State">
+                        <MudChip T="string" Size="Size.Small" Color="@PrinterColor(context)">@PrinterStateText(context)</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Orientation">@context.Orientation</MudTd>
+                    <MudTd DataLabel="Verify Fails">@context.VerifyFailCount / @context.VerifyFailThreshold</MudTd>
+                    <MudTd DataLabel="Label Types">@string.Join(", ", context.LabelTypes)</MudTd>
+                    <MudTd DataLabel="Last Printed">@(context.LastPrintedUtc?.LocalDateTime.ToString("HH:mm:ss") ?? "—")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+}
+
+<style>
+    .line-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid var(--mud-palette-lines-default); flex-wrap: wrap; }
+    .line-head-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .line-printers { padding: 4px 8px 8px; }
+    .dash-muted { color: var(--mud-palette-text-secondary); }
+</style>
 
 @code {
     private IReadOnlyList<LineStatus> _lines = [];
@@ -113,6 +118,12 @@
         LineRunState.Slow => Color.Warning,
         _ => Color.Error,
     };
+
+    private IReadOnlyList<PrinterStatus> PrintersFor(string lineId) =>
+        _printers
+            .Where(p => string.Equals(p.LineId, lineId, StringComparison.Ordinal))
+            .OrderBy(p => p.Name, StringComparer.Ordinal)
+            .ToList();
 
     private static Color PrinterColor(PrinterStatus p) =>
         !p.Online ? Color.Error : p.IsSpare ? Color.Info : Color.Success;

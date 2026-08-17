@@ -46,7 +46,7 @@ public sealed class DemoConfigTreeQuery(DemoDataStore store) : IConfigTreeQuery
     {
         var printers = store.Printers.Values
             .Where(p => string.Equals(p.LineId, line.LineId, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p.ConfigOrder)
+            .OrderBy(p => p.PlcNumber)
             .Select(BuildPrinterNode)
             .ToList();
 
@@ -188,7 +188,7 @@ public sealed class DemoPrinterEditor(DemoDataStore store)
     public Task<IReadOnlyList<PrinterDto>> ListForLineAsync(string lineId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<PrinterDto>>(Store.Printers.Values
             .Where(p => string.Equals(p.LineId, lineId, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p.ConfigOrder)
+            .OrderBy(p => p.PlcNumber)
             .ToList());
 }
 
@@ -228,3 +228,4 @@ public sealed class DemoMapEditor(DemoDataStore store)
             .Where(m => string.Equals(m.LineId, lineId, StringComparison.OrdinalIgnoreCase))
             .ToList());
 }
+

@@ -58,6 +58,9 @@ public sealed class RejectCartonsTests : TestContext
             ];
             return Task.FromResult(new PagedResult<RejectCartonRow>(rows, 2, 0, 200));
         }
+
+        public Task<IReadOnlyList<string>> GetReasonsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<string>>(["No scan", "Verify fail"]);
     }
 
     private sealed class FakeReprint : IReprintAuthorizationCommand

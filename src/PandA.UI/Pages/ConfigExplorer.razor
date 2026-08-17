@@ -42,7 +42,8 @@
             @if (_builderStep == 0)
             {
                 <MudGrid Spacing="2">
-                    <MudItem xs="12" sm="6"><MudTextField @bind-Value="_builderLane.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="builder-lane-name" /></MudItem>
+                    <MudItem xs="12" sm="4"><MudTextField @bind-Value="_builderLane.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="builder-lane-name" /></MudItem>
+                    <MudItem xs="12" sm="2"><MudNumericField T="int" Min="1" @bind-Value="_builderLane.PlcNumber" Label="PLC Number" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="builder-lane-plc" /></MudItem>
                     <MudItem xs="12" sm="6">
                         <MudSelect T="LineControlPolicy" @bind-Value="_builderLane.ControlPolicy" Label="Control policy" Variant="Variant.Outlined" Margin="Margin.Dense">
                             @foreach (var p in Enum.GetValues<LineControlPolicy>())
@@ -53,10 +54,14 @@
                     </MudItem>
                     <MudItem xs="12" sm="6"><MudNumericField T="double" @bind-Value="_builderLane.EncoderResolutionInchesPerPulse" Label="Encoder resolution (in/pulse)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" sm="6"><MudNumericField T="double" @bind-Value="_builderLane.BeltSpeedInchesPerSecond" Label="Belt speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" Class="d-flex align-center gap-4">
+                        <MudCheckBox T="bool" @bind-Value="_builderLane.LoadBalanceEnabled" Label="Load balancing" data-testid="builder-lane-loadbalance" />
+                        <MudCheckBox T="bool" @bind-Value="_builderLane.TwoPrinterRuleEnabled" Label="Two-printer rule" data-testid="builder-lane-tworule" />
+                    </MudItem>
                     <MudItem xs="12"><MudTextField @bind-Value="_builderLane.Zones" Label="Zones (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12">
                         <MudText Typo="Typo.subtitle2" Class="mb-1">Buffer order</MudText>
-                        <MudText Typo="Typo.caption" Class="cfg-muted mb-2 d-block">Drag tags to set label-type priority. Add new tags below.</MudText>
+                        <MudText Typo="Typo.caption" Class="cfg-muted mb-2 d-block">Drag label definitions to set the order the buffer produces them. The first label is verified against the first definition, and so on.</MudText>
                         <MudDropContainer T="string" @ref="_builderBufferContainer" Items="_builderLane.BufferTags"
                                           ItemsSelector="@((i, z) => true)"
                                           ItemDropped="@(info => OnBufferDropped(_builderLane, info, _builderBufferContainer))"
@@ -75,13 +80,13 @@
                         </MudDropContainer>
                         @if (_builderLane.BufferTags.Count == 0)
                         {
-                            <MudText Typo="Typo.caption" Class="cfg-muted">No buffer tags yet — add one below.</MudText>
+                            <MudText Typo="Typo.caption" Class="cfg-muted">No label definitions in the buffer yet — add one below.</MudText>
                         }
                         <div class="d-flex gap-2 mt-2 align-center">
-                            <MudTextField @bind-Value="_builderNewBufferTag" Label="New buffer tag" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="builder-buffer-newtag" />
+                            <MudTextField @bind-Value="_builderNewBufferTag" Label="Label definition" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="builder-buffer-newtag" />
                             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                                        OnClick="@(() => { if (AddBufferTag(_builderLane, _builderNewBufferTag, _builderBufferContainer)) { _builderNewBufferTag = string.Empty; } })"
-                                       data-testid="builder-buffer-add">Add tag</MudButton>
+                                       data-testid="builder-buffer-add">Add label</MudButton>
                         </div>
                     </MudItem>
                     <MudItem xs="12"><MudText Typo="Typo.caption" Class="cfg-muted">Per-orientation online minimums are seeded automatically and editable after the lane is created. Tracking devices are inferred from the print/apply devices.</MudText></MudItem>
@@ -124,15 +129,12 @@
                                         </MudItem>
                                         <MudItem xs="12" sm="6"><MudTextField @bind-Value="bp.Ip" Label="IP" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                         <MudItem xs="6" sm="3"><MudNumericField T="int" @bind-Value="bp.Port" Label="Port" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                        <MudItem xs="6" sm="3"><MudNumericField T="int" @bind-Value="bp.ConfigOrder" Label="Config order" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                        <MudItem xs="12"><MudTextField @bind-Value="bp.LabelTypes" Label="Label types (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="6" sm="3"><MudNumericField T="int" Min="1" @bind-Value="bp.PlcNumber" Label="PLC Number" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                         <MudItem xs="6" sm="4"><MudTextField @bind-Value="bp.PrintDevice" Label="Print device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                         <MudItem xs="6" sm="4"><MudTextField @bind-Value="bp.ApplyDevice" Label="Apply device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                         <MudItem xs="6" sm="4"><MudNumericField T="int" @bind-Value="bp.PrintPoint" Label="Print point" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                         <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="bp.TampMountHeightInches" Label="Tamp mount height (in)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                         <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="bp.TampSpeedInchesPerSecond" Label="Tamp speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                        <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="bp.DynamicApply" Label="Dynamic apply" /></MudItem>
-                                        <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="bp.SpareEligible" Label="Spare eligible" /></MudItem>
                                     </MudGrid>
                                     <div class="cfg-actions">
                                         <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteOutline" OnClick="@(() => BuilderRemovePrinter(bp))" data-testid="builder-remove-printer">Remove</MudButton>
@@ -202,7 +204,8 @@
                 </div>
 
                 <MudGrid Spacing="2">
-                    <MudItem xs="12" sm="6"><MudTextField @bind-Value="_laneDraft.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="lane-name" /></MudItem>
+                    <MudItem xs="12" sm="4"><MudTextField @bind-Value="_laneDraft.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="lane-name" /></MudItem>
+                    <MudItem xs="12" sm="2"><MudNumericField T="int" Min="1" @bind-Value="_laneDraft.PlcNumber" Label="PLC Number" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="lane-plc" /></MudItem>
                     <MudItem xs="12" sm="6">
                         <MudSelect T="LineControlPolicy" @bind-Value="_laneDraft.ControlPolicy" Label="Control policy" Variant="Variant.Outlined" Margin="Margin.Dense">
                             @foreach (var p in Enum.GetValues<LineControlPolicy>())
@@ -213,11 +216,15 @@
                     </MudItem>
                     <MudItem xs="12" sm="6"><MudNumericField T="double" @bind-Value="_laneDraft.EncoderResolutionInchesPerPulse" Label="Encoder resolution (in/pulse)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" sm="6"><MudNumericField T="double" @bind-Value="_laneDraft.BeltSpeedInchesPerSecond" Label="Belt speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" sm="6" Class="d-flex align-center gap-4">
+                        <MudCheckBox T="bool" @bind-Value="_laneDraft.LoadBalanceEnabled" Label="Load balancing" data-testid="lane-loadbalance" />
+                        <MudCheckBox T="bool" @bind-Value="_laneDraft.TwoPrinterRuleEnabled" Label="Two-printer rule" data-testid="lane-tworule" />
+                    </MudItem>
                     <MudItem xs="12" sm="6"><MudTextField Value="@ActiveMapDisplay" Label="Active map (managed on Maps &amp; Fire Points)" Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="true" Disabled="true" data-testid="lane-activemap" /></MudItem>
                     <MudItem xs="12"><MudTextField @bind-Value="_laneDraft.Zones" Label="Zones (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12">
                         <MudText Typo="Typo.subtitle2" Class="mb-1">Buffer order</MudText>
-                        <MudText Typo="Typo.caption" Class="cfg-muted mb-2 d-block">Drag tags to reorder the label-type priority for this lane. Add new tags below.</MudText>
+                        <MudText Typo="Typo.caption" Class="cfg-muted mb-2 d-block">Drag label definitions to set the order the buffer produces them for this lane. The first label is verified against the first definition, and so on.</MudText>
                         <MudDropContainer T="string" @ref="_laneBufferContainer" Items="_laneDraft.BufferTags"
                                           ItemsSelector="@((i, z) => true)"
                                           ItemDropped="@(info => OnBufferDropped(_laneDraft, info, _laneBufferContainer))"
@@ -236,13 +243,13 @@
                         </MudDropContainer>
                         @if (_laneDraft.BufferTags.Count == 0)
                         {
-                            <MudText Typo="Typo.caption" Class="cfg-muted">No buffer tags yet — add one below.</MudText>
+                            <MudText Typo="Typo.caption" Class="cfg-muted">No label definitions in the buffer yet — add one below.</MudText>
                         }
                         <div class="d-flex gap-2 mt-2 align-center">
-                            <MudTextField @bind-Value="_laneNewBufferTag" Label="New buffer tag" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="lane-buffer-newtag" />
+                            <MudTextField @bind-Value="_laneNewBufferTag" Label="Label definition" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="lane-buffer-newtag" />
                             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                                        OnClick="@(() => { if (AddBufferTag(_laneDraft, _laneNewBufferTag, _laneBufferContainer)) { _laneNewBufferTag = string.Empty; } })"
-                                       data-testid="lane-buffer-add">Add tag</MudButton>
+                                       data-testid="lane-buffer-add">Add label</MudButton>
                         </div>
                     </MudItem>
                     <MudItem xs="12"><MudText Typo="Typo.caption" Class="cfg-muted">Tracking devices are inferred from each printer's print/apply devices (plus the scanner) — no manual entry needed.</MudText></MudItem>
@@ -328,15 +335,12 @@
                                     </MudItem>
                                     <MudItem xs="12" sm="6"><MudTextField @bind-Value="item.Draft.Ip" Label="IP" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                     <MudItem xs="6" sm="3"><MudNumericField T="int" @bind-Value="item.Draft.Port" Label="Port" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                    <MudItem xs="6" sm="3"><MudNumericField T="int" @bind-Value="item.Draft.ConfigOrder" Label="Config order" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                    <MudItem xs="12"><MudTextField @bind-Value="item.Draft.LabelTypes" Label="Label types (comma-separated)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="6" sm="3"><MudNumericField T="int" Min="1" @bind-Value="item.Draft.PlcNumber" Label="PLC Number" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                     <MudItem xs="6" sm="4"><MudTextField @bind-Value="item.Draft.PrintDevice" Label="Print device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                     <MudItem xs="6" sm="4"><MudTextField @bind-Value="item.Draft.ApplyDevice" Label="Apply device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                     <MudItem xs="6" sm="4"><MudNumericField T="int" @bind-Value="item.Draft.PrintPoint" Label="Print point" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                     <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="item.Draft.TampMountHeightInches" Label="Tamp mount height (in)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                     <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="item.Draft.TampSpeedInchesPerSecond" Label="Tamp speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                    <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="item.Draft.DynamicApply" Label="Dynamic apply" /></MudItem>
-                                    <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="item.Draft.SpareEligible" Label="Spare eligible" /></MudItem>
                                 </MudGrid>
                                 <div class="cfg-actions">
                                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SavePrinterAsync(item))" data-testid="save-printer">Save printer</MudButton>
@@ -674,8 +678,6 @@
                     <MudItem xs="6" sm="4"><MudNumericField T="int" @bind-Value="_settings.VerifyFailThreshold" Label="Verify fail threshold" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="6" sm="4"><MudNumericField T="int" @bind-Value="_settings.PostTripResetCount" Label="Post-trip reset count" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="_settings.ReprintLabelsEnabled" Label="Reprint labels enabled" /></MudItem>
-                    <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="_settings.LoadBalanceEnabled" Label="Load balancing" /></MudItem>
-                    <MudItem xs="12" sm="4" Class="d-flex align-center"><MudCheckBox T="bool" @bind-Value="_settings.TwoPrinterRuleEnabled" Label="Two-printer rule" /></MudItem>
                 </MudGrid>
                 <div class="cfg-actions">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveSettingsAsync" data-testid="save-settings">Save settings</MudButton>
@@ -821,7 +823,7 @@
         try
         {
             var list = await PrinterEditor.ListAsync();
-            _allPrinters = list.OrderBy(p => p.LineId, StringComparer.Ordinal).ThenBy(p => p.ConfigOrder).ToList();
+            _allPrinters = list.OrderBy(p => p.LineId, StringComparer.Ordinal).ThenBy(p => p.PlcNumber).ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException) { Fail("printers", ex); }
     }
@@ -867,7 +869,7 @@
 
             var printers = await PrinterEditor.ListForLineAsync(id);
             _printers = printers
-                .OrderBy(p => p.ConfigOrder)
+                .OrderBy(p => p.PlcNumber)
                 .Select(p => new PrinterEditItem { Draft = PrinterDraft.From(p) })
                 .ToList();
 
@@ -910,7 +912,7 @@
     private void BuilderBack() => _builderStep = 0;
 
     private void BuilderAddPrinter() =>
-        _builderPrinters.Add(new PrinterDraft { Name = "New Printer", OrientationId = DefaultOrientationId() });
+        _builderPrinters.Add(new PrinterDraft { Name = "New Printer", OrientationId = DefaultOrientationId(), PlcNumber = _builderPrinters.Count + 1 });
 
     private void BuilderRemovePrinter(PrinterDraft printer) => _builderPrinters.Remove(printer);
 
@@ -973,7 +975,7 @@
     private void AddPrinter()
     {
         if (_laneId is null) { return; }
-        _printers.Add(new PrinterEditItem { Draft = new PrinterDraft { LineId = _laneId, Name = "New Printer", OrientationId = DefaultOrientationId() } });
+        _printers.Add(new PrinterEditItem { Draft = new PrinterDraft { LineId = _laneId, Name = "New Printer", OrientationId = DefaultOrientationId(), PlcNumber = _printers.Count + 1 } });
     }
 
     private async Task ApplyPrintPointToAllAsync()
@@ -1223,7 +1225,7 @@
         if (tag.Length == 0) { return false; }
         if (lane.BufferTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)))
         {
-            Snackbar.Add($"Buffer tag \"{tag}\" already exists on this lane.", Severity.Warning);
+            Snackbar.Add($"Label \"{tag}\" is already in the buffer for this lane.", Severity.Warning);
             return false;
         }
         lane.BufferTags.Add(tag);
@@ -1297,8 +1299,6 @@
     {
         public double EncoderResolutionInchesPerPulse { get; set; }
         public bool ReprintLabelsEnabled { get; set; }
-        public bool LoadBalanceEnabled { get; set; }
-        public bool TwoPrinterRuleEnabled { get; set; }
         public int VerifyFailThreshold { get; set; }
         public int PostTripResetCount { get; set; }
 
@@ -1306,15 +1306,13 @@
         {
             EncoderResolutionInchesPerPulse = d.EncoderResolutionInchesPerPulse,
             ReprintLabelsEnabled = d.ReprintLabelsEnabled,
-            LoadBalanceEnabled = d.LoadBalanceEnabled,
-            TwoPrinterRuleEnabled = d.TwoPrinterRuleEnabled,
             VerifyFailThreshold = d.VerifyFailThreshold,
             PostTripResetCount = d.PostTripResetCount,
         };
 
         public SettingsDto ToDto() => new(
-            EncoderResolutionInchesPerPulse, ReprintLabelsEnabled, LoadBalanceEnabled,
-            TwoPrinterRuleEnabled, VerifyFailThreshold, PostTripResetCount);
+            EncoderResolutionInchesPerPulse, ReprintLabelsEnabled,
+            VerifyFailThreshold, PostTripResetCount);
     }
 
     private sealed class LabelDraft
@@ -1365,26 +1363,32 @@
     {
         public string? Id { get; set; }
         public string Name { get; set; } = "";
+        public int PlcNumber { get; set; } = 1;
         public string Zones { get; set; } = "";
         public List<string> BufferTags { get; set; } = [];
         public string? ActiveMapId { get; set; }
         public LineControlPolicy ControlPolicy { get; set; }
         public double EncoderResolutionInchesPerPulse { get; set; } = 0.25;
         public double BeltSpeedInchesPerSecond { get; set; } = 24;
+        public bool LoadBalanceEnabled { get; set; } = true;
+        public bool TwoPrinterRuleEnabled { get; set; }
         public List<OrientationMinimum> OnlineMinimums { get; set; } = [];
 
         public static LineDraft From(LineDto d) => new()
         {
-            Id = d.LineId, Name = d.Name, Zones = Join(d.Zones),
+            Id = d.LineId, Name = d.Name, PlcNumber = d.PlcNumber, Zones = Join(d.Zones),
             BufferTags = d.BufferOrder.ToList(), ActiveMapId = d.ActiveMapId, ControlPolicy = d.ControlPolicy,
             EncoderResolutionInchesPerPulse = d.EncoderResolutionInchesPerPulse,
             BeltSpeedInchesPerSecond = d.BeltSpeedInchesPerSecond,
+            LoadBalanceEnabled = d.LoadBalanceEnabled,
+            TwoPrinterRuleEnabled = d.TwoPrinterRuleEnabled,
             OnlineMinimums = d.OnlineMinimums.ToList(),
         };
 
-        public LineDto ToDto() => new(Id, Name, Split(Zones), BufferTags.ToList(),
+        public LineDto ToDto() => new(Id, Name, PlcNumber, Split(Zones), BufferTags.ToList(),
             string.IsNullOrWhiteSpace(ActiveMapId) ? null : ActiveMapId, ControlPolicy,
-            OnlineMinimums, EncoderResolutionInchesPerPulse, BeltSpeedInchesPerSecond);
+            OnlineMinimums, EncoderResolutionInchesPerPulse, BeltSpeedInchesPerSecond,
+            LoadBalanceEnabled, TwoPrinterRuleEnabled);
     }
 
     private sealed class PrinterDraft
@@ -1395,27 +1399,23 @@
         public string Ip { get; set; } = "";
         public int Port { get; set; }
         public string OrientationId { get; set; } = "";
-        public string LabelTypes { get; set; } = "";
-        public int ConfigOrder { get; set; }
+        public int PlcNumber { get; set; } = 1;
         public string PrintDevice { get; set; } = "";
         public string ApplyDevice { get; set; } = "";
         public int PrintPoint { get; set; }
-        public bool DynamicApply { get; set; }
-        public bool SpareEligible { get; set; }
         public double TampMountHeightInches { get; set; }
         public double TampSpeedInchesPerSecond { get; set; }
 
         public static PrinterDraft From(PrinterDto d) => new()
         {
             Id = d.PrinterId, LineId = d.LineId, Name = d.Name, Ip = d.Ip, Port = d.Port,
-            OrientationId = d.OrientationId, LabelTypes = Join(d.LabelTypes), ConfigOrder = d.ConfigOrder,
+            OrientationId = d.OrientationId, PlcNumber = d.PlcNumber,
             PrintDevice = d.PrintDevice, ApplyDevice = d.ApplyDevice, PrintPoint = d.PrintPoint,
-            DynamicApply = d.DynamicApply, SpareEligible = d.SpareEligible,
             TampMountHeightInches = d.TampMountHeightInches, TampSpeedInchesPerSecond = d.TampSpeedInchesPerSecond,
         };
 
-        public PrinterDto ToDto() => new(Id, LineId, Name, Ip, Port, OrientationId, Split(LabelTypes), ConfigOrder,
-            PrintDevice, ApplyDevice, PrintPoint, DynamicApply, SpareEligible,
+        public PrinterDto ToDto() => new(Id, LineId, Name, Ip, Port, OrientationId, PlcNumber,
+            PrintDevice, ApplyDevice, PrintPoint,
             TampMountHeightInches, TampSpeedInchesPerSecond);
     }
 

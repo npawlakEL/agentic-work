@@ -174,7 +174,7 @@ public sealed class ConfigExplorerTests : TestContext
 
         // Settings
         public Task<SettingsDto> GetAsync(CancellationToken ct = default) =>
-            Task.FromResult(new SettingsDto(0.25, true, true, false, 3, 2));
+            Task.FromResult(new SettingsDto(0.25, true, 3, 2));
 
         public Task<CommandResult> SaveAsync(SettingsDto settings, CancellationToken ct = default)
         {
@@ -211,7 +211,7 @@ public sealed class ConfigExplorerTests : TestContext
         Task<IReadOnlyList<LineDto>> IConfigEditor<LineDto>.ListAsync(CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<LineDto>>([]);
         Task<LineDto?> IConfigEditor<LineDto>.GetAsync(string id, CancellationToken ct) =>
-            Task.FromResult<LineDto?>(new LineDto(id, "L", [], [], null, LineControlPolicy.AllowDegraded, [], 0.25, 24));
+            Task.FromResult<LineDto?>(new LineDto(id, "L", 1, [], [], null, LineControlPolicy.AllowDegraded, [], 0.25, 24, true, false));
         Task<CommandResult> IConfigEditor<LineDto>.SaveAsync(LineDto e, CancellationToken ct)
         {
             LineSaves++;
@@ -223,9 +223,9 @@ public sealed class ConfigExplorerTests : TestContext
 
         // Printer
         Task<IReadOnlyList<PrinterDto>> IConfigEditor<PrinterDto>.ListAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<PrinterDto>>([new PrinterDto("PR1", "L1", "Printer 1", "1.1.1.1", 9100, "side-orient", [], 0, "", "", 0, false, true, 0, 0)]);
+            Task.FromResult<IReadOnlyList<PrinterDto>>([new PrinterDto("PR1", "L1", "Printer 1", "1.1.1.1", 9100, "side-orient", 1, "", "", 0, 0, 0)]);
         Task<PrinterDto?> IConfigEditor<PrinterDto>.GetAsync(string id, CancellationToken ct) =>
-            Task.FromResult<PrinterDto?>(new PrinterDto(id, "L1", "P", "1.1.1.1", 9100, "side-orient", [], 0, "", "", 0, false, true, 0, 0));
+            Task.FromResult<PrinterDto?>(new PrinterDto(id, "L1", "P", "1.1.1.1", 9100, "side-orient", 1, "", "", 0, 0, 0));
         Task<CommandResult> IConfigEditor<PrinterDto>.SaveAsync(PrinterDto e, CancellationToken ct) =>
             Task.FromResult(CommandResult.Ok());
         Task<CommandResult> IConfigEditor<PrinterDto>.DeleteAsync(string id, CancellationToken ct) =>

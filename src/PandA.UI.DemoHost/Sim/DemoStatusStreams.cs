@@ -66,6 +66,9 @@ public sealed class DemoStatusStreams(DemoDataStore store) : ILineStatusStream, 
         foreach (var printer in store.Printers.Values)
         {
             var rt = store.PrinterRuntime.TryGetValue(printer.PrinterId!, out var r) ? r : new DemoPrinterRuntime();
+            var labelTypes = store.Lines.TryGetValue(printer.LineId, out var line)
+                ? LineSimulationFactory.LabelTypesForPrinter(store, line, printer.PrinterId!)
+                : [];
             result.Add(new PrinterStatus(
                 printer.PrinterId!,
                 printer.Name,
@@ -75,7 +78,7 @@ public sealed class DemoStatusStreams(DemoDataStore store) : ILineStatusStream, 
                 store.Orientations.TryGetValue(printer.OrientationId, out var o) ? o.Name : printer.OrientationId,
                 rt.VerifyFailCount,
                 store.Settings.VerifyFailThreshold,
-                printer.LabelTypes,
+                labelTypes,
                 rt.LastPrintedUtc));
         }
 
