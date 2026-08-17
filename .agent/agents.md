@@ -123,8 +123,8 @@ Every pass through the Coder ↔ Reviewer loop MUST produce written records. Thi
 **The Orchestrator performs a deep read (not a skim):**
 0. **Detect repo type FIRST:** is this a **harness-authoring repo** (the repo IS the harness — blank `.project` templates are by design, not gaps) or a **downstream product repo** (harness cloned into a real project — filled planning docs + app code + tests are expected)? Announce which; the Boot Report's "gaps" are judged against that type.
 1. **Read the whole harness:** `agents.md` (all gates, all constraints, all modes), every file in `.agent/roles/`, `.agent/model-config.md`, and the frontmatter **and bodies** of every skill in `.agent/skills/`.
-2. **Run a harness integrity check:** every mode with a section in `agents.md` has a routing-table entry in `orchestrator.agent.md` and vice-versa; every skill has complete frontmatter (`name`/`description`/`load_when`/`upstream`) with `name` matching its filename (no dupes); every referenced `.project/` and `.client-docs/` path exists; constraint numbering is contiguous. Flag mismatches as gaps.
-3. **Read the project state:** `.project/vision.md` (the whiteboard), `.project/spec.md`, `.project/planner-tasks.md`, `.project/taskboard/`, and the latest entries in `architecture-log/`, `reviewer-log/`, `learnings/`, `backlog/`.
+2. **Run a harness integrity check:** run `node .agent/tools/harness-check.mjs` — it verifies mode↔routing parity, complete skill frontmatter with `name` matching filename, that every referenced `.agent/`/`.project/`/`.client-docs/` path exists, and contiguous constraint numbering. If Node isn't available, do the same checks by hand. Flag any gap it reports.
+3. **Read the project state:** `.project/STATE.md` (the live "where are we" snapshot — read this FIRST for instant context), `.project/vision.md` (the whiteboard), `.project/spec.md`, `.project/planner-tasks.md`, `.project/taskboard/`, and the latest entries in `architecture-log/`, `reviewer-log/`, `learnings/`, `backlog/`.
 4. **Survey the actual codebase:** top-level structure, stack/build files, test setup, and how code is organized — enough to know what it's about to steward. It does NOT start changing anything.
 5. **Self-verify and report back** with a concise "Boot Report" that proves ingestion:
    ```
@@ -181,7 +181,7 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
 
 2. **Each Senior Coder audits its assigned scope for:**
    - **Bugs & correctness holes** — logic errors, unhandled edge cases, race conditions, off-by-one, null/undefined handling
-   - **Security issues** — injection risks, auth gaps, exposed secrets, unvalidated input
+   - **Security** (first-class dimension) — injection (SQL/command/XSS), authn/authz gaps and missing access checks, unvalidated or untrusted input, exposed secrets/keys/tokens, insecure crypto or transport, unsafe deserialization, SSRF/path-traversal, dependency/supply-chain risk, and sensitive-data handling (logging, storage, exposure in responses). Report each with location + exploit scenario + fix.
    - **Code quality** — duplication, dead code, tangled dependencies, poor separation of concerns, missing error handling
    - **Optimization opportunities** — inefficient algorithms, N+1 queries, unnecessary re-renders, memory leaks, redundant work
    - **Architectural concerns** — pattern violations, tech debt, brittle coupling, scalability limits
@@ -234,6 +234,7 @@ Nightwatch is an **unattended, scheduled** run (typically nightly) that guards t
 1. **OVERNIGHT — Re-check and hunt.** On the *unchanged* trunk (latest `master`), run the full, slow suite that PRs skip:
    - the complete unit + driver/integration/e2e test suites (not just a changed subset — there is no change; this is the whole trunk)
    - targeted **mutation testing** on critical/high-risk modules (see `.agent/skills/mutation-testing.md`)
+   - a **harness integrity check** (`node .agent/tools/harness-check.mjs`) so doc/skill drift is caught alongside code rot
    - optionally a lightweight Finalize-style audit pass
    The point is to catch rot that slipped through per-PR checks or that only surfaces in aggregate.
 
@@ -277,6 +278,14 @@ The user says **"retro"** to run a retrospective on the *process itself* (not th
 
 > **Reading these:** The emphatic language (MANDATORY, NO EXCEPTIONS, BLOCKED) is intentional — it exists so the workflow holds even on smaller models. On Opus-tier reasoning agents (see `.agent/model-config.md`), treat these as firm intent rather than rote checklists: follow the *purpose* of each constraint, not just its literal wording. The Orchestrator is the enforcement authority for all of them.
 
+> **Index by theme** (numbers are stable identifiers — referenced elsewhere — so they are never renumbered; new constraints are appended):
+> - **Gates & flow:** #1 (no gate skips), #6 (no pushing in the loop), #8 (spec-gap escalation), #12 (workflow is law), #24 (Gate 3 never skipped)
+> - **Delegation & scope:** #3 (scope boundaries), #11 (technical questions → Senior Coder), #20 (auto-engage Senior Coder), #22 (no Orchestrator drift)
+> - **Context & statelessness:** #2 (reload context every invocation), #4 (skills auto-load by match), #9 (Senior Coder reads the codebase)
+> - **Testing & quality:** #21 (regression guardrail + mutation opt-in)
+> - **Documentation & learning:** #5 (learnings mandatory), #7 (rock-solid spec), #10 (architecture logging), #13 (docs ship with code), #23 (corrections are training data)
+> - _(Constraints not listed above — e.g. #14–#19 — are enforcement/visibility details in sequence below.)_
+
 1. **No agent skips a gate.** Coder cannot begin without Senior Coder's handoff. Reviewer cannot start without Senior Coder's sign-off. Learner cannot run until both Senior Coder and Reviewer pass.
 2. **Agents are stateless between invocations — MUST reload context.** All context must be passed explicitly (via files or prompts). At the START of every invocation, every agent MUST read:
     - `.project/vision.md` — the whiteboard (project direction, user preferences, conventions)
@@ -284,7 +293,7 @@ The user says **"retro"** to run a retrospective on the *process itself* (not th
     - Their relevant project files (spec, taskboard, architecture-log, etc.)
     - Agents do NOT rely on "remembering" from a previous invocation. They reload every time.
 3. **Each agent operates within its defined scope.** The coder does not gather requirements. The reviewer does not write features. The Senior Coder does not write production code.
-4. **Skills are mandatory reading and AUTO-LOAD by description match.** At the START of every invocation, every agent scans the frontmatter (`name` + `description` + `load_when`) of every file in `.agent/skills/` — reading just the frontmatter is cheap. For every skill whose description/`load_when` matches the task at hand, the agent **loads the full skill body and follows it** automatically — no waiting to be told, no reinventing. If a skill covers the task, using it is not optional. New skills must ship with frontmatter (see `.agent/skills/README.md`) so they fire when they should.
+4. **Skills are mandatory reading and AUTO-LOAD by description match.** At the START of every invocation, every agent scans the frontmatter (`name` + `description` + `load_when`) of every skill file in `.agent/skills/` (excluding `README.md`, which documents the format and is not itself a skill) — reading just the frontmatter is cheap. For every skill whose description/`load_when` matches the task at hand, the agent **loads the full skill body and follows it** automatically — no waiting to be told, no reinventing. If a skill covers the task, using it is not optional. New skills must ship with frontmatter (see `.agent/skills/README.md`) so they fire when they should.
 5. **Learnings are mandatory.** Every completed project must produce at least one learning entry.
 6. **No pushing during Coder ↔ Senior Coder ↔ Reviewer loop.** All work stays local until user approves (Gate 2.5).
 7. **Spec must be rock solid before handoff.** No open items, no unanswered questions in `.project/planner-tasks.md` when the spec goes to the Senior Coder/Coder. If questions remain, they must be answered first.

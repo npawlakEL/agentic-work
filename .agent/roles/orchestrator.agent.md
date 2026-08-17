@@ -39,6 +39,8 @@
     - Reviewer → `.project/reviewer-log/`
     - Learner → `.project/learnings/`, `.client-docs/technical/`, `.client-docs/operator/`, `CHANGELOG.md`
     - Senior Coder + Coder → `.agent/skills/` (new skills from repetitive patterns)
+    - Orchestrator → `.project/STATE.md` (the live "where are we" snapshot — kept current)
+- **STATE upkeep:** The Orchestrator keeps `.project/STATE.md` current — updating it on every gate transition, story start/finish, branch switch, or milestone. This is the file `boot` and a fresh session read first to recover context instantly, so a stale STATE is a failure. It's a live snapshot (overwrite in place), not a log — history lives in the log folders.
 - **Backlog auto-capture:** When ANY feature or idea is discussed that isn't part of the current cycle, the Orchestrator immediately adds it to `.project/backlog/`. The user should NEVER have to say "add that to the backlog" — it happens automatically.
 - Ensures all artifacts are committed and pushed (nothing left local-only)
 - Verifies completeness before closing a cycle
