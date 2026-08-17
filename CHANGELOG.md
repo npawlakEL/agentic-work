@@ -21,3 +21,49 @@
 ## [Unreleased]
 
 _(Next cycle's changes will be logged here by the Learner.)_
+
+---
+
+## [0.1.0] — 2026-08-17
+
+First versioned baseline of the Agent Harness. Backfilled from 40 prior commits
+(2026-07-06 → 2026-08-17) that were never logged — see
+`.project/learnings/2026-08-17-changelog-gate-skipped.md`.
+
+### Added — Agents & core workflow
+- Six-agent gated workflow: Orchestrator, Planner, Senior Coder, Coder, Reviewer, Learner.
+- Six flow gates (1 → 1.5 → 2 → 2.5 → 2.75 → 3) with the user as the merge gate (Gates 2.5 & 2.75).
+- Per-agent model recommendations tuned for Opus 4.8 (`.agent/model-config.md`).
+- Orchestrator personality (chill surf-bro) and the Agent Visibility Protocol (announce every handoff).
+
+### Added — User-invoked modes
+- **Boot** — run-first ingestion ritual: deep-read the harness + project, repo-type detection, harness integrity check, self-verifying Boot Report, commit to the workflow.
+- **Finalize** — multi-Senior-Coder read-only codebase audit → one prioritized report.
+- **Nightwatch** — scheduled trunk guardian: full suite + mutation on unchanged trunk, drafts fixes (never merges, never weakens a test), morning digest.
+- **Retro** — process retrospective that mines logs + corrections and curates skills.
+- **Grill Me** — Planner deep requirement interrogation.
+- **Regroup** — Planner + Senior Coder joint review.
+- **Hot-path** — lightweight route for small fixes.
+
+### Added — Enforcement (Constraints #1–#24)
+- Auto-engage Senior Coder on any code-related request — the user never prompts for it (#20).
+- Regression guardrail — coupled unit + driver suites run green on every code change; opt-in mutation testing for high-risk modules (#21).
+- No Orchestrator drift — delegation does not decay over long sessions (#22).
+- Corrections are training data — captured automatically and promoted to skills (#23).
+- Gate 3 never skipped — every landed change (incl. Orchestrator-direct harness edits) closes with the Learner: CHANGELOG + learnings (#24).
+- Documentation-as-blocking-gate, mandatory review-loop logging, Planner proactive questioning, universal request routing, state tracking, "no shortcuts / workflow is law."
+
+### Added — Skills system
+- Skills auto-load by frontmatter (`name`/`description`/`load_when`/`upstream`) description match.
+- Universal skills upstream to the `agent-harness` source-of-authority branch.
+- Skills: `commit-and-push`, `senior-coder-checklist`, `harness-doc-merge`, `mutation-testing`, `nightwatch`, `boot`, `retro`, `changelog-and-learn`.
+
+### Added — Structure
+- `.agent/` (agents.md, roles, skills, model-config), `.project/` (vision, spec, planner-tasks, taskboard + architecture-log / reviewer-log / learnings / backlog / planning-sessions), `.client-docs/` (operator + technical).
+
+### Changed
+- Flattened `.project/vision/vision.md` → `.project/vision.md` so the three singular planning docs sit flat while folders stay reserved for multi-entry logs.
+- Promotion model: `agent-harness` is the source of authority; `master` mirrors it (harness/workflow-only, identical tree).
+
+### Removed
+- Stripped the original lane-config application code to make the repo a generic, reusable harness; scrubbed stale untracked build artifacts from the worktree.

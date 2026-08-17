@@ -276,7 +276,7 @@ The Orchestrator announces the engagement so the interaction is visible, then ha
 | Bug fix / small change | Hot-path | "Fix the login button" |
 | Refactor / config change | Hot-path or Full (Senior decides scope) | "Refactor the auth module" |
 | Documentation-only | Learner + Senior Coder collab | "Update the API docs" |
-| Harness/workflow change | Orchestrator direct | "Add a constraint to the workflow" |
+| Harness/workflow change | Orchestrator direct → **then Learner closes Gate 3** | "Add a constraint to the workflow" |
 | Question / discussion | Orchestrator answers (may consult agents) | "How does the auth work?" |
 | Codebase audit | **Finalize mode** — fan out Senior Coder(s), read-only audit | "finalize" |
 | Scheduled trunk guardian | **Nightwatch mode** — full suite + mutation on trunk, draft fixes, never merge | "run nightwatch" / nightly cron |
