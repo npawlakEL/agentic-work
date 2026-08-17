@@ -76,3 +76,4 @@ Say these keywords to trigger special modes:
 | **grill me** | Planner | Systematically interrogates you with deep requirement questions before any work begins |
 | **regroup** | Planner + Senior Coder | Joint review of the current state to surface additional questions, risks, and concerns |
 | **finalize** | Senior Coder(s) | Read-only parallel codebase audit — bugs, security, quality, optimizations, open questions, doc gaps → prioritized report |
+| **run nightwatch** | Senior Coder + Coder + Reviewer | Scheduled (nightly) trunk guardian — full suite + mutation testing on unchanged `master`, drafts fixes for real regressions (never merges, never weakens a test), posts a morning digest |

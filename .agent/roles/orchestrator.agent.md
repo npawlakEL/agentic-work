@@ -279,6 +279,7 @@ The Orchestrator announces the engagement so the interaction is visible, then ha
 | Harness/workflow change | Orchestrator direct | "Add a constraint to the workflow" |
 | Question / discussion | Orchestrator answers (may consult agents) | "How does the auth work?" |
 | Codebase audit | **Finalize mode** — fan out Senior Coder(s), read-only audit | "finalize" |
+| Scheduled trunk guardian | **Nightwatch mode** — full suite + mutation on trunk, draft fixes, never merge | "run nightwatch" / nightly cron |
 
 **The Orchestrator announces the classification:**
 ```

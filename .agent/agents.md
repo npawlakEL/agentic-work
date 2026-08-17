@@ -193,6 +193,32 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
 - Every finding must be **actionable** — vague "could be better" notes are not allowed; each needs a location, a reason, and a recommendation.
 - Findings the user approves for fixing STILL go through the full workflow — Finalize surfaces work, it doesn't bypass gates.
 
+## 🌙 "Nightwatch" Mode (Scheduled Trunk Guardian)
+
+Nightwatch is an **unattended, scheduled** run (typically nightly) that guards the main branch. It runs the slow, high-value checks a per-PR loop can't afford, and when it finds a REAL regression it drafts a fix through the normal gates — but it **never merges**. The user wakes up to a digest, not a surprise. It is triggered by a schedule (a workflow cron), not by a keyword, though the user can also say "run nightwatch" on demand.
+
+**Three phases (as on the cards):**
+
+1. **OVERNIGHT — Re-check and hunt.** On the *unchanged* trunk (latest `master`), run the full, slow suite that PRs skip:
+   - the complete unit + driver/integration/e2e test suites (not just a changed subset — there is no change; this is the whole trunk)
+   - targeted **mutation testing** on critical/high-risk modules (see `.agent/skills/mutation-testing.md`)
+   - optionally a lightweight Finalize-style audit pass
+   The point is to catch rot that slipped through per-PR checks or that only surfaces in aggregate.
+
+2. **IF SOMETHING IS RED — An agent opens a fix.** For each failure, the Senior Coder first classifies it:
+   - **Flaky / environmental** (non-deterministic, timing, external dependency) → do NOT "fix" by changing product code. Quarantine per the project's flaky-test policy, log it, and surface it in the digest. Never chase a phantom regression.
+   - **Real regression** → run the normal async fix loop (Senior Coder scopes → Coder fixes → Reviewer signs off), on a fresh branch, and **open a DRAFT PR** into the user's queue. Same checks as any human PR. **It never merges** (Gate 2.75 is always the user) and it **never weakens a test to make red go green** — no deleting assertions, no loosening thresholds, no `[Skip]`. Green must be earned by fixing the code, and mutation testing is the backstop that proves it.
+
+3. **IN THE MORNING — A digest.** Emit a concise summary of: what ran, what was green, what was red (real vs. flaky), which draft PRs were opened, and where the AI tooling itself needed correcting (e.g. a bad auto-fix that was reverted). The digest goes to `.project/architecture-log/` (dated) with open questions to `.project/planner-tasks.md` and deferred items to `.project/backlog/`. The Orchestrator presents it to the user at the start of the next session.
+
+**Key rules:**
+- **Never merges.** Nightwatch can open draft PRs; the user is always the merge gate. No exceptions, even for "obvious" fixes.
+- **Never weakens a test.** Making a failing test pass by deleting/loosening/skipping it is a forbidden anti-pattern — it defeats the entire purpose. If a test is genuinely wrong, that's a finding for the user, not an autonomous edit.
+- **Red ≠ regression.** Every failure is triaged flaky-vs-real before any fix. Flaky tests are quarantined and reported, not "fixed."
+- **Fixes go through the gates**, just asynchronously — no shortcut because it's unattended.
+- **Bounded and honest.** If a fix can't be made cleanly within the normal escalation limits (see Failure Escalation Protocol), Nightwatch stops, leaves it red, and reports it in the digest rather than forcing a hacky patch.
+- **Setup is per-project.** The schedule and the actual test/mutation commands are wired per repo (see `.agent/skills/nightwatch.md`), since they depend on the project's stack.
+
 ## Constraints & Guardrails
 
 > **Reading these:** The emphatic language (MANDATORY, NO EXCEPTIONS, BLOCKED) is intentional — it exists so the workflow holds even on smaller models. On Opus-tier reasoning agents (see `.agent/model-config.md`), treat these as firm intent rather than rote checklists: follow the *purpose* of each constraint, not just its literal wording. The Orchestrator is the enforcement authority for all of them.
