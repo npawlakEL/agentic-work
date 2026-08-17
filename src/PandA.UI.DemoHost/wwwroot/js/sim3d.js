@@ -635,8 +635,10 @@ function syncLabels(group, carton) {
 
         const onTop = String(label.orientation).toLowerCase() === "top";
         if (onTop) {
+            // Sit just above the packing-tape strip (tape top surface is at height + 0.12) so a
+            // top-apply label reads as stuck ON the carton, not tucked under the tape.
             entry.plane.rotation.set(-Math.PI / 2, 0, 0);
-            entry.plane.position.set(centerX, BELT_TOP_Y + carton.heightInches + 0.06, 0);
+            entry.plane.position.set(centerX, BELT_TOP_Y + carton.heightInches + 0.16, 0);
             entry.tag.position.set(centerX, BELT_TOP_Y + carton.heightInches + 5, 0);
         } else {
             entry.plane.rotation.set(0, 0, 0);
