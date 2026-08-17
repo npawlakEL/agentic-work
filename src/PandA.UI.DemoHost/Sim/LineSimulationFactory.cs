@@ -130,16 +130,23 @@ internal static class LineSimulationFactory
         }
 
         var firePoints = new List<((string PrinterId, string LabelType) Key, FirePoint FirePoint)>();
-        foreach (var id in map.FirePointIds)
+        foreach (var assignment in map.Assignments)
         {
-            if (!store.FirePoints.TryGetValue(id, out var fp) ||
-                !store.Printers.TryGetValue(fp.PrinterId, out var printer))
+            if (!store.FirePoints.TryGetValue(assignment.FirePointId, out var fp))
             {
                 continue;
             }
 
             var labelType = LabelTypeName(store, fp.LabelDefId);
-            firePoints.Add(((fp.PrinterId, labelType), ToFirePoint(printer, fp)));
+            foreach (var printerId in assignment.PrinterIds)
+            {
+                if (!store.Printers.TryGetValue(printerId, out var printer))
+                {
+                    continue;
+                }
+
+                firePoints.Add(((printerId, labelType), ToFirePoint(printer, fp)));
+            }
         }
 
         return firePoints.Count == 0 ? null : new FirePointProfile(map.Name, firePoints);

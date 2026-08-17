@@ -44,11 +44,8 @@ public interface IPrinterEditor : IConfigEditor<PrinterDto>
     Task<IReadOnlyList<PrinterDto>> ListForLineAsync(string lineId, CancellationToken ct = default);
 }
 
-/// <summary>CRUD for fire points. <see cref="ListForPrinterAsync"/> scopes to one printer.</summary>
-public interface IFirePointEditor : IConfigEditor<FirePointDto>
-{
-    Task<IReadOnlyList<FirePointDto>> ListForPrinterAsync(string printerId, CancellationToken ct = default);
-}
+/// <summary>CRUD for fire points. Fire points are a normalized, printer-independent glossary; maps bind them to printers.</summary>
+public interface IFirePointEditor : IConfigEditor<FirePointDto>;
 
 /// <summary>CRUD for maps. <see cref="ListForLineAsync"/> scopes to one line.</summary>
 public interface IMapEditor : IConfigEditor<MapDto>

@@ -85,7 +85,7 @@ public sealed class ConfigExplorerTests : TestContext
     }
 
     [Fact]
-    public void Adding_a_fire_point_saves_with_null_id_and_printer()
+    public void Adding_a_fire_point_saves_with_null_id()
     {
         RenderComponent<MudBlazor.MudPopoverProvider>();
         var cut = RenderComponent<ConfigExplorer>();
@@ -94,15 +94,15 @@ public sealed class ConfigExplorerTests : TestContext
             .First(t => t.TextContent.Contains("Fire Points", StringComparison.Ordinal))
             .Click();
 
-        // "Add fire point" appends a blank, expanded editor defaulting to the first printer.
+        // "Add fire point" appends a blank, expanded editor defaulting to the first label definition.
         cut.Find("[data-testid=add-firepoint]").Click();
         cut.Find("[data-testid=save-firepoint]").Click();
 
         Assert.Equal(1, _config.FirePointSaves);
         Assert.NotNull(_config.LastSavedFirePoint);
-        // A brand-new fire point saves with a null id and is associated to the first printer.
+        // A brand-new normalized fire point saves with a null id and the first label definition.
         Assert.Null(_config.LastSavedFirePoint!.FirePointId);
-        Assert.Equal("PR1", _config.LastSavedFirePoint!.PrinterId);
+        Assert.Equal("label-1", _config.LastSavedFirePoint!.LabelDefId);
     }
 
     [Fact]
@@ -237,7 +237,7 @@ public sealed class ConfigExplorerTests : TestContext
         Task<IReadOnlyList<FirePointDto>> IConfigEditor<FirePointDto>.ListAsync(CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<FirePointDto>>([]);
         Task<FirePointDto?> IConfigEditor<FirePointDto>.GetAsync(string id, CancellationToken ct) =>
-            Task.FromResult<FirePointDto?>(new FirePointDto(id, "P1", "label-1", "Middle", 0));
+            Task.FromResult<FirePointDto?>(new FirePointDto(id, "label-1", "Middle", 0));
         Task<CommandResult> IConfigEditor<FirePointDto>.SaveAsync(FirePointDto e, CancellationToken ct)
         {
             FirePointSaves++;
@@ -246,8 +246,6 @@ public sealed class ConfigExplorerTests : TestContext
         }
         Task<CommandResult> IConfigEditor<FirePointDto>.DeleteAsync(string id, CancellationToken ct) =>
             Task.FromResult(CommandResult.Ok());
-        public Task<IReadOnlyList<FirePointDto>> ListForPrinterAsync(string printerId, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<FirePointDto>>([]);
 
         // Map
         Task<IReadOnlyList<MapDto>> IConfigEditor<MapDto>.ListAsync(CancellationToken ct) =>

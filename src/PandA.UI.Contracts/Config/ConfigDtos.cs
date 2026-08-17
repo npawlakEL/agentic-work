@@ -110,15 +110,17 @@ public sealed record PrinterDto(
     double TampMountHeightInches,
     double TampSpeedInchesPerSecond);
 
-/// <summary>A fire point = (printer × label definition) plus the apply point. Devices/print point come from the printer.</summary>
+/// <summary>
+/// A normalized fire point = (label definition + apply point). It is printer-independent; a map binds it
+/// to one or more printers. Global uniqueness holds on (<see cref="LabelDefId"/> + <see cref="ApplyPointNotation"/>),
+/// so e.g. <c>Shipping (1T)</c> exists exactly once and is shared across every printer that applies it.
+/// </summary>
 /// <param name="FirePointId">Identifier (null when creating).</param>
-/// <param name="PrinterId">Owning printer (supplies orientation, print/apply device, print point, dynamic apply).</param>
 /// <param name="LabelDefId">Label definition this fire point applies.</param>
 /// <param name="ApplyEdge">Apply edge: Leading, Middle, or Trailing.</param>
 /// <param name="ApplyInches">Apply distance from the edge, in inches (negative only for Middle).</param>
 public sealed record FirePointDto(
     string? FirePointId,
-    string PrinterId,
     string LabelDefId,
     string ApplyEdge,
     double ApplyInches)
@@ -129,9 +131,24 @@ public sealed record FirePointDto(
         ApplyEdge switch { "Leading" => "L", "Trailing" => "T", _ => "M" };
 }
 
-/// <summary>A Map: a named collection of fire-point profiles; exactly one active per line.</summary>
+/// <summary>Binds a normalized fire point to the printers that apply it within a map.</summary>
+/// <param name="FirePointId">The fire point being assigned.</param>
+/// <param name="PrinterIds">Printers (on the map's line) that apply this fire point. One fire point may bind many printers.</param>
+public sealed record FirePointAssignment(string FirePointId, IReadOnlyList<string> PrinterIds);
+
+/// <summary>A Map: a per-line set of fire-point → printer assignments; exactly one active per line.</summary>
 /// <param name="MapId">Identifier (null when creating).</param>
 /// <param name="LineId">Owning line.</param>
 /// <param name="Name">Display name.</param>
-/// <param name="FirePointIds">Fire points belonging to this map.</param>
-public sealed record MapDto(string? MapId, string LineId, string Name, IReadOnlyList<string> FirePointIds);
+/// <param name="Assignments">Which printers apply each fire point in this map.</param>
+public sealed record MapDto(string? MapId, string LineId, string Name, IReadOnlyList<FirePointAssignment> Assignments)
+{
+    /// <summary>The distinct fire points referenced by this map (bound to at least one printer).</summary>
+    public IReadOnlyList<string> FirePointIds =>
+        Assignments.Where(a => a.PrinterIds.Count > 0).Select(a => a.FirePointId).ToList();
+
+    /// <summary>The printers that apply the given fire point in this map (empty if unassigned).</summary>
+    public IReadOnlyList<string> PrintersFor(string firePointId) =>
+        Assignments.FirstOrDefault(a => string.Equals(a.FirePointId, firePointId, StringComparison.OrdinalIgnoreCase))?.PrinterIds
+        ?? [];
+}

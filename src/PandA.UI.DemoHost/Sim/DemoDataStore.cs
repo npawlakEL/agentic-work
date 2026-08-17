@@ -38,6 +38,10 @@ public sealed class DemoDataStore
     private string _topOrientationId = "";
     private readonly Dictionary<string, string> _labelDefIdByName = new(StringComparer.OrdinalIgnoreCase);
 
+    // Normalized, printer-independent fire points (a map binds them to printers).
+    private string _shippingFirePointId = "";
+    private string _contentFirePointId = "";
+
     public string NextId(string prefix) => $"{prefix}-{Interlocked.Increment(ref _idSeq)}";
 
     public DemoDataStore()
@@ -77,6 +81,12 @@ public sealed class DemoDataStore
             Stations[id] = new MandaStationDto(id, name, ip, port);
         }
 
+        // Normalized fire points (label + apply point), printer-independent. A line's map binds each to printers.
+        _shippingFirePointId = NextId("fp");
+        FirePoints[_shippingFirePointId] = new FirePointDto(_shippingFirePointId, _labelDefIdByName["Shipping"], "Trailing", 1);
+        _contentFirePointId = NextId("fp");
+        FirePoints[_contentFirePointId] = new FirePointDto(_contentFirePointId, _labelDefIdByName["Content"], "Middle", 0);
+
         // Lines + printers + fire points + maps
         SeedLine("Line 1", "L1", ["Ship1", "Ship2", "Cont1"]);
         SeedLine("Line 2", "L2", ["Ship3", "Cont2"]);
@@ -91,7 +101,8 @@ public sealed class DemoDataStore
         var mapId = NextId("map");
 
         var printerIds = new List<string>();
-        var firePointIds = new List<string>();
+        var sidePrinterIds = new List<string>();
+        var topPrinterIds = new List<string>();
 
         for (var i = 0; i < printerNames.Length; i++)
         {
@@ -100,6 +111,7 @@ public sealed class DemoDataStore
             var orientationId = isTop ? _topOrientationId : _sideOrientationId;
             var printerId = NextId("printer");
             printerIds.Add(printerId);
+            (isTop ? topPrinterIds : sidePrinterIds).Add(printerId);
 
             // Spare eligibility is redundancy within an orientation group: a printer may be held as a
             // spare only when an earlier printer of the SAME orientation already covers its label types.
@@ -134,16 +146,6 @@ public sealed class DemoDataStore
                 TampMountHeightInches: 12,
                 TampSpeedInchesPerSecond: 30);
 
-            var labelName = isTop ? "Content" : "Shipping";
-            var fpId = NextId("fp");
-            firePointIds.Add(fpId);
-            FirePoints[fpId] = new FirePointDto(
-                FirePointId: fpId,
-                PrinterId: printerId,
-                LabelDefId: _labelDefIdByName[labelName],
-                ApplyEdge: isTop ? "Middle" : "Trailing",
-                ApplyInches: isTop ? 0 : 1);
-
             PrinterRuntime[printerId] = new DemoPrinterRuntime
             {
                 Online = true,
@@ -153,7 +155,19 @@ public sealed class DemoDataStore
             };
         }
 
-        Maps[mapId] = new MapDto(mapId, lineId, $"{tag} Default Map", firePointIds);
+        // The map binds each normalized fire point to every printer of the matching orientation:
+        // both side printers share the one Shipping (1T) fire point; the top printer gets Content (0M).
+        var assignments = new List<FirePointAssignment>();
+        if (sidePrinterIds.Count > 0)
+        {
+            assignments.Add(new FirePointAssignment(_shippingFirePointId, sidePrinterIds));
+        }
+        if (topPrinterIds.Count > 0)
+        {
+            assignments.Add(new FirePointAssignment(_contentFirePointId, topPrinterIds));
+        }
+
+        Maps[mapId] = new MapDto(mapId, lineId, $"{tag} Default Map", assignments);
 
         Lines[lineId] = new LineDto(
             LineId: lineId,

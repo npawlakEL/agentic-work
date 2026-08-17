@@ -24,10 +24,17 @@ public sealed class DemoConfigTreeQuery(DemoDataStore store) : IConfigTreeQuery
             .Select(BuildLineNode)
             .ToList();
 
+        var firePoints = store.FirePoints.Values
+            .OrderBy(f => LabelName(f.LabelDefId), StringComparer.Ordinal)
+            .ThenBy(f => f.ApplyPointNotation, StringComparer.Ordinal)
+            .Select(f => new ConfigTreeNode(ConfigNodeKind.FirePoint, $"{LabelName(f.LabelDefId)} ({f.ApplyPointNotation})", f.FirePointId, []))
+            .ToList();
+
         var root = new ConfigTreeNode(ConfigNodeKind.Root, "System", null,
         [
             new ConfigTreeNode(ConfigNodeKind.SettingsGroup, "Settings", "settings", []),
             ConfigTreeNode.Group(ConfigNodeKind.LabelDefinitions, "Label Definitions", labels),
+            ConfigTreeNode.Group(ConfigNodeKind.FirePoints, "Fire Points", firePoints),
             ConfigTreeNode.Group(ConfigNodeKind.MandaStations, "MandA Stations", stations),
             ConfigTreeNode.Group(ConfigNodeKind.Lines, "Lines", lines),
         ]);
@@ -56,19 +63,8 @@ public sealed class DemoConfigTreeQuery(DemoDataStore store) : IConfigTreeQuery
         ]);
     }
 
-    private ConfigTreeNode BuildPrinterNode(PrinterDto printer)
-    {
-        var firePoints = store.FirePoints.Values
-            .Where(f => string.Equals(f.PrinterId, printer.PrinterId, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(f => LabelName(f.LabelDefId), StringComparer.Ordinal)
-            .Select(f => new ConfigTreeNode(ConfigNodeKind.FirePoint, $"{LabelName(f.LabelDefId)} ({f.ApplyPointNotation})", f.FirePointId, []))
-            .ToList();
-
-        return new ConfigTreeNode(ConfigNodeKind.Printer, printer.Name, printer.PrinterId,
-        [
-            ConfigTreeNode.Group(ConfigNodeKind.FirePoints, "Fire Points", firePoints),
-        ]);
-    }
+    private ConfigTreeNode BuildPrinterNode(PrinterDto printer) =>
+        new(ConfigNodeKind.Printer, printer.Name, printer.PrinterId, []);
 
     private string LabelName(string labelDefId) =>
         store.LabelDefs.TryGetValue(labelDefId, out var def) ? def.Name : labelDefId;
@@ -121,6 +117,11 @@ public abstract class DemoConfigEditor<TDto>(ConcurrentDictionary<string, TDto> 
     public Task<CommandResult> SaveAsync(TDto entity, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        if (Validate(entity) is { } failure)
+        {
+            return Task.FromResult(failure);
+        }
+
         var id = GetId(entity);
         if (string.IsNullOrEmpty(id))
         {
@@ -131,6 +132,9 @@ public abstract class DemoConfigEditor<TDto>(ConcurrentDictionary<string, TDto> 
         items[id] = entity;
         return Task.FromResult(CommandResult.Ok("Saved."));
     }
+
+    /// <summary>Optional pre-save validation; return a failure to block the save, or null to allow.</summary>
+    protected virtual CommandResult? Validate(TDto entity) => null;
 
     public Task<CommandResult> DeleteAsync(string id, CancellationToken ct = default) =>
         Task.FromResult(items.TryRemove(id, out _)
@@ -195,10 +199,21 @@ public sealed class DemoFirePointEditor(DemoDataStore store)
 
     protected override FirePointDto WithId(FirePointDto e, string id) => e with { FirePointId = id };
 
-    public Task<IReadOnlyList<FirePointDto>> ListForPrinterAsync(string printerId, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<FirePointDto>>(Store.FirePoints.Values
-            .Where(f => string.Equals(f.PrinterId, printerId, StringComparison.OrdinalIgnoreCase))
-            .ToList());
+    // A fire point must be unique across the system on (label definition + apply point).
+    protected override CommandResult? Validate(FirePointDto e)
+    {
+        var dup = Store.FirePoints.Values.FirstOrDefault(f =>
+            !string.Equals(f.FirePointId, e.FirePointId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(f.LabelDefId, e.LabelDefId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(f.ApplyPointNotation, e.ApplyPointNotation, StringComparison.OrdinalIgnoreCase));
+        if (dup is not null)
+        {
+            var label = Store.LabelDefs.TryGetValue(e.LabelDefId, out var l) ? l.Name : e.LabelDefId;
+            return CommandResult.Fail($"A fire point for {label} ({e.ApplyPointNotation}) already exists.");
+        }
+
+        return null;
+    }
 }
 
 public sealed class DemoMapEditor(DemoDataStore store)
