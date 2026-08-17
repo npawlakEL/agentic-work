@@ -1,3 +1,14 @@
+---
+name: senior-coder-checklist
+description: >
+  Load whenever the Senior Coder is doing a feasibility sign-off, spot-check,
+  final review, or triaging Reviewer findings. A living checklist of what the
+  Senior Coder always verifies before signing off on any code.
+load_when: >
+  Senior Coder feasibility assessment, spot-check, final sign-off, or review
+  triage. Match keywords: sign-off, review, spot-check, feasibility, triage.
+upstream: true
+---
 # Skill: Senior Coder Checklist
 
 **Owner:** Senior Coder Agent
