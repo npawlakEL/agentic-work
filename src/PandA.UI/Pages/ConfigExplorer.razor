@@ -933,20 +933,20 @@
         var list = await LineEditor.ListAsync();
         var newId = list.FirstOrDefault(l => l.LineId is not null && !before.Contains(l.LineId))?.LineId;
 
-        var printerFailures = 0;
+        var printerFailures = new List<string>();
         if (newId is not null)
         {
             foreach (var printer in _builderPrinters)
             {
                 printer.LineId = newId;
                 var result = await PrinterEditor.SaveAsync(printer.ToDto());
-                if (!result.Success) { printerFailures++; }
+                if (!result.Success) { printerFailures.Add(result.Message ?? $"'{printer.Name}' could not be saved."); }
             }
         }
 
-        if (printerFailures > 0)
+        if (printerFailures.Count > 0)
         {
-            Snackbar.Add($"{printerFailures} printer(s) could not be saved.", Severity.Warning);
+            Snackbar.Add($"{printerFailures.Count} printer(s) could not be saved: {string.Join(" ", printerFailures)}", Severity.Warning);
         }
 
         _builderOpen = false;
