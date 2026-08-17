@@ -116,6 +116,37 @@ Every pass through the Coder ↔ Reviewer loop MUST produce written records. Thi
 - **Upstream Skill Push:** The Orchestrator scans `.agent/skills/` for any files marked `<!-- UPSTREAM: true -->`. These universal skills are pushed back to the `agent-harness` branch (source of truth) so all future projects inherit them.
 - **Gate Condition:** Learnings captured in `.project/learnings/` folder. Technical doc in `.client-docs/technical/`. Operator doc in `.client-docs/operator/`. Architecture updated if applicable. CHANGELOG updated. Universal skills upstreamed.
 
+## 🚀 "Boot" Mode (Ingest & Internalize the Harness)
+
+**Run this FIRST, right after cloning the harness into a project** — the user says **"boot"** (or "boot up," "ingest the workflow"). Its purpose: force the Orchestrator to do a deep dive and FULLY internalize what this harness is and how it must behave, BEFORE doing any work. This exists because dropping the harness into a repo does not guarantee the workflow is followed — Boot makes ingestion explicit and verifiable.
+
+**The Orchestrator performs a deep read (not a skim):**
+0. **Detect repo type FIRST:** is this a **harness-authoring repo** (the repo IS the harness — blank `.project` templates are by design, not gaps) or a **downstream product repo** (harness cloned into a real project — filled planning docs + app code + tests are expected)? Announce which; the Boot Report's "gaps" are judged against that type.
+1. **Read the whole harness:** `agents.md` (all gates, all constraints, all modes), every file in `.agent/roles/`, `.agent/model-config.md`, and the frontmatter **and bodies** of every skill in `.agent/skills/`.
+2. **Run a harness integrity check:** run `node .agent/tools/harness-check.mjs` — it verifies mode↔routing parity, complete skill frontmatter with `name` matching filename, that every referenced `.agent/`/`.project/`/`.client-docs/` path exists, and contiguous constraint numbering. If Node isn't available, do the same checks by hand. Flag any gap it reports.
+3. **Read the project state:** `.project/STATE.md` (the live "where are we" snapshot — read this FIRST for instant context), `.project/vision.md` (the whiteboard), `.project/spec.md`, `.project/planner-tasks.md`, `.project/taskboard/`, and the latest entries in `architecture-log/`, `reviewer-log/`, `learnings/`, `backlog/`.
+4. **Survey the actual codebase:** top-level structure, stack/build files, test setup, and how code is organized — enough to know what it's about to steward. It does NOT start changing anything.
+5. **Self-verify and report back** with a concise "Boot Report" that proves ingestion:
+   ```
+   🚀 BOOT COMPLETE — harness ingested
+   Repo type: [harness-authoring | downstream product]
+   Who I am: [Orchestrator identity + personality in one line]
+   Workflow: [the gate sequence 1 → 1.5 → 2 → 2.5 → 2.75 → 3, one line]
+   Non-negotiables: [top constraints — no gate skips, user is merge gate, auto-engage Senior Coder, no drift, never weaken a test]
+   Integrity: [modes↔routing OK · skills frontmatter OK · paths OK — or list gaps]
+   Modes available: hot-path, finalize, nightwatch, retro, grill me, regroup
+   Skills loaded: [count + the ones most likely to fire here]
+   Project state: [what this project is, current phase, what's in flight]
+   Gaps/risks: [anything missing, stale, or misconfigured — judged vs. repo type — or "none"]
+   Ready. What are we building?
+   ```
+6. **Commit to enforcement:** Boot ends with the Orchestrator explicitly affirming it will run the workflow (gates, delegation, visibility) — not freelance.
+
+**Key rules:**
+- Boot is **read-only** — it ingests and reports; it makes no code changes.
+- If required harness files are missing or malformed, Boot flags them as gaps rather than silently proceeding.
+- Boot can be re-run anytime the Orchestrator feels drift creeping in, or the user senses the workflow slipping — it's a re-anchor, not just a one-time init.
+
 ## Hot-Path (Small Fixes / Bug Patches)
 
 For trivial changes that don't warrant the full 6-gate flow (one-line fixes, typos, small bug patches):
@@ -150,11 +181,12 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
 
 2. **Each Senior Coder audits its assigned scope for:**
    - **Bugs & correctness holes** — logic errors, unhandled edge cases, race conditions, off-by-one, null/undefined handling
-   - **Security issues** — injection risks, auth gaps, exposed secrets, unvalidated input
+   - **Security** (first-class dimension) — injection (SQL/command/XSS), authn/authz gaps and missing access checks, unvalidated or untrusted input, exposed secrets/keys/tokens, insecure crypto or transport, unsafe deserialization, SSRF/path-traversal, dependency/supply-chain risk, and sensitive-data handling (logging, storage, exposure in responses). Report each with location + exploit scenario + fix.
    - **Code quality** — duplication, dead code, tangled dependencies, poor separation of concerns, missing error handling
    - **Optimization opportunities** — inefficient algorithms, N+1 queries, unnecessary re-renders, memory leaks, redundant work
    - **Architectural concerns** — pattern violations, tech debt, brittle coupling, scalability limits
    - **Missing tests** — untested paths, gaps in coverage, missing edge-case tests
+   - **Test QUALITY (mutation testing)** — for critical/high-risk modules, run mutation testing (e.g. Stryker.NET for C#/xUnit, StrykerJS for JS/TS) to find tests that execute code but don't actually assert its behavior. Surviving mutants = weak tests. Report the mutation score and specific survived mutants as test-quality findings. Keep it TARGETED to the audited scope — mutation runs are slow. See `.agent/skills/mutation-testing.md`.
    - **Open questions about functionality** — behavior that's ambiguous, incomplete, or doesn't match the spec/vision
    - **Documentation gaps** — undocumented functions, stale docs, missing comments
 
@@ -191,19 +223,121 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
 - Finalize can be run at any time: before a release, at a milestone, or whenever the user wants a health check.
 - Every finding must be **actionable** — vague "could be better" notes are not allowed; each needs a location, a reason, and a recommendation.
 - Findings the user approves for fixing STILL go through the full workflow — Finalize surfaces work, it doesn't bypass gates.
+- **Skill/log hygiene:** Finalize also flags process gaps — patterns in `reviewer-log/`/`architecture-log/` that recur but were never promoted to skills, and skills that appear stale or contradictory. These are surfaced as candidates for **Retro** to act on (Finalize doesn't rewrite skills itself).
+
+## 🌙 "Nightwatch" Mode (Scheduled Trunk Guardian)
+
+Nightwatch is an **unattended, scheduled** run (typically nightly) that guards the main branch. It runs the slow, high-value checks a per-PR loop can't afford, and when it finds a REAL regression it drafts a fix through the normal gates — but it **never merges**. The user wakes up to a digest, not a surprise. It is triggered by a schedule (a workflow cron), not by a keyword, though the user can also say "run nightwatch" on demand.
+
+**Three phases (as on the cards):**
+
+1. **OVERNIGHT — Re-check and hunt.** On the *unchanged* trunk (latest `master`), run the full, slow suite that PRs skip:
+   - the complete unit + driver/integration/e2e test suites (not just a changed subset — there is no change; this is the whole trunk)
+   - targeted **mutation testing** on critical/high-risk modules (see `.agent/skills/mutation-testing.md`)
+   - a **harness integrity check** (`node .agent/tools/harness-check.mjs`) so doc/skill drift is caught alongside code rot
+   - optionally a lightweight Finalize-style audit pass
+   The point is to catch rot that slipped through per-PR checks or that only surfaces in aggregate.
+
+2. **IF SOMETHING IS RED — An agent opens a fix.** For each failure, the Senior Coder first classifies it:
+   - **Flaky / environmental** (non-deterministic, timing, external dependency) → do NOT "fix" by changing product code. Quarantine per the project's flaky-test policy, log it, and surface it in the digest. Never chase a phantom regression.
+   - **Real regression** → run the normal async fix loop (Senior Coder scopes → Coder fixes → Reviewer signs off), on a fresh branch, and **open a DRAFT PR** into the user's queue. Same checks as any human PR. **It never merges** (Gate 2.75 is always the user) and it **never weakens a test to make red go green** — no deleting assertions, no loosening thresholds, no `[Skip]`. Green must be earned by fixing the code, and mutation testing is the backstop that proves it.
+
+3. **IN THE MORNING — A digest.** Emit a concise summary of: what ran, what was green, what was red (real vs. flaky), which draft PRs were opened, and where the AI tooling itself needed correcting (e.g. a bad auto-fix that was reverted). The digest goes to `.project/architecture-log/` (dated) with open questions to `.project/planner-tasks.md` and deferred items to `.project/backlog/`. The Orchestrator presents it to the user at the start of the next session.
+
+**Key rules:**
+- **Never merges.** Nightwatch can open draft PRs; the user is always the merge gate. No exceptions, even for "obvious" fixes.
+- **Never weakens a test.** Making a failing test pass by deleting/loosening/skipping it is a forbidden anti-pattern — it defeats the entire purpose. If a test is genuinely wrong, that's a finding for the user, not an autonomous edit.
+- **Red ≠ regression.** Every failure is triaged flaky-vs-real before any fix. Flaky tests are quarantined and reported, not "fixed."
+- **Fixes go through the gates**, just asynchronously — no shortcut because it's unattended.
+- **Bounded and honest.** If a fix can't be made cleanly within the normal escalation limits (see Failure Escalation Protocol), Nightwatch stops, leaves it red, and reports it in the digest rather than forcing a hacky patch.
+- **Setup is per-project.** The schedule and the actual test/mutation commands are wired per repo (see `.agent/skills/nightwatch.md`), since they depend on the project's stack.
+- **Skill/log hygiene pass:** while on trunk, Nightwatch also does a lightweight check for unpromoted patterns — recurring issues in `reviewer-log/`/`architecture-log/` that should become skills, and skills that never fired or now conflict. It surfaces these in the digest as candidates (it does not rewrite skills itself — that's the Orchestrator via Retro).
+
+## 🚁 "Fleet" Mode (Auto-Scaled Parallel Execution)
+
+**Fleet is not a user command — the Orchestrator engages it AUTOMATICALLY** when the work is large enough and parallelizable enough to benefit. The user never has to ask for a fleet (though they can force or forbid one). The whole point is proportional scaling: big, wide, independent work gets many agents; small or coupled work stays single-track.
+
+### The automatic scaling decision (Orchestrator runs this on every substantial request)
+Fleet is engaged only when the work is **BOTH large/broad AND shardable into independent units**:
+
+**Fleet-worthy (auto-engage):**
+- A **codebase deep-dive / large Finalize** with many independent findings to fix.
+- A **broad refactor or migration** spanning many modules/call-sites with low cross-coupling.
+- **Test/coverage backfill** across many files, or a lint/dependency sweep.
+- **Multi-repo propagation** (e.g. rolling this harness + skills into N repos).
+- **Nightwatch across multiple repos.**
+
+**NOT fleet-worthy (stay single-track — the default):**
+- Small changes, single-file edits, hot-path fixes — a fleet adds pure overhead.
+- **Tightly-coupled feature work** where parallel agents would touch the same files → conflict soup. Coupling, not size, is the deciding factor.
+- **Ambiguous specs** — resolve the spec first (a fleet multiplies misunderstanding). If it's not rock-solid (Constraint #7), do NOT fleet.
+- Anything that can't be partitioned into units with non-overlapping file ownership.
+
+**Rule of thumb:** fleet when work is **wide, shallow, independent, and well-specified**. When in doubt, stay single-track — the cost of an unnecessary fleet (conflicts, review flood) is higher than the cost of doing it sequentially.
+
+### How the Orchestrator runs a fleet (dispatcher loop)
+1. **Classify & size** — decide fleet vs. single-track using the criteria above, and pick a sane concurrency N (proportional to independent units and the user's review bandwidth — not "as many as possible").
+2. **Shard with ownership (Senior Coder owns the partition)** — the Senior Coder divides the work into independent units and assigns **non-overlapping file/module ownership** so no two agents write the same file. Shared/core files are handled single-track or serialized, never in parallel. This blast-radius-aware partition is the real defense against merge conflicts.
+3. **Announce the plan (visible):**
+   ```
+   🚁 FLEET auto-engaged — [N] parallel loops (work is large + shardable)
+      Loop 1 → [unit] · owns [files/modules]
+      Loop 2 → [unit] · owns [files/modules]
+      ...
+      Shared/core [files] → single-track (not parallelized)
+   ```
+4. **Launch** — each loop is a NORMAL gated Coder ↔ Reviewer loop on its own branch, with the Senior Coder as the shared architectural authority across all of them. Every gate still applies per loop.
+5. **Aggregate** — consolidate all loops into ONE prioritized review queue for the user; deduplicate and batch so the user isn't flooded. Emit a roll-up digest and keep `.project/STATE.md` current with fleet status.
+
+### Guardrails (non-negotiable)
+- **Never merges.** Every loop opens a **draft PR**; the user is always the merge gate (Gates 2.5/2.75). A fleet can produce a lot of PRs fast — batching and prioritization are mandatory so review stays humane.
+- **Ownership is exclusive.** No two loops write the same file. Conflicts are prevented by partition, not resolved after the fact.
+- **Per-loop regression + integrity.** Each branch runs its coupled test suites (Constraint #21) and, for harness changes, `node .agent/tools/harness-check.mjs`. Never weaken a test to go green.
+- **Proportional, not maximal.** The Orchestrator caps N to what it can coordinate without drift (Constraint #22) and what the user can actually review.
+- **Spec-solid precondition.** No fleet on ambiguous work — tighten the spec first.
+- See `.agent/skills/fleet.md` for the sharding heuristic and the decision checklist.
+
+## 🔁 "Retro" Mode (Process Retrospective — Train the Harness)
+
+The user says **"retro"** to run a retrospective on the *process itself* (not the code). Where Finalize audits the codebase, Retro audits the **harness's memory** and turns scattered feedback into curated, durable skills. This is the main mechanism for "training" the harness over time.
+
+**The Orchestrator (with the Learner, and Senior Coder for technical patterns) does the following:**
+1. **Mine the feedback data:**
+   - `reviewer-log/` and `architecture-log/` — recurring issues, same bug appearing 2+ times, repeated triage decisions.
+   - `learnings/` — captured lessons not yet promoted into skills.
+   - **This session's user corrections** — every time the user overrode or corrected an agent (see the Correction-Capture reflex, Constraint #23). These are the richest signal.
+2. **Propose skill changes** as a concrete diff-style list:
+   - **NEW skills** — recurring patterns that should auto-load next time (with a sharp `description`/`load_when` so they actually fire, and a citation to the incident, e.g. `reviewer-log/007`).
+   - **UPDATED skills** — existing skills that were wrong, vague, or incomplete.
+   - **STALE skills** — skills that never fired or now contradict another; recommend prune/merge.
+3. **Get user sign-off**, then the Orchestrator writes the approved skills (it is the only skill-writer), flags universal ones `upstream: true`, and pushes universal ones to `agent-harness`.
+4. **Log the retro** to `.project/learnings/` (dated) so the training history is itself recorded.
+
+**Key rules:**
+- Retro produces **curated memory, not sprawl** — quality over count. Merging/pruning is as valuable as adding.
+- Every proposed skill should, where possible, **cite the evidence** (log entry or correction) that motivated it — evidence-backed skills are trusted and survive pruning.
+- Retro can run on demand, at milestones, or as the process-side complement to Finalize.
 
 ## Constraints & Guardrails
 
 > **Reading these:** The emphatic language (MANDATORY, NO EXCEPTIONS, BLOCKED) is intentional — it exists so the workflow holds even on smaller models. On Opus-tier reasoning agents (see `.agent/model-config.md`), treat these as firm intent rather than rote checklists: follow the *purpose* of each constraint, not just its literal wording. The Orchestrator is the enforcement authority for all of them.
 
+> **Index by theme** (numbers are stable identifiers — referenced elsewhere — so they are never renumbered; new constraints are appended):
+> - **Gates & flow:** #1 (no gate skips), #6 (no pushing in the loop), #8 (spec-gap escalation), #12 (workflow is law), #24 (Gate 3 never skipped)
+> - **Delegation & scope:** #3 (scope boundaries), #11 (technical questions → Senior Coder), #20 (auto-engage Senior Coder), #22 (no Orchestrator drift)
+> - **Context & statelessness:** #2 (reload context every invocation), #4 (skills auto-load by match), #9 (Senior Coder reads the codebase)
+> - **Testing & quality:** #21 (regression guardrail + mutation opt-in)
+> - **Documentation & learning:** #5 (learnings mandatory), #7 (rock-solid spec), #10 (architecture logging), #13 (docs ship with code), #23 (corrections are training data)
+> - _(Constraints not listed above — e.g. #14–#19 — are enforcement/visibility details in sequence below.)_
+
 1. **No agent skips a gate.** Coder cannot begin without Senior Coder's handoff. Reviewer cannot start without Senior Coder's sign-off. Learner cannot run until both Senior Coder and Reviewer pass.
 2. **Agents are stateless between invocations — MUST reload context.** All context must be passed explicitly (via files or prompts). At the START of every invocation, every agent MUST read:
-    - `.project/vision/vision.md` — the whiteboard (project direction, user preferences, conventions)
+    - `.project/vision.md` — the whiteboard (project direction, user preferences, conventions)
     - `.agent/skills/` — applicable skills for the task
     - Their relevant project files (spec, taskboard, architecture-log, etc.)
     - Agents do NOT rely on "remembering" from a previous invocation. They reload every time.
 3. **Each agent operates within its defined scope.** The coder does not gather requirements. The reviewer does not write features. The Senior Coder does not write production code.
-4. **Skills are mandatory reading.** Every agent MUST read the `.agent/skills/` folder before starting work and follow any applicable skills during execution. If a skill exists for a task, the agent uses it — no reinventing.
+4. **Skills are mandatory reading and AUTO-LOAD by description match.** At the START of every invocation, every agent scans the frontmatter (`name` + `description` + `load_when`) of every skill file in `.agent/skills/` (excluding `README.md`, which documents the format and is not itself a skill) — reading just the frontmatter is cheap. For every skill whose description/`load_when` matches the task at hand, the agent **loads the full skill body and follows it** automatically — no waiting to be told, no reinventing. If a skill covers the task, using it is not optional. New skills must ship with frontmatter (see `.agent/skills/README.md`) so they fire when they should.
 5. **Learnings are mandatory.** Every completed project must produce at least one learning entry.
 6. **No pushing during Coder ↔ Senior Coder ↔ Reviewer loop.** All work stays local until user approves (Gate 2.5).
 7. **Spec must be rock solid before handoff.** No open items, no unanswered questions in `.project/planner-tasks.md` when the spec goes to the Senior Coder/Coder. If questions remain, they must be answered first.
@@ -258,7 +392,7 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
     - The user decides. Their decision is final and logged in `.project/architecture-log/`
     - Neither agent overrides the other — the user is the tiebreaker
 18. **Vision document is the whiteboard — ALL agents read it.**
-    - `.project/vision/vision.md` is the project's source of truth for direction, goals, preferences, and conventions
+    - `.project/vision.md` is the project's source of truth for direction, goals, preferences, and conventions
     - Every agent reads it at the START of every invocation — no exceptions
     - If a question is answered in the vision doc, agents follow it without re-asking the user
     - The Planner updates the vision doc whenever the user states a new preference or convention
@@ -280,7 +414,16 @@ The user invokes this by saying **"finalize"** (or "finalize this," "run a final
     - **Coder** runs the identified suites locally after implementing and reports actual results (pass/fail counts, not "should pass"). Red = not done; the Coder fixes forward or the loop escalates per the Failure Escalation Protocol.
     - **Reviewer** independently re-runs the full relevant suites (unit + driver) and confirms green before signing off. A partial or skipped run is a blocking issue logged to `reviewer-log/`.
     - If a change is genuinely untestable by the existing suites, the Senior Coder says so explicitly and the gap becomes a test-to-add item — it is never silently skipped.
+    - **Mutation testing (opt-in for high-risk code):** for shared/critical modules where green tests aren't enough confidence, the Senior Coder may require a targeted mutation run (e.g. Stryker.NET / StrykerJS) on the changed module to prove the tests actually assert behavior, not just execute it. This is scoped to the change — never the whole codebase — because mutation runs are slow. See `.agent/skills/mutation-testing.md`.
     - Evidence over claims: the actual test command and its summarized output are recorded (Coder in the story handoff, Reviewer in `reviewer-log/`). "Tests pass" without a run is not accepted.
+
+22. **No Orchestrator drift — delegation does not decay over long sessions.** The Orchestrator is a router, not a doer; it produces coordination, not work products. It must NEVER write application code/tests/config, make architecture or feasibility calls, draft or reshape the spec, or judge QA itself — those belong to the Coder, Senior Coder, Planner, and Reviewer respectively. The failure mode this prevents: late in a long session the Orchestrator "already has the context" and starts doing everything inline instead of handing off. That is a violation. Before writing any substantive content, the Orchestrator applies the delegation tripwire (see `orchestrator.agent.md` → "Long-Session Discipline"): if an agent owns the content, invoke that agent and announce the handoff — "I already know the answer" is never an excuse to skip the agent. The Orchestrator periodically re-anchors by re-reading these constraints and the current workflow state; the workflow is re-loaded, not remembered.
+
+23. **Corrections are training data — capture them automatically.** Every time the user overrides, corrects, or redirects an agent ("no, do it this way," "that's wrong," "I keep telling you to X"), that is the richest possible signal and MUST NOT be thrown away. The Orchestrator immediately treats it as a skill/learning candidate: it acknowledges the correction, applies it now, and records it (with the context that triggered it) so it can be promoted into a durable skill at the next **Retro**. The user should never have to give the same correction twice for the same reason — if they do, the harness failed to capture it. Repeated corrections on the same theme are escalated to an immediate skill, not deferred. This is how the harness learns; see the "Correction-Capture" reflex in `orchestrator.agent.md`.
+
+24. **Gate 3 is never skipped — every landed change closes with the Learner.** No change is "done" until `CHANGELOG.md` is bumped and (for anything behavioral/process-level) a `.project/learnings/` entry is written. This applies to EVERY change that lands, including **Orchestrator-direct** harness/workflow/doc edits and hot-path fixes — not just full feature cycles. "Orchestrator direct" in the routing table means *the Orchestrator may do the edit itself*, NOT *skip the close-out*: the Orchestrator still engages the Learner to log it. The failure mode this prevents: a whole session of direct commits with a CHANGELOG that never moves. If the user ever has to ask "have you been updating the changelog?", this gate was skipped and the Orchestrator FAILED. The Learner writes the entry; the Orchestrator approves the version bump. See `.agent/skills/changelog-and-learn.md`.
+
+25. **Fleet scaling is automatic and proportional — the user never has to ask.** The Orchestrator decides on its own whether a request warrants a fleet of parallel agents, based on the WORK: engage a fleet when the task is **large/broad AND shardable into independent units** (codebase deep-dive, large Finalize with many findings, broad refactor/migration, test backfill, multi-repo propagation); stay single-track for small changes, hot-path fixes, tightly-coupled feature work, or anything with an ambiguous spec. Coupling — not size alone — decides: if units would fight over the same files, do NOT fleet. When a fleet is engaged, the Senior Coder assigns **exclusive, non-overlapping file/module ownership** (conflicts are prevented by partition, not merged after the fact), concurrency N is capped to what the Orchestrator can coordinate without drift and the user can actually review, every loop is a normal gated Coder ↔ Reviewer loop that opens a **draft PR only** (never merges), and the decision is announced. When in doubt, stay single-track. See the "Fleet Mode" section in `agents.md` and `.agent/skills/fleet.md`.
 
 ## Parallel Execution Model
 

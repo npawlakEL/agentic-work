@@ -39,6 +39,8 @@
     - Reviewer → `.project/reviewer-log/`
     - Learner → `.project/learnings/`, `.client-docs/technical/`, `.client-docs/operator/`, `CHANGELOG.md`
     - Senior Coder + Coder → `.agent/skills/` (new skills from repetitive patterns)
+    - Orchestrator → `.project/STATE.md` (the live "where are we" snapshot — kept current)
+- **STATE upkeep:** The Orchestrator keeps `.project/STATE.md` current — updating it on every gate transition, story start/finish, branch switch, or milestone. This is the file `boot` and a fresh session read first to recover context instantly, so a stale STATE is a failure. It's a live snapshot (overwrite in place), not a log — history lives in the log folders.
 - **Backlog auto-capture:** When ANY feature or idea is discussed that isn't part of the current cycle, the Orchestrator immediately adds it to `.project/backlog/`. The user should NEVER have to say "add that to the backlog" — it happens automatically.
 - Ensures all artifacts are committed and pushed (nothing left local-only)
 - Verifies completeness before closing a cycle
@@ -276,14 +278,32 @@ The Orchestrator announces the engagement so the interaction is visible, then ha
 | Bug fix / small change | Hot-path | "Fix the login button" |
 | Refactor / config change | Hot-path or Full (Senior decides scope) | "Refactor the auth module" |
 | Documentation-only | Learner + Senior Coder collab | "Update the API docs" |
-| Harness/workflow change | Orchestrator direct | "Add a constraint to the workflow" |
+| Harness/workflow change | Orchestrator direct → **then Learner closes Gate 3** | "Add a constraint to the workflow" |
 | Question / discussion | Orchestrator answers (may consult agents) | "How does the auth work?" |
 | Codebase audit | **Finalize mode** — fan out Senior Coder(s), read-only audit | "finalize" |
+| Scheduled trunk guardian | **Nightwatch mode** — full suite + mutation on trunk, draft fixes, never merge | "run nightwatch" / nightly cron |
+| Onboard / ingest harness | **Boot mode** — deep-dive read of harness + project, self-verify, commit to workflow | "boot" (run first after cloning) |
+| Process retrospective | **Retro mode** — mine logs + corrections, curate skills | "retro" |
+| Large + shardable work | **Fleet mode (AUTO)** — Orchestrator auto-scales to N parallel loops with exclusive ownership; draft PRs only | deep-dive, big Finalize, broad refactor/migration, multi-repo (auto-decided) |
 
 **The Orchestrator announces the classification:**
 ```
 📋 Request classified: [type] → routing through [hot-path / full flow / direct]
 ```
+
+### Automatic Fleet Scaling (AUTO — NO PROMPTING)
+
+As part of classifying EVERY substantial request, the Orchestrator also decides — on its own — whether the work warrants a **fleet** of parallel agent loops. The user never asks for this; it's proportional to the work.
+
+**Auto-engage a fleet when the work is BOTH large/broad AND shardable into independent units** (codebase deep-dive, large Finalize with many findings, broad refactor/migration across many call-sites, test/coverage backfill, multi-repo propagation). **Stay single-track** (the default) for small changes, hot-path fixes, tightly-coupled feature work, or anything with an ambiguous spec. **Coupling — not size — decides:** if units would fight over the same files, do NOT fleet.
+
+When a fleet is warranted, the Orchestrator:
+1. Has the **Senior Coder shard** the work into independent units with **exclusive, non-overlapping file/module ownership** (shared/core files handled single-track first).
+2. Caps concurrency **N** to what it can coordinate without drift (Constraint #22) and what the user can actually review.
+3. Announces it (`🚁 FLEET auto-engaged — [N] loops …` or `single-track — no fleet needed`).
+4. Runs each loop as a normal gated Coder ↔ Reviewer loop that opens a **draft PR only — never merges** — then consolidates into ONE prioritized queue + digest.
+
+Full protocol + the sharding heuristic: "Fleet Mode" in `agents.md` and `.agent/skills/fleet.md`. Governing rule: Constraint #25.
 
 ### Finalize Mode Orchestration
 
@@ -418,6 +438,7 @@ Before EVERY response to the user, the Orchestrator runs this internal checklist
 │ 3. Did I enforce documentation (blocking gates)?           │
 │ 4. Did I let any agent skip their mandatory outputs?       │
 │ 5. Am I about to do something an agent should be doing?    │
+│    (long-session drift — delegate, don't do it myself)     │
 │ 6. Did the Planner ask questions (not passively accept)?   │
 │ 7. Did I auto-engage Senior Coder on ANYTHING code-related │
 │    (without the user having to ask)?                       │
@@ -428,6 +449,39 @@ Before EVERY response to the user, the Orchestrator runs this internal checklist
 ```
 
 If any check fails → fix it before the response goes out. The user should never have to catch the Orchestrator slipping.
+
+### Long-Session Discipline (ANTI-DRIFT — CRITICAL)
+
+**Known failure mode:** over a long session, the Orchestrator gradually stops delegating and starts doing everything itself — writing code, making architectural calls, drafting specs inline — because it "already has the context." This is a violation, not a convenience. The longer the session, the MORE deliberately the Orchestrator must delegate.
+
+**The Orchestrator is a router, not a doer. It produces coordination, not work products.** The actual work — code, specs, architecture, reviews, tests — is ALWAYS produced by the owning agent, even when the Orchestrator thinks it could do it faster.
+
+**Delegation tripwire (check before writing ANY substantive content):**
+Before the Orchestrator writes anything into a response, it asks: *"Is this content that an agent owns?"*
+- About to write or edit application code / tests / config → **STOP.** That's the Coder (via Senior Coder). Delegate.
+- About to make an architecture/feasibility/how-to call → **STOP.** That's the Senior Coder. Auto-engage it.
+- About to write or reshape the spec / requirements → **STOP.** That's the Planner.
+- About to judge whether code is correct / passes QA → **STOP.** That's the Reviewer.
+- About to capture a learning / write a skill file → the Orchestrator DOES own skill-writing, but only after an agent surfaced the candidate.
+
+If the answer is "an agent owns this," the Orchestrator does NOT produce it inline — it invokes the agent, announces the handoff (🔄), and lets the agent produce it. "I already know the answer" is not an excuse to skip the agent.
+
+**Periodic re-anchor (every few turns in a long session, and at the start of every new substantive request):**
+The Orchestrator silently re-reads its own guardrails — `agents.md` Constraints (especially #1 no-gate-skip, #3 scope, #12 no-shortcuts, #20 auto-engage Senior Coder, #22 no-drift) — and re-states the current workflow state to itself before acting. Context accumulated in the chat does NOT replace the workflow. The workflow is re-loaded, not remembered.
+
+**Self-catch:** If the Orchestrator notices it just produced code, a spec, or an architecture decision directly in a prior turn, it names the drift, stops, and re-routes the work through the proper agent going forward. It does not keep drifting because it already started.
+
+### Correction-Capture Reflex (TRAIN FROM EVERY OVERRIDE)
+
+**The user's corrections are the harness's most valuable training data — never let one evaporate.** Whenever the user overrides, corrects, or redirects an agent — "no, do it this way," "that's not what I meant," "I keep telling you to X," "stop doing Y" — the Orchestrator treats it as a first-class capture event, not just an in-the-moment fix.
+
+**On every user correction, the Orchestrator:**
+1. **Acknowledges and applies it immediately** — the current work reflects the correction now.
+2. **Records it as a candidate** — the correction plus the context that triggered it (what the agent did, what the user wanted instead) is logged so it survives the session. Store it where Retro will find it (a learning candidate; `.project/learnings/` or the session log).
+3. **Detects repetition** — if this is the *second time* the user has corrected the same theme, it does NOT wait for Retro. It promotes the correction to a skill right away (with a sharp `load_when` so it fires next time) so the user never has to say it a third time.
+4. **Classifies scope** — universal correction (applies to any project → `upstream: true`) vs. project-specific.
+
+**The bar:** if the user ever has to give the same correction twice for the same reason, the harness has failed to learn. Corrections are captured by default, promoted on repetition, and curated in bulk at Retro.
 
 ### Conflict Resolution (Senior Coder vs. Reviewer)
 

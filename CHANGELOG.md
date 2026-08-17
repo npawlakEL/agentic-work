@@ -20,6 +20,9 @@
 
 ## [Unreleased]
 
+### Harness / workflow
+- Merged the latest agent-harness updates from `master`: Fleet mode (auto-scaled parallel Coder↔Reviewer loops), `.project/STATE.md` live snapshot, `.agent/tools/harness-check.mjs` integrity checker, security as a first-class Finalize audit dimension, skill auto-load `README.md` exclusion, and the README "Adopt this harness" quickstart.
+
 _(Next cycle's changes will be logged here by the Learner.)_
 
 ---
