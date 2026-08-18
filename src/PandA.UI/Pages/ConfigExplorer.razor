@@ -133,7 +133,7 @@
                                         <MudItem xs="6" sm="4"><MudTextField @bind-Value="bp.PrintDevice" Label="Print device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                         <MudItem xs="6" sm="4"><MudTextField @bind-Value="bp.ApplyDevice" Label="Apply device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                         <MudItem xs="6" sm="4"><MudNumericField T="int" @bind-Value="bp.PrintPoint" Label="Print point" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                        <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="bp.TampMountHeightInches" Label="Tamp mount height (in)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                        <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="bp.TampMountHeightInches" Label="@(TampHeightApplies(bp.OrientationId) ? "Tamp mount height (in)" : "Tamp mount height (n/a for side)")" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!TampHeightApplies(bp.OrientationId))" /></MudItem>
                                         <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="bp.TampSpeedInchesPerSecond" Label="Tamp speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                     </MudGrid>
                                     <div class="cfg-actions">
@@ -339,7 +339,7 @@
                                     <MudItem xs="6" sm="4"><MudTextField @bind-Value="item.Draft.PrintDevice" Label="Print device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                     <MudItem xs="6" sm="4"><MudTextField @bind-Value="item.Draft.ApplyDevice" Label="Apply device" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                     <MudItem xs="6" sm="4"><MudNumericField T="int" @bind-Value="item.Draft.PrintPoint" Label="Print point" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                                    <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="item.Draft.TampMountHeightInches" Label="Tamp mount height (in)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                    <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="item.Draft.TampMountHeightInches" Label="@(TampHeightApplies(item.Draft.OrientationId) ? "Tamp mount height (in)" : "Tamp mount height (n/a for side)")" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!TampHeightApplies(item.Draft.OrientationId))" /></MudItem>
                                     <MudItem xs="6" sm="4"><MudNumericField T="double" @bind-Value="item.Draft.TampSpeedInchesPerSecond" Label="Tamp speed (in/s)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                 </MudGrid>
                                 <div class="cfg-actions">
@@ -1261,6 +1261,11 @@
         var kind = _allOrientations.FirstOrDefault(o => o.OrientationId == orientationId)?.MotionKind ?? ApplyMotionKind.Side;
         return kind == ApplyMotionKind.Top ? Color.Secondary : kind == ApplyMotionKind.Front ? Color.Tertiary : Color.Info;
     }
+
+    // Tamp mount height is the vertical drop for a top/front-apply head; it's irrelevant for a
+    // side-apply printer, so the field is disabled for Side orientations.
+    private bool TampHeightApplies(string? orientationId) =>
+        (_allOrientations.FirstOrDefault(o => o.OrientationId == orientationId)?.MotionKind ?? ApplyMotionKind.Side) != ApplyMotionKind.Side;
 
     private void Notify(CommandResult result, string okFallback)
     {
