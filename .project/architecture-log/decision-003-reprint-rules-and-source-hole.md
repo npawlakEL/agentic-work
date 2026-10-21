@@ -49,11 +49,18 @@ The induct reprint gate now reads the `Reprint Labels` setting, matching source 
 ## Amendment — owner ruling 2026-10-21, R7 (verify-fail re-arm is ported)
 
 "No auto re-arm on verify fail" is **superseded**. After a verify failure the carton is re-armed so its next
-induct prints it again — indefinitely, no attempt cap — **when `Reprint Labels` is on** (evaluated at the verify
-fail). `TransportOrder.MarkVerifyFailed(failedAt, rearm: true)` returns the order to `Advised`, resets the
+induct prints it again — indefinitely, no attempt cap — **when `Reprint Labels` is on**. `TransportOrder.MarkVerifyFailed(failedAt, rearm: true)` returns the order to `Advised`, resets the
 per-label print states, clears any reprint authorization and sets `VerifyFailRearmed` (which `CanPrint`
 honors and the next completed print clears). `PrintCount` stays **monotonic** (history kept). The write runs
 under the carton lease with version CAS (`SaveWithRetryAsync`). The station returns
 `VerifyStationStatus.ReArmed` (still routes Fail, writes reject history, counts toward the streak). With
 `Reprint Labels` off the carton is `HeldForIntervention` and needs `AuthorizeReprint` as before. Exception
 cartons (no data) are never re-armed. Tests: `OwnerRulings20261021Tests.R7_*`.
+
+**Follow-up ruling (2026-10-21): `Reprint Labels` is evaluated at induct time.** The setting is read on the verify
+fail (to decide whether to re-arm) **and again on every induct**. With it off at induct, any carton that has
+already printed (`PrintCount` > 0) is blocked (`InductStatus.NoReprint`) even if it was re-armed by a verify
+fail or a tracking recovery, whenever that re-arm happened. Only an explicit operator `AuthorizeReprint`
+lets it print. Turning the setting back on lets the re-armed carton print. Code:
+`TransportOrder.CanPrintWith`. Tests: `OwnerRulings20261021Tests.R7_ReArmedCarton_SettingTurnedOffBeforeInduct_DoesNotPrint`
+and `R7_ReArmedCarton_SettingOffAtInduct_OperatorAuthorizationStillPrints`.

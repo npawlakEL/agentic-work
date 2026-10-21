@@ -198,8 +198,17 @@ public sealed class TransportOrder
     /// <c>sdisp_PA_LookupCarton</c> L308-347): when the setting is on, an already-printed / inactive carton
     /// prints again exactly as the SQL does; when off, the decision-003 rules of <see cref="CanPrint"/>
     /// apply (operator authorization required). Owner ruling 2026-10-21.
+    /// <para>
+    /// The setting is evaluated <b>at induct</b> (owner follow-up 2026-10-21 to R7): with it off, a carton that has
+    /// already printed (<see cref="PrintCount"/> &gt; 0) is blocked even when it was system-re-armed (verify-fail or
+    /// tracking re-arm), regardless of when the re-arm happened. Only an explicit operator
+    /// <see cref="AuthorizeReprint"/> lets it print.
+    /// </para>
     /// </summary>
-    public bool CanPrintWith(bool reprintLabels) => reprintLabels || CanPrint;
+    public bool CanPrintWith(bool reprintLabels) =>
+        reprintLabels
+        || Status == TransportOrderStatus.ReprintAuthorized
+        || (PrintCount == 0 && CanPrint);
 
     /// <summary>
     /// True when the carton has produced output in its current advice generation: a completed run, a

@@ -168,23 +168,49 @@ public sealed class OwnerRulings20261021Tests
     }
 
     [Fact]
-    public async Task R7_ReArmedCarton_PrintsOnItsNextInduct_EvenWithoutGlobalReprint()
+    public async Task R7_ReArmedCarton_SettingTurnedOffBeforeInduct_DoesNotPrint()
     {
+        // Owner follow-up 2026-10-21: Reprint Labels is evaluated at induct time, not at the verify fail.
         _lines.AddCommissioned(Line("L1"));
-        var on = await Settings(KnownSettings.ReprintLabels, true);
-        await Advice(on).AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
-        await Induct(on).InductAsync("L1", "BL1");
-        Assert.Equal(VerifyStationStatus.ReArmed, (await FailVerifyAsync(on)).Status);
+        var settings = await Settings(KnownSettings.ReprintLabels, true);
+        await Advice(settings).AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
+        var induct = Induct(settings);
+        await induct.InductAsync("L1", "BL1");
+        Assert.Equal(VerifyStationStatus.ReArmed, (await FailVerifyAsync(settings)).Status);
 
-        var off = await Settings(KnownSettings.ReprintLabels, false);
-        var reprint = await Induct(off).InductAsync("L1", "BL1");
+        await settings.SetAsync(KnownSettings.ReprintLabels, false);
+        var blocked = await induct.InductAsync("L1", "BL1");
+
+        Assert.Equal(InductStatus.NoReprint, blocked.Status);
+        Assert.Single(_gateway.Jobs);
+        Assert.Equal(1, (await _store.FindActiveByTuIdAsync("BL1"))!.PrintCount);
+
+        await settings.SetAsync(KnownSettings.ReprintLabels, true);
+        var reprint = await induct.InductAsync("L1", "BL1");
 
         Assert.Equal(InductStatus.Printed, reprint.Status);
+        Assert.Equal(2, _gateway.Jobs.Count);
         var order = (await _store.FindActiveByTuIdAsync("BL1"))!;
         Assert.Equal(2, order.PrintCount);
         Assert.False(order.VerifyFailRearmed);
     }
 
+    [Fact]
+    public async Task R7_ReArmedCarton_SettingOffAtInduct_OperatorAuthorizationStillPrints()
+    {
+        _lines.AddCommissioned(Line("L1"));
+        var settings = await Settings(KnownSettings.ReprintLabels, true);
+        await Advice(settings).AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
+        await Induct(settings).InductAsync("L1", "BL1");
+        await FailVerifyAsync(settings);
+        await settings.SetAsync(KnownSettings.ReprintLabels, false);
+
+        var order = (await _store.FindActiveByTuIdAsync("BL1"))!;
+        order.AuthorizeReprint("operator");
+        await _store.SaveAsync(order);
+
+        Assert.Equal(InductStatus.Printed, (await Induct(settings).InductAsync("L1", "BL1")).Status);
+    }
     [Fact]
     public async Task R7_ReprintOff_VerifyFail_DoesNotReArm()
     {
