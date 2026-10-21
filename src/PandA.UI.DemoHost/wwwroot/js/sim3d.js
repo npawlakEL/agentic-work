@@ -15,6 +15,10 @@ let cartons = new Map();
 let eyes = new Map();
 let fallbackCanvas;
 let fallbackContext;
+// Bumped by every start()/stop(); async work captures it and bails once superseded, so a stop() that lands
+// mid-await (or a second start() on the cached module) can never leave an orphaned render loop behind.
+let generation = 0;
+let lastLineId;
 
 const REST_TAMP_Y = 42;   // top arm parked high above the belt
 const REST_SIDE_Z = 24;   // side arm parked belt-side of its body so the pad stays visible
@@ -25,35 +29,110 @@ const LABEL_H = 4;        // rendered label height (inches)
 const CARTON_BROWN = 0x9c6b3f;  // kraft cardboard — cartons keep this colour; status is shown as text
 
 export async function start(element, dotnetReference) {
+    // Tear down anything a previous start() on this cached module left running.
+    teardown();
+    const gen = ++generation;
     host = element;
     dotnet = dotnetReference;
     host.innerHTML = "";
 
     try {
-        three = await import("./three.module.js");
+        const threeModule = await import("./three.module.js");
         const orbit = await import("./OrbitControls.js");
+        if (gen !== generation) {
+            return "stopped";
+        }
+        three = threeModule;
         initThree(orbit.OrbitControls);
         rendererMode = "three";
     } catch (err) {
+        if (gen !== generation) {
+            return "stopped";
+        }
         console.error("Three.js failed to initialise, using 2D fallback", err);
+        teardownThree();
+        host.innerHTML = "";
         initFallback();
         rendererMode = "fallback";
     }
 
-    loop();
+    window.addEventListener("resize", resize);
+    loop(gen);
     return rendererMode;
 }
 
 export function stop() {
+    generation++;
+    teardown();
+}
+
+function teardown() {
     cancelAnimationFrame(animationId);
     animationId = 0;
-    cartons.clear();
-    eyes.clear();
-    printers.clear();
+    window.removeEventListener("resize", resize);
+    teardownThree();
+    if (fallbackCanvas) {
+        fallbackCanvas.remove();
+    }
+    fallbackCanvas = undefined;
+    fallbackContext = undefined;
+    lastLineId = undefined;
+}
+
+function teardownThree() {
+    controls?.dispose();
+    controls = undefined;
+    if (scene) {
+        disposeObject(scene);
+    }
     if (renderer) {
         renderer.dispose();
+        renderer.domElement?.remove();
     }
-    window.removeEventListener("resize", resize);
+    renderer = undefined;
+    scene = undefined;
+    root = undefined;
+    camera = undefined;
+    beltMesh = undefined;
+    printers.clear();
+    cartons.clear();
+    eyes.clear();
+}
+
+const TEXTURE_KEYS = ["map", "alphaMap", "aoMap", "bumpMap", "displacementMap", "emissiveMap", "envMap",
+    "lightMap", "metalnessMap", "normalMap", "roughnessMap", "specularMap", "gradientMap"];
+
+// Detach `obj` from its parent and free every geometry/material/texture beneath it. All of these are
+// created per object (nothing is shared at module level), and the Sets de-duplicate resources shared
+// between meshes within the same subtree (e.g. a station's frame material).
+function disposeObject(obj) {
+    if (!obj) return;
+    obj.parent?.remove(obj);
+    const geometries = new Set();
+    const materials = new Set();
+    const textures = new Set();
+    obj.traverse(node => {
+        if (node.geometry) geometries.add(node.geometry);
+        const mats = Array.isArray(node.material) ? node.material : node.material ? [node.material] : [];
+        for (const mat of mats) {
+            materials.add(mat);
+            for (const key of TEXTURE_KEYS) {
+                if (mat[key]?.isTexture) textures.add(mat[key]);
+            }
+        }
+    });
+    for (const g of geometries) g.dispose();
+    for (const t of textures) t.dispose();
+    for (const m of materials) m.dispose();
+}
+
+// The cartons (keyed by blind label, which repeats across lines), stations and eyes all belong to one
+// line; when the snapshot switches lines, drop them so the new line is rebuilt with its own dimensions.
+function clearLineObjects() {
+    for (const map of [cartons, printers, eyes]) {
+        for (const group of map.values()) disposeObject(group);
+        map.clear();
+    }
 }
 
 export function resetView() {
@@ -79,9 +158,9 @@ export function setCameraPreset(preset) {
 }
 
 function initThree(OrbitControls) {
-    // A fresh scene/root is created here; drop any stale mesh maps from a previous init so a line
-    // switch (which re-runs start()) fully repopulates the new root. Otherwise entries whose ids are
-    // stable across lines (e.g. the tracking eyes) stay parented to the discarded root and vanish.
+    // A fresh scene/root is created here; drop any stale mesh maps from a previous init so a re-start
+    // fully repopulates the new root. (Line switches do NOT re-run start(); renderSnapshot detects a
+    // lineId change and clears the line objects itself.)
     printers.clear();
     cartons.clear();
     eyes.clear();
@@ -120,7 +199,6 @@ function initThree(OrbitControls) {
     root = new three.Group();
     scene.add(root);
     buildLine();
-    window.addEventListener("resize", resize);
 }
 
 function buildLine() {
@@ -340,7 +418,7 @@ function syncPrinters(printerList, cartonList) {
     }
     for (const [id, group] of printers) {
         if (!seen.has(id)) {
-            root.remove(group);
+            disposeObject(group);
             printers.delete(id);
         }
     }
@@ -405,14 +483,23 @@ function animateStation(group, cartonList) {
     }
 }
 
-async function loop() {
+async function loop(gen) {
+    if (gen !== generation) {
+        return;
+    }
     try {
         const snapshot = await dotnet.invokeMethodAsync("GetSnapshot");
+        if (gen !== generation) {
+            return;
+        }
         renderSnapshot(snapshot);
     } catch {
         // circuit not ready yet; try again next frame
     }
-    animationId = requestAnimationFrame(loop);
+    if (gen !== generation) {
+        return;
+    }
+    animationId = requestAnimationFrame(() => loop(gen));
 }
 
 function renderSnapshot(snapshot) {
@@ -425,6 +512,11 @@ function renderSnapshot(snapshot) {
     const eyeList = snapshot.eyes ?? [];
     const cartonList = snapshot.cartons ?? [];
     const printerList = snapshot.printers ?? [];
+
+    if (snapshot.lineId !== lastLineId) {
+        clearLineObjects();
+        lastLineId = snapshot.lineId;
+    }
 
     resizeBelt(settings);
     syncPrinters(printerList, cartonList);
@@ -460,7 +552,7 @@ function syncEyes(nextEyes) {
     }
     for (const [id, group] of eyes) {
         if (!seen.has(id)) {
-            root.remove(group);
+            disposeObject(group);
             eyes.delete(id);
         }
     }
@@ -508,7 +600,7 @@ function syncCartons(nextCartons) {
     }
     for (const [id, group] of cartons) {
         if (!seen.has(id)) {
-            root.remove(group);
+            disposeObject(group);
             cartons.delete(id);
         }
     }
@@ -545,9 +637,7 @@ function updateCartonStatus(group, carton) {
     if (group.userData.statusText === carton.state) return;
     group.userData.statusText = carton.state;
     if (group.userData.status) {
-        group.remove(group.userData.status);
-        group.userData.status.material.map?.dispose();
-        group.userData.status.material.dispose();
+        disposeObject(group.userData.status);
     }
     const sprite = makeTextSprite(carton.state, 4.2, statusTextColor(carton.state), "rgba(15,23,42,0.92)");
     sprite.position.set(0, group.userData.statusHeight ?? (BELT_TOP_Y + 12), 0);
@@ -656,9 +746,9 @@ function syncLabels(group, carton) {
     }
     for (const [key, entry] of group.userData.labels) {
         if (!seen.has(key)) {
-            group.remove(entry.plane);
-            group.remove(entry.tag);
-            ruler?.remove(entry.marker);
+            disposeObject(entry.plane);
+            disposeObject(entry.tag);
+            disposeObject(entry.marker);
             ruler?.userData.markers.delete(key);
             group.userData.labels.delete(key);
         }
