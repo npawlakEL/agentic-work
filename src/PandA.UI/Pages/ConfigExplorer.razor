@@ -12,6 +12,7 @@
 @inject IMapEditor MapEditor
 @inject IOrientationEditor OrientationEditor
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <PageTitle>PandA — Config Explorer</PageTitle>
 
@@ -83,7 +84,12 @@
                             <MudText Typo="Typo.caption" Class="cfg-muted">No label definitions in the buffer yet — add one below.</MudText>
                         }
                         <div class="d-flex gap-2 mt-2 align-center">
-                            <MudTextField @bind-Value="_builderNewBufferTag" Label="Label definition" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="builder-buffer-newtag" />
+                            <MudSelect T="string" @bind-Value="_builderNewBufferTag" Label="Label definition" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="builder-buffer-newtag">
+                                @foreach (var name in AvailableBufferLabels(_builderLane))
+                                {
+                                    <MudSelectItem T="string" Value="@name">@name</MudSelectItem>
+                                }
+                            </MudSelect>
                             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                                        OnClick="@(() => { if (AddBufferTag(_builderLane, _builderNewBufferTag, _builderBufferContainer)) { _builderNewBufferTag = string.Empty; } })"
                                        data-testid="builder-buffer-add">Add label</MudButton>
@@ -99,6 +105,10 @@
                     <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                                OnClick="BuilderAddPrinter" data-testid="builder-add-printer">Add printer</MudButton>
                 </div>
+                @if (_builderCreatedLineId is not null)
+                {
+                    <MudText Typo="Typo.body2" Class="cfg-muted mb-2" data-testid="builder-retry-note">The lane was created. These printers could not be saved — fix them and retry, or cancel to keep the lane without them.</MudText>
+                }
                 @if (_builderPrinters.Count == 0)
                 {
                     <MudText Typo="Typo.body2" Class="cfg-muted cfg-inline-empty" data-testid="builder-printers-empty">No printers yet. Add one, or finish to create the lane without printers.</MudText>
@@ -152,8 +162,11 @@
                 <div class="cfg-actions-right">
                     @if (_builderStep == 1)
                     {
-                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ChevronLeft" OnClick="BuilderBack" data-testid="builder-back">Back</MudButton>
-                        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check" OnClick="BuilderFinishAsync" data-testid="builder-finish">Create lane</MudButton>
+                        @if (_builderCreatedLineId is null)
+                        {
+                            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ChevronLeft" OnClick="BuilderBack" data-testid="builder-back">Back</MudButton>
+                        }
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check" OnClick="BuilderFinishAsync" data-testid="builder-finish">@(_builderCreatedLineId is null ? "Create lane" : "Retry printers")</MudButton>
                     }
                     else
                     {
@@ -246,7 +259,12 @@
                             <MudText Typo="Typo.caption" Class="cfg-muted">No label definitions in the buffer yet — add one below.</MudText>
                         }
                         <div class="d-flex gap-2 mt-2 align-center">
-                            <MudTextField @bind-Value="_laneNewBufferTag" Label="Label definition" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="lane-buffer-newtag" />
+                            <MudSelect T="string" @bind-Value="_laneNewBufferTag" Label="Label definition" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="lane-buffer-newtag">
+                                @foreach (var name in AvailableBufferLabels(_laneDraft))
+                                {
+                                    <MudSelectItem T="string" Value="@name">@name</MudSelectItem>
+                                }
+                            </MudSelect>
                             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                                        OnClick="@(() => { if (AddBufferTag(_laneDraft, _laneNewBufferTag, _laneBufferContainer)) { _laneNewBufferTag = string.Empty; } })"
                                        data-testid="lane-buffer-add">Add label</MudButton>
@@ -412,7 +430,7 @@
                             <MudGrid Spacing="2">
                                 <MudItem xs="12" sm="6"><MudTextField @bind-Value="map.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                                 <MudItem xs="12" sm="6">
-                                    <MudSelect T="string" @bind-Value="map.LineId" Label="Line" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="map-line">
+                                    <MudSelect T="string" Value="map.LineId" ValueChanged="@((string v) => OnMapLineChanged(map, v))" Label="Line" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="map-line">
                                         @foreach (var line in _lines)
                                         {
                                             <MudSelectItem T="string" Value="@line.LineId">@line.Name</MudSelectItem>
@@ -465,6 +483,10 @@
                             }
                             <div class="cfg-actions">
                                 <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveMapAsync(map))" data-testid="save-map">Save map</MudButton>
+                                @if (map.Id is not null && string.IsNullOrEmpty(activeOn))
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" StartIcon="@Icons.Material.Filled.CheckCircle" OnClick="@(() => SetActiveMapAsync(map))" data-testid="set-active-map">Set active on @LineName(map.LineId)</MudButton>
+                                }
                                 <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteMapAsync(map))" data-testid="delete-map">Delete</MudButton>
                             </div>
                         </ChildContent>
@@ -736,6 +758,8 @@
     private List<OrientationDraft> _orientations = [];
 
     private List<LabelDraft> _labels = [];
+    // Saved label-definition names (the only valid buffer-order entries).
+    private List<string> _savedLabelNames = [];
     private List<StationDraft> _stations = [];
     private SettingsDraft? _settings;
 
@@ -754,6 +778,8 @@
     private int _builderStep;
     private LineDraft _builderLane = new();
     private List<PrinterDraft> _builderPrinters = [];
+    // Set once the wizard has created its lane but some printers failed; the next finish only retries printers.
+    private string? _builderCreatedLineId;
 
     private string LaneTitle => string.IsNullOrWhiteSpace(_laneDraft?.Name) ? "Untitled lane" : _laneDraft!.Name;
 
@@ -804,6 +830,7 @@
         {
             var list = await LabelEditor.ListAsync();
             _labels = list.OrderBy(l => l.Name, StringComparer.Ordinal).Select(LabelDraft.From).ToList();
+            _savedLabelNames = list.Select(l => l.Name.Trim()).Where(n => n.Length > 0).OrderBy(n => n, StringComparer.Ordinal).ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException) { Fail("labels", ex); }
     }
@@ -894,10 +921,20 @@
         _builderLane = new LineDraft { Name = "", ControlPolicy = LineControlPolicy.AllowDegraded };
         _builderPrinters = [];
         _builderStep = 0;
+        _builderCreatedLineId = null;
         _builderOpen = true;
     }
 
-    private void BuilderCancel() => _builderOpen = false;
+    private async Task BuilderCancel()
+    {
+        _builderOpen = false;
+        // The lane already exists (only some printers failed) — show it rather than pretending nothing happened.
+        if (_builderCreatedLineId is { } createdId)
+        {
+            _builderCreatedLineId = null;
+            await LoadLinesAsync(createdId);
+        }
+    }
 
     private void BuilderNext()
     {
@@ -912,11 +949,11 @@
     private void BuilderBack() => _builderStep = 0;
 
     private void BuilderAddPrinter() =>
-        _builderPrinters.Add(new PrinterDraft { Name = "New Printer", OrientationId = DefaultOrientationId(), PlcNumber = _builderPrinters.Count + 1 });
+        _builderPrinters.Add(new PrinterDraft { Name = "New Printer", OrientationId = DefaultOrientationId(), PlcNumber = NextPlcNumber(_builderPrinters.Select(p => p.PlcNumber)) });
 
     private void BuilderRemovePrinter(PrinterDraft printer) => _builderPrinters.Remove(printer);
 
-    private async Task BuilderFinishAsync()
+    private Task BuilderFinishAsync() => Guard("create the lane", async () =>
     {
         if (string.IsNullOrWhiteSpace(_builderLane.Name))
         {
@@ -925,60 +962,110 @@
             return;
         }
 
-        var before = _lines.Select(l => l.LineId).Where(id => id is not null).ToHashSet(StringComparer.Ordinal)!;
-        var laneResult = await LineEditor.SaveAsync(_builderLane.ToDto());
-        Notify(laneResult, "Lane created.");
-        if (!laneResult.Success) { return; }
-
-        var list = await LineEditor.ListAsync();
-        var newId = list.FirstOrDefault(l => l.LineId is not null && !before.Contains(l.LineId))?.LineId;
-
-        var printerFailures = new List<string>();
-        if (newId is not null)
+        // A retry after a partial failure only re-saves the printers that failed; the lane already exists.
+        var newId = _builderCreatedLineId;
+        if (newId is null)
         {
-            foreach (var printer in _builderPrinters)
+            var lane = _builderLane.ToDto();
+            var laneResult = await LineEditor.SaveAsync(lane);
+            Notify(laneResult, "Lane created.");
+            if (!laneResult.Success) { return; }
+
+            newId = laneResult.EntityId ?? await FindLineIdAsync(lane);
+            if (newId is null)
             {
-                printer.LineId = newId;
-                var result = await PrinterEditor.SaveAsync(printer.ToDto());
-                if (!result.Success) { printerFailures.Add(result.Message ?? $"'{printer.Name}' could not be saved."); }
+                Snackbar.Add("The lane was created but could not be located to add its printers; add them from the lane editor.", Severity.Warning);
+                _builderOpen = false;
+                await LoadLinesAsync();
+                return;
+            }
+
+            _builderCreatedLineId = newId;
+        }
+
+        var failed = new List<PrinterDraft>();
+        var failures = new List<string>();
+        foreach (var printer in _builderPrinters)
+        {
+            printer.LineId = newId;
+            var result = await PrinterEditor.SaveAsync(printer.ToDto());
+            if (!result.Success)
+            {
+                failed.Add(printer);
+                failures.Add(result.Message ?? $"'{printer.Name}' could not be saved.");
             }
         }
 
-        if (printerFailures.Count > 0)
+        await LoadPrintersAllAsync();
+        if (failed.Count > 0)
         {
-            Snackbar.Add($"{printerFailures.Count} printer(s) could not be saved: {string.Join(" ", printerFailures)}", Severity.Warning);
+            // Keep the wizard open on the printers step showing only the ones that failed so they can be fixed and retried.
+            _builderPrinters = failed;
+            _builderStep = 1;
+            Snackbar.Add($"{failed.Count} printer(s) could not be saved — fix and retry, or cancel to keep the lane without them. {string.Join(" ", failures)}", Severity.Warning);
+            await LoadLinesAsync(newId);
+            return;
         }
 
         _builderOpen = false;
+        _builderCreatedLineId = null;
         await LoadLinesAsync(newId);
-        await LoadPrintersAllAsync();
-    }
+    });
 
-    private async Task DeleteLaneAsync()
+    // Fallback when the editor does not report the new id: the line name and PLC number are both unique.
+    private async Task<string?> FindLineIdAsync(LineDto lane)
     {
-        if (_laneId is null) { return; }
-        var result = await LineEditor.DeleteAsync(_laneId);
-        Notify(result, "Lane deleted.");
-        if (result.Success) { _laneId = null; await LoadLinesAsync(); }
+        var list = await LineEditor.ListAsync();
+        return list.FirstOrDefault(l =>
+            l.PlcNumber == lane.PlcNumber &&
+            string.Equals(l.Name.Trim(), lane.Name.Trim(), StringComparison.OrdinalIgnoreCase))?.LineId;
     }
 
-    private async Task SaveLaneAsync()
+    private static int NextPlcNumber(IEnumerable<int> existing)
+    {
+        var list = existing.ToList();
+        return (list.Count == 0 ? 0 : list.Max()) + 1;
+    }
+
+    private Task DeleteLaneAsync() => Guard("delete the lane", async () =>
+    {
+        if (_laneId is null || _laneDraft is null) { return; }
+        var printers = _printers.Count(p => p.Draft.Id is not null);
+        var maps = _maps.Count(m => m.Id is not null);
+        var message = printers + maps > 0
+            ? $"Delete lane '{LaneTitle}' together with its {printers} printer(s) and {maps} map(s)? This cannot be undone."
+            : $"Delete lane '{LaneTitle}'? This cannot be undone.";
+        var confirmed = await DialogService.ShowMessageBox("Delete lane", message, yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+
+        var result = await LineEditor.DeleteWithDependentsAsync(_laneId);
+        Notify(result, "Lane deleted.");
+        if (result.Success)
+        {
+            _laneId = null;
+            await LoadLinesAsync();
+            await LoadPrintersAllAsync();
+            await LoadMapsAllAsync();
+        }
+    });
+
+    private Task SaveLaneAsync() => Guard("save the lane", async () =>
     {
         if (_laneDraft is null) { return; }
         var result = await LineEditor.SaveAsync(_laneDraft.ToDto());
         Notify(result, "Lane saved.");
         if (result.Success) { await LoadLinesAsync(_laneId); }
-    }
+    });
 
     // ---- Printers ----
 
     private void AddPrinter()
     {
         if (_laneId is null) { return; }
-        _printers.Add(new PrinterEditItem { Draft = new PrinterDraft { LineId = _laneId, Name = "New Printer", OrientationId = DefaultOrientationId(), PlcNumber = _printers.Count + 1 } });
+        _printers.Add(new PrinterEditItem { Draft = new PrinterDraft { LineId = _laneId, Name = "New Printer", OrientationId = DefaultOrientationId(), PlcNumber = NextPlcNumber(_printers.Select(p => p.Draft.PlcNumber)) } });
     }
 
-    private async Task ApplyPrintPointToAllAsync()
+    private Task ApplyPrintPointToAllAsync() => Guard("apply the print point", async () =>
     {
         if (_printers.Count == 0) { return; }
         var failures = 0;
@@ -994,23 +1081,23 @@
         else { Snackbar.Add("Print point applied to all printers.", Severity.Success); }
         await LoadLaneAsync(_laneId);
         await LoadPrintersAllAsync();
-    }
+    });
 
-    private async Task SavePrinterAsync(PrinterEditItem item)
+    private Task SavePrinterAsync(PrinterEditItem item) => Guard("save the printer", async () =>
     {
         item.Draft.LineId = _laneId ?? item.Draft.LineId;
         var result = await PrinterEditor.SaveAsync(item.Draft.ToDto());
         Notify(result, "Printer saved.");
         if (result.Success) { await LoadLaneAsync(_laneId); await LoadPrintersAllAsync(); }
-    }
+    });
 
-    private async Task DeletePrinterAsync(PrinterEditItem item)
+    private Task DeletePrinterAsync(PrinterEditItem item) => Guard("delete the printer", async () =>
     {
         if (item.Draft.Id is null) { _printers.Remove(item); return; }
         var result = await PrinterEditor.DeleteAsync(item.Draft.Id);
         Notify(result, "Printer deleted.");
         if (result.Success) { await LoadLaneAsync(_laneId); await LoadPrintersAllAsync(); await LoadFirePointsAllAsync(); }
-    }
+    });
 
     // ---- Fire points ----
 
@@ -1020,7 +1107,7 @@
         _allFirePoints.Add(new FirePointDraft { LabelDefId = labelId, ApplyEdge = "Middle", ApplyInches = 0 });
     }
 
-    private async Task SaveFirePointAsync(FirePointDraft fp)
+    private Task SaveFirePointAsync(FirePointDraft fp) => Guard("save the fire point", async () =>
     {
         if (string.IsNullOrWhiteSpace(fp.LabelDefId))
         {
@@ -1030,15 +1117,15 @@
         var result = await FirePointEditor.SaveAsync(fp.ToDto());
         Notify(result, "Fire point saved.");
         if (result.Success) { await LoadFirePointsAllAsync(); }
-    }
+    });
 
-    private async Task DeleteFirePointAsync(FirePointDraft fp)
+    private Task DeleteFirePointAsync(FirePointDraft fp) => Guard("delete the fire point", async () =>
     {
         if (fp.Id is null) { _allFirePoints.Remove(fp); return; }
         var result = await FirePointEditor.DeleteAsync(fp.Id);
         Notify(result, "Fire point deleted.");
         if (result.Success) { await LoadFirePointsAllAsync(); }
-    }
+    });
 
     // ---- Maps ----
 
@@ -1048,7 +1135,21 @@
         _allMaps.Add(new MapDraft { LineId = lineId, Name = "New Map" });
     }
 
-    private async Task SaveMapAsync(MapDraft map)
+    // Assignments bind fire points to printers of the map's line, so they cannot survive a line change.
+    private void OnMapLineChanged(MapDraft map, string? lineId)
+    {
+        lineId ??= "";
+        if (string.Equals(map.LineId, lineId, StringComparison.Ordinal)) { return; }
+        var hadAssignments = map.Assignments.Count > 0;
+        map.LineId = lineId;
+        map.Assignments.Clear();
+        if (hadAssignments)
+        {
+            Snackbar.Add("Fire point assignments were cleared because they belonged to the previous line's printers.", Severity.Info);
+        }
+    }
+
+    private Task SaveMapAsync(MapDraft map) => Guard("save the map", async () =>
     {
         if (string.IsNullOrWhiteSpace(map.LineId))
         {
@@ -1058,40 +1159,87 @@
         var result = await MapEditor.SaveAsync(map.ToDto());
         Notify(result, "Map saved.");
         if (result.Success) { await LoadMapsAllAsync(); await LoadLaneAsync(_laneId); }
-    }
+    });
 
-    private async Task DeleteMapAsync(MapDraft map)
+    private Task DeleteMapAsync(MapDraft map) => Guard("delete the map", async () =>
     {
         if (map.Id is null) { _allMaps.Remove(map); return; }
         var result = await MapEditor.DeleteAsync(map.Id);
         Notify(result, "Map deleted.");
         if (result.Success) { await LoadMapsAllAsync(); await LoadLaneAsync(_laneId); }
+    });
+
+    // Activates the saved map on the line it is saved against (unsaved edits to the map are not applied).
+    private Task SetActiveMapAsync(MapDraft map) => Guard("set the active map", async () =>
+    {
+        if (map.Id is null)
+        {
+            Snackbar.Add("Save the map before making it active.", Severity.Warning);
+            return;
+        }
+
+        var saved = await MapEditor.GetAsync(map.Id);
+        if (saved is null)
+        {
+            Snackbar.Add("That map no longer exists.", Severity.Error);
+            await LoadMapsAllAsync();
+            return;
+        }
+
+        var line = await LineEditor.GetAsync(saved.LineId);
+        if (line is null)
+        {
+            Snackbar.Add("The map's line no longer exists.", Severity.Error);
+            return;
+        }
+
+        var result = await LineEditor.SaveAsync(line with { ActiveMapId = saved.MapId });
+        if (!result.Success)
+        {
+            Notify(result, "");
+            return;
+        }
+
+        Snackbar.Add($"'{saved.Name}' is now the active map on '{line.Name}'.", Severity.Success);
+        await RefreshLinesListAsync();
+        if (_laneDraft is not null && string.Equals(_laneDraft.Id, line.LineId, StringComparison.Ordinal))
+        {
+            _laneDraft.ActiveMapId = saved.MapId;
+        }
+    });
+
+    // Refreshes the line list (active-map flags) without discarding unsaved edits in the open lane draft.
+    private async Task RefreshLinesListAsync()
+    {
+        var list = await LineEditor.ListAsync();
+        _lines = list.OrderBy(l => l.Name, StringComparer.Ordinal).ToList();
     }
 
     // ---- Labels ----
 
     private void AddLabel() => _labels.Add(new LabelDraft());
 
-    private async Task SaveLabelAsync(LabelDraft label)
+    private Task SaveLabelAsync(LabelDraft label) => Guard("save the label definition", async () =>
     {
         var result = await LabelEditor.SaveAsync(label.ToDto());
         Notify(result, "Label saved.");
-        if (result.Success) { await LoadLabelsAsync(); }
-    }
+        // A rename cascades into every lane's buffer order, so the lanes are reloaded too.
+        if (result.Success) { await LoadLabelsAsync(); await LoadLinesAsync(_laneId); await LoadFirePointsAllAsync(); }
+    });
 
-    private async Task DeleteLabelAsync(LabelDraft label)
+    private Task DeleteLabelAsync(LabelDraft label) => Guard("delete the label definition", async () =>
     {
         if (label.Id is null) { _labels.Remove(label); return; }
         var result = await LabelEditor.DeleteAsync(label.Id);
         Notify(result, "Label deleted.");
         if (result.Success) { await LoadLabelsAsync(); }
-    }
+    });
 
     // ---- Orientations ----
 
     private void AddOrientation() => _orientations.Add(new OrientationDraft { Name = "New Orientation", MotionKind = ApplyMotionKind.Side });
 
-    private async Task SaveOrientationAsync(OrientationDraft orientation)
+    private Task SaveOrientationAsync(OrientationDraft orientation) => Guard("save the orientation", async () =>
     {
         if (string.IsNullOrWhiteSpace(orientation.Name))
         {
@@ -1101,42 +1249,57 @@
         var result = await OrientationEditor.SaveAsync(orientation.ToDto());
         Notify(result, "Orientation saved.");
         if (result.Success) { await LoadOrientationsAsync(); }
-    }
+    });
 
-    private async Task DeleteOrientationAsync(OrientationDraft orientation)
+    private Task DeleteOrientationAsync(OrientationDraft orientation) => Guard("delete the orientation", async () =>
     {
         if (orientation.Id is null) { _orientations.Remove(orientation); return; }
         var result = await OrientationEditor.DeleteAsync(orientation.Id);
         Notify(result, "Orientation deleted.");
         if (result.Success) { await LoadOrientationsAsync(); }
-    }
+    });
 
     // ---- Stations ----
 
     private void AddStation() => _stations.Add(new StationDraft { Port = 9100 });
 
-    private async Task SaveStationAsync(StationDraft station)
+    private Task SaveStationAsync(StationDraft station) => Guard("save the station", async () =>
     {
         var result = await StationEditor.SaveAsync(station.ToDto());
         Notify(result, "Station saved.");
         if (result.Success) { await LoadStationsAsync(); }
-    }
+    });
 
-    private async Task DeleteStationAsync(StationDraft station)
+    private Task DeleteStationAsync(StationDraft station) => Guard("delete the station", async () =>
     {
         if (station.Id is null) { _stations.Remove(station); return; }
         var result = await StationEditor.DeleteAsync(station.Id);
         Notify(result, "Station deleted.");
         if (result.Success) { await LoadStationsAsync(); }
-    }
+    });
 
     // ---- Settings ----
 
-    private async Task SaveSettingsAsync()
+    private Task SaveSettingsAsync() => Guard("save settings", async () =>
     {
         if (_settings is null) { return; }
         var result = await SettingsEditor.SaveAsync(_settings.ToDto());
         Notify(result, "Settings saved.");
+        // Settings propagate (e.g. encoder resolution) into every lane; reload so a stale lane draft can't overwrite them.
+        if (result.Success) { await LoadLinesAsync(_laneId); }
+    });
+
+    /// <summary>Runs a save/delete handler, turning an unexpected service exception into an error snackbar.</summary>
+    private async Task Guard(string action, Func<Task> work)
+    {
+        try
+        {
+            await work();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to {action}: {ex.Message}", Severity.Error);
+        }
     }
 
     // ---- Helpers ----
@@ -1223,6 +1386,11 @@
     {
         tag = (tag ?? string.Empty).Trim();
         if (tag.Length == 0) { return false; }
+        if (!_savedLabelNames.Contains(tag, StringComparer.OrdinalIgnoreCase))
+        {
+            Snackbar.Add($"\"{tag}\" is not a label definition.", Severity.Warning);
+            return false;
+        }
         if (lane.BufferTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)))
         {
             Snackbar.Add($"Label \"{tag}\" is already in the buffer for this lane.", Severity.Warning);
@@ -1238,6 +1406,13 @@
         lane.BufferTags.Remove(tag);
         container?.Refresh();
     }
+
+    // Saved label definitions not yet in the lane's buffer order (the choices for "Add label").
+    private List<string> AvailableBufferLabels(LineDraft lane) =>
+        _savedLabelNames.Where(n => !lane.BufferTags.Contains(n, StringComparer.OrdinalIgnoreCase)).ToList();
+
+    private string LineName(string? lineId) =>
+        _lines.FirstOrDefault(l => l.LineId == lineId)?.Name ?? "line";
 
     private string ActiveMapDisplay
     {

@@ -13,6 +13,11 @@
     A C#-authoritative view of the PandA.Core print/apply lifecycle. JavaScript renders only the snapshot returned by the simulator.
 </MudText>
 
+@if (_error is not null)
+{
+    <MudAlert Severity="MudBlazor.Severity.Warning" Class="mb-4" data-testid="sim-error">@_error</MudAlert>
+}
+
 <MudPaper Elevation="2" Class="sim-toolbar pa-4 mb-4">
     <div class="sim-toolbar__actions">
         <MudSelect T="string" Value="_lineId" ValueChanged="ChangeLine" Label="PandA line" Dense="true" Variant="MudBlazor.Variant.Outlined" Class="sim-line-select" data-testid="sim-line-select">
@@ -137,61 +142,113 @@
     private double _speed = 24;
     private string _lineId = "";
 
-    private LineSimulation Simulation => Catalog.Get(_lineId);
+    private string? _error;
+    private bool _disposed;
+
+    /// <summary>The current line's simulation, or null (with <see cref="_error"/> set) when the line is gone/unrunnable.</summary>
+    private LineSimulation? Simulation
+    {
+        get
+        {
+            var lookup = Catalog.TryGet(_lineId);
+            _error = lookup.Error;
+            return lookup.Simulation;
+        }
+    }
+
+    private LineSimulationSnapshot EmptySnapshot(string message) =>
+        new(false, _speed, 260, _lineId, "", _settings.ToSettings(), [], [], [], message);
 
     protected override async Task OnInitializedAsync()
     {
         _lineId = Catalog.DefaultLineId;
-        _snapshot = await Simulation.GetSnapshotAsync();
+        await RefreshAsync();
         _speed = _snapshot.BeltSpeedInchesPerSecond;
         _settings = SimSettingsEditModel.From(_snapshot.Settings);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        if (!firstRender || _disposed)
         {
             return;
         }
 
         _self = DotNetObjectReference.Create(this);
-        _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sim3d.js");
+        var module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/sim3d.js");
+        if (_disposed)
+        {
+            await DisposeModuleQuietlyAsync(module, stop: false);
+            return;
+        }
+
+        _module = module;
         await _module.InvokeVoidAsync("start", _sceneHost, _self);
+        if (_disposed)
+        {
+            await DisposeModuleQuietlyAsync(module, stop: true);
+        }
     }
 
     [JSInvokable]
     public async Task<LineSimulationSnapshot> GetSnapshot()
     {
-        _snapshot = await Simulation.GetSnapshotAsync();
+        await RefreshAsync();
         return _snapshot;
+    }
+
+    private async Task RefreshAsync()
+    {
+        var sim = Simulation;
+        _snapshot = sim is null ? EmptySnapshot(_error ?? "No simulation") : await sim.GetSnapshotAsync();
     }
 
     private async Task StartLine()
     {
-        await Simulation.StartAsync();
-        _snapshot = await Simulation.GetSnapshotAsync();
+        if (Simulation is { } sim)
+        {
+            await sim.StartAsync();
+        }
+
+        await RefreshAsync();
     }
 
     private async Task StopLine()
     {
-        await Simulation.StopAsync();
-        _snapshot = await Simulation.GetSnapshotAsync();
+        if (Simulation is { } sim)
+        {
+            await sim.StopAsync();
+        }
+
+        await RefreshAsync();
     }
 
     private async Task SpawnCarton()
     {
-        _snapshot = await Simulation.SpawnCartonAsync();
+        if (Simulation is { } sim)
+        {
+            _snapshot = await sim.SpawnCartonAsync();
+            return;
+        }
+
+        await RefreshAsync();
     }
 
     private async Task ClearLine()
     {
-        _snapshot = await Simulation.ClearCartonsAsync();
+        if (Simulation is { } sim)
+        {
+            _snapshot = await sim.ClearCartonsAsync();
+            return;
+        }
+
+        await RefreshAsync();
     }
 
     private async Task ChangeLine(string lineId)
     {
         _lineId = lineId;
-        _snapshot = await Simulation.GetSnapshotAsync();
+        await RefreshAsync();
         _speed = _snapshot.BeltSpeedInchesPerSecond;
         _settings = SimSettingsEditModel.From(_snapshot.Settings);
     }
@@ -200,14 +257,24 @@
     {
         _speed = value;
         _settings.BeltSpeedInchesPerSecond = value;
-        await Simulation.SetBeltSpeedAsync(value);
-        _snapshot = await Simulation.GetSnapshotAsync();
+        if (Simulation is { } sim)
+        {
+            await sim.SetBeltSpeedAsync(value);
+        }
+
+        await RefreshAsync();
     }
 
     private async Task ApplySettings()
     {
         _settings.BeltSpeedInchesPerSecond = _speed;
-        _snapshot = await Simulation.UpdateSettingsAsync(_settings.ToSettings());
+        if (Simulation is not { } sim)
+        {
+            await RefreshAsync();
+            return;
+        }
+
+        _snapshot = await sim.UpdateSettingsAsync(_settings.ToSettings());
         _speed = _snapshot.BeltSpeedInchesPerSecond;
         _settings = SimSettingsEditModel.From(_snapshot.Settings);
     }
@@ -230,13 +297,33 @@
 
     public async ValueTask DisposeAsync()
     {
-        if (_module is not null)
+        _disposed = true;
+        var module = _module;
+        _module = null;
+        if (module is not null)
         {
-            await _module.InvokeVoidAsync("stop");
-            await _module.DisposeAsync();
+            await DisposeModuleQuietlyAsync(module, stop: true);
         }
 
         _self?.Dispose();
+        _self = null;
+    }
+
+    // The circuit may already be gone when the component is torn down; JS cleanup is best-effort.
+    private static async Task DisposeModuleQuietlyAsync(IJSObjectReference module, bool stop)
+    {
+        try
+        {
+            if (stop)
+            {
+                await module.InvokeVoidAsync("stop");
+            }
+
+            await module.DisposeAsync();
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or ObjectDisposedException or TaskCanceledException)
+        {
+        }
     }
 
     private sealed class SimSettingsEditModel

@@ -30,6 +30,34 @@ public sealed class DemoDataStore
     public ConcurrentDictionary<string, DemoCarton> Cartons { get; } = new(StringComparer.OrdinalIgnoreCase);
     public ConcurrentDictionary<string, DemoPrinterRuntime> PrinterRuntime { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Single store-level gate serializing config validate-then-write, deletes, and settings propagation
+    /// so concurrent editors (one per Blazor circuit) cannot interleave and break uniqueness/reference rules.
+    /// </summary>
+    public Lock SyncRoot { get; } = new();
+
+    private long _globalConfigVersion;
+    private readonly ConcurrentDictionary<string, long> _lineConfigVersions = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Monotonic config version for one line: bumps whenever that line's config (line, printers, maps) or
+    /// any shared config (label defs, fire points, orientations, settings) changes. Sim caches key off it.
+    /// </summary>
+    public long ConfigVersionFor(string lineId) =>
+        Interlocked.Read(ref _globalConfigVersion) + _lineConfigVersions.GetValueOrDefault(lineId);
+
+    /// <summary>Record a config change for <paramref name="lineId"/>, or for every line when null.</summary>
+    public void MarkConfigChanged(string? lineId = null)
+    {
+        if (string.IsNullOrWhiteSpace(lineId))
+        {
+            Interlocked.Increment(ref _globalConfigVersion);
+            return;
+        }
+
+        _lineConfigVersions.AddOrUpdate(lineId, 1, (_, v) => v + 1);
+    }
+
     private int _idSeq = 1000;
 
     private string _sideOrientationId = "";

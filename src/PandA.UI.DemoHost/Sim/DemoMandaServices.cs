@@ -74,6 +74,11 @@ public sealed class DemoMandaServices(DemoDataStore store)
                 return Task.FromResult(new MandaVerifyResult(0, false, "No active carton at station."));
             }
 
+            if (!string.Equals(state.ActiveCartonId, cartonId, StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(new MandaVerifyResult(0, false, $"Carton '{cartonId}' is not the active carton at this station; scan it first."));
+            }
+
             var index = state.Labels.ToList().FindIndex(l =>
                 string.Equals(l.LabelBarcode, scannedBarcode, StringComparison.OrdinalIgnoreCase));
 

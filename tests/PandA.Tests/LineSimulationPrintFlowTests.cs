@@ -61,12 +61,14 @@ public sealed class LineSimulationPrintFlowTests
     }
 
     [Fact]
-    public async Task LabelPrintsOntoTampHead_WhenCartonCentreReachesPrintPoint()
+    public async Task LabelPrintsOntoTampHead_WhenCartonLeadingEdgeReachesPrintPoint()
     {
         var orders = new InMemoryTransportOrderStore();
         var gateway = new CapturingPrinterGateway();
         var clock = new SimClock(DateTimeOffset.UtcNow);
 
+        // Print fire point 40 pulses past the induct eye at 1"/pulse, so the print point sits 40" downstream
+        // of the inbound scanner — well past the carton's leading edge when it is inducted (12" carton).
         var profile = new FirePointProfile("Active",
             [(("Ship1", "Shipping"), new FirePoint(1, 40, 2, ApplyPoint.Parse("1T")))]);
         var config = new LineConfig("L1", [new PrinterConfig("Ship1", "10.0.0.1", 9100, ["Shipping"], ApplyOrientation.Side, 0)], activeProfile: profile);
@@ -77,45 +79,63 @@ public sealed class LineSimulationPrintFlowTests
 
         var sim = new LineSimulation(
             "L1", "Line 1", induct, verify, orders, gateway, clock, verifyFailThreshold: 2,
-            new LineSimulationSettings { ConveyorLengthInches = 160, BeltSpeedInchesPerSecond = 120 },
+            new LineSimulationSettings
+            {
+                ConveyorLengthInches = 400,
+                BeltSpeedInchesPerSecond = 24,
+                CartonLengthInches = 12,
+                EncoderResolutionInchesPerPulse = 1,
+                PrintFirePointOffsetInches = 0,
+            },
             [new SimPrinterStation("Ship1", "Side", PrintTrackingDevice: 1, ApplyTrackingDevice: 2, PrintFirePointPulses: 40)]);
 
         await sim.StartAsync();
         await sim.SpawnCartonAsync();
 
+        // Belt speed is 24 in/s and each step is clamped to 0.12 s, so one step moves at most ~2.9".
+        const double maxStepInches = 24 * 0.12 + 0.01;
+        double? leadingWhenLabelCreated = null;
+        double? previousLeading = null;
         double? leadingAtPrint = null;
         double printX = 0;
-        var appliedBeforePrint = false;
-        for (var i = 0; i < 400 && leadingAtPrint is null; i++)
+        for (var i = 0; i < 1500 && leadingAtPrint is null; i++)
         {
             await Task.Delay(5);
             var snap = await sim.GetSnapshotAsync();
-            var label = snap.Cartons.FirstOrDefault()?.Labels.FirstOrDefault();
             var carton = snap.Cartons.FirstOrDefault();
-            if (label is null || carton is null)
+            var label = carton?.Labels.FirstOrDefault();
+            if (carton is null || label is null)
             {
                 continue;
             }
 
-            if (label.Applied && !label.OnTamp && leadingAtPrint is null)
-            {
-                appliedBeforePrint = true;
-            }
+            var leading = carton.PositionInches + carton.LengthInches;
+            printX = label.PrintPoint.X;
+            leadingWhenLabelCreated ??= leading;
+            Assert.False(label.Applied, "label must print onto the tamp head before it is applied");
 
             if (label.OnTamp)
             {
-                leadingAtPrint = carton.PositionInches + carton.LengthInches;
-                printX = label.PrintPoint.X;
+                leadingAtPrint = leading;
+            }
+            else
+            {
+                Assert.True(leading < printX,
+                    $"label should already be on the tamp head once the leading edge passes the print point (leading {leading:0.0} vs printX {printX:0.0})");
+                previousLeading = leading;
             }
         }
 
+        Assert.True(leadingWhenLabelCreated is not null, "carton should be inducted and get a label");
+        Assert.True(printX - leadingWhenLabelCreated!.Value > 10,
+            $"test setup: print point must be well downstream of the leading edge at induct (leading {leadingWhenLabelCreated:0.0} vs printX {printX:0.0})");
         Assert.True(leadingAtPrint is not null, "label should ride the tamp head within the run window");
-        Assert.False(appliedBeforePrint, "label must print onto the tamp head before it is applied");
-        // onTamp fires as the carton's LEADING edge reaches the label's print point, not at a discrete eye.
-        Assert.True(leadingAtPrint!.Value >= printX - 1,
-            $"print should fire once the leading edge reaches the print point (leading {leadingAtPrint:0.0} vs printX {printX:0.0})");
+        Assert.True(previousLeading is not null, "label should be observed off the tamp head before printing");
+        Assert.True(leadingAtPrint!.Value >= printX,
+            $"print must not fire before the leading edge reaches the print point (leading {leadingAtPrint:0.0} vs printX {printX:0.0})");
+        Assert.True(leadingAtPrint.Value - printX <= maxStepInches,
+            $"print should fire within one step of the leading edge reaching the print point (leading {leadingAtPrint:0.0} vs printX {printX:0.0})");
     }
-
     [Fact]
     public async Task LabelIsApplied_WhenCartonCentreReachesPrinterStation_NotAtEyeCrossing()
     {

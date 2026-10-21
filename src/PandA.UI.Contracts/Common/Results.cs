@@ -14,9 +14,10 @@ public sealed record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int 
 /// <summary>Outcome of a command (Save/Delete/Authorize/etc.).</summary>
 /// <param name="Success">True when the command succeeded.</param>
 /// <param name="Message">Human-readable detail (error text on failure, confirmation on success).</param>
-public sealed record CommandResult(bool Success, string? Message = null)
+/// <param name="EntityId">Identifier of the entity a successful Save created/updated (null when not applicable or unknown).</param>
+public sealed record CommandResult(bool Success, string? Message = null, string? EntityId = null)
 {
-    public static CommandResult Ok(string? message = null) => new(true, message);
+    public static CommandResult Ok(string? message = null, string? entityId = null) => new(true, message, entityId);
 
     public static CommandResult Fail(string message) => new(false, message);
 }

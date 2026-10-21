@@ -15,13 +15,14 @@ public sealed class FirePointNormalizationTests
         var store = new DemoDataStore();
         var editor = new DemoFirePointEditor(store);
         var existing = store.FirePoints.Values.First();
+        var countBefore = store.FirePoints.Count;
 
         // Same label definition + same apply point as an existing fire point → duplicate.
         var dup = new FirePointDto(null, existing.LabelDefId, existing.ApplyEdge, existing.ApplyInches);
         var result = await editor.SaveAsync(dup);
 
         Assert.False(result.Success);
-        Assert.Equal(store.FirePoints.Count, store.FirePoints.Count); // nothing added
+        Assert.Equal(countBefore, store.FirePoints.Count); // nothing added
     }
 
     [Fact]

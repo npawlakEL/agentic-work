@@ -21,9 +21,10 @@ internal static class LineSimulationFactory
 
     public static LineSimulation Create(DemoDataStore store, string? lineId)
     {
-        var line = lineId is null
-            ? store.Lines.Values.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase).First()
-            : store.Lines.Values.First(l => string.Equals(l.LineId, lineId, StringComparison.OrdinalIgnoreCase));
+        var line = (lineId is null
+            ? store.Lines.Values.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault()
+            : store.Lines.Values.FirstOrDefault(l => string.Equals(l.LineId, lineId, StringComparison.OrdinalIgnoreCase)))
+            ?? throw new KeyNotFoundException(lineId is null ? "No lines are configured." : $"Line '{lineId}' does not exist.");
         var printers = store.Printers.Values
             .Where(p => string.Equals(p.LineId, line.LineId, StringComparison.OrdinalIgnoreCase))
             .OrderBy(p => p.PlcNumber)
@@ -145,15 +146,29 @@ internal static class LineSimulationFactory
                     continue;
                 }
 
-                firePoints.Add(((printerId, labelType), ToFirePoint(printer, fp)));
+                // A malformed fire point (e.g. stored before validation existed) is skipped rather than
+                // throwing into the Blazor circuit that is building the simulation.
+                if (TryToFirePoint(printer, fp) is { } firePoint)
+                {
+                    firePoints.Add(((printerId, labelType), firePoint));
+                }
             }
         }
 
         return firePoints.Count == 0 ? null : new FirePointProfile(map.Name, firePoints);
     }
 
-    private static FirePoint ToFirePoint(PrinterDto printer, FirePointDto fp) =>
-        new(ParseTrackingDevice(printer.PrintDevice), printer.PrintPoint, ParseTrackingDevice(printer.ApplyDevice), ApplyPoint.Parse(fp.ApplyPointNotation));
+    private static FirePoint? TryToFirePoint(PrinterDto printer, FirePointDto fp)
+    {
+        try
+        {
+            return new(ParseTrackingDevice(printer.PrintDevice), printer.PrintPoint, ParseTrackingDevice(printer.ApplyDevice), ApplyPoint.Parse(fp.ApplyPointNotation));
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException or OverflowException)
+        {
+            return null;
+        }
+    }
 
     private static string LabelTypeName(DemoDataStore store, string labelDefId) =>
         store.LabelDefs.TryGetValue(labelDefId, out var def) ? def.Name : labelDefId;

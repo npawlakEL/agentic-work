@@ -186,11 +186,11 @@ public sealed class MessageConsoleService
         entries.Add(new ConsoleEntry(ConsoleEntryKind.InboundFrame, $"IN  281 PANDA_SCAN_INBOUND  {scanWire}"));
 
         var parsedScan = InductScanMessage.FromFrame(PaFrame.Parse(scanWire));
-        var before = gateway.Jobs.Count;
+        var before = gateway.Count;
         var inductResult = await induct.InductAsync(line.LineId!, parsedScan.BlindLabel);
         entries.Add(new ConsoleEntry(ConsoleEntryKind.StepResult, $"Induct → {inductResult.Status}"));
 
-        var printedJobs = gateway.Jobs.Skip(before).ToList();
+        var printedJobs = gateway.JobsSince(before).ToList();
         foreach (var job in printedJobs)
         {
             var fire = job.FirePoint is { } f

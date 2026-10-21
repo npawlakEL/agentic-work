@@ -90,7 +90,7 @@ public sealed class DemoLookupQueries(DemoDataStore store) : ITransportOrderQuer
     public Task<IReadOnlyList<CartonLabelSlot>> GetLabelSlotsAsync(string cartonId, CancellationToken ct = default)
     {
         IReadOnlyList<CartonLabelSlot> slots = store.Cartons.TryGetValue(cartonId, out var carton)
-            ? carton.Slots
+            ? carton.Slots.ToList()
             : [];
         return Task.FromResult(slots);
     }

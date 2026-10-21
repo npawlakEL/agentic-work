@@ -146,6 +146,135 @@ public sealed class ConfigExplorerTests : TestContext
         Assert.Empty(cut.FindAll("[data-testid=builder-add-printer]"));
     }
 
+    [Fact]
+    public void Lane_builder_keeps_failed_printers_and_retries_only_them()
+    {
+        RenderComponent<MudBlazor.MudPopoverProvider>();
+        var cut = RenderComponent<ConfigExplorer>();
+        _config.PrinterSaveResult = p => p.PlcNumber == 2 ? CommandResult.Fail("PLC 2 rejected.") : CommandResult.Ok();
+
+        cut.Find("[data-testid=add-lane]").Click();
+        cut.Find("[data-testid=lane-builder] input").Change("Pack Line 4");
+        cut.Find("[data-testid=builder-next]").Click();
+        cut.Find("[data-testid=builder-add-printer]").Click();
+        cut.Find("[data-testid=builder-add-printer]").Click();
+        cut.Find("[data-testid=builder-finish]").Click();
+
+        // The lane was created once; the good printer saved against the id the editor returned; the failed one stays.
+        Assert.Equal(1, _config.LineSaves);
+        var saved = Assert.Single(_config.SavedPrinters);
+        Assert.Equal("line-new-1", saved.LineId);
+        Assert.Equal(1, saved.PlcNumber);
+        Assert.NotNull(cut.Find("[data-testid=lane-builder]"));
+        Assert.Single(cut.FindAll("[data-testid=builder-printer-panel]"));
+        Assert.NotNull(cut.Find("[data-testid=builder-retry-note]"));
+
+        // Retrying only re-saves the failed printer and does not create a second lane.
+        _config.PrinterSaveResult = _ => CommandResult.Ok();
+        cut.Find("[data-testid=builder-finish]").Click();
+
+        Assert.Equal(1, _config.LineSaves);
+        Assert.Equal(2, _config.SavedPrinters.Count);
+        Assert.All(_config.SavedPrinters, p => Assert.Equal("line-new-1", p.LineId));
+        Assert.Empty(cut.FindAll("[data-testid=lane-builder]"));
+    }
+
+    [Fact]
+    public void Lane_builder_defaults_new_printer_plc_to_max_plus_one()
+    {
+        RenderComponent<MudBlazor.MudPopoverProvider>();
+        var cut = RenderComponent<ConfigExplorer>();
+
+        cut.Find("[data-testid=add-lane]").Click();
+        cut.Find("[data-testid=lane-builder] input").Change("Pack Line 5");
+        cut.Find("[data-testid=builder-next]").Click();
+        cut.Find("[data-testid=builder-add-printer]").Click();
+        cut.Find("[data-testid=builder-add-printer]").Click();
+        cut.Find("[data-testid=builder-add-printer]").Click();
+        // Remove the middle printer (PLC 2): the next default must be max+1 = 4, not count+1 = 3.
+        cut.FindAll("[data-testid=builder-remove-printer]")[1].Click();
+        cut.Find("[data-testid=builder-add-printer]").Click();
+        cut.Find("[data-testid=builder-finish]").Click();
+
+        Assert.Equal([1, 3, 4], _config.SavedPrinters.Select(p => p.PlcNumber).OrderBy(n => n).ToArray());
+    }
+
+    [Fact]
+    public void Set_active_saves_the_maps_line_with_the_map_as_active()
+    {
+        _config.Lines.Add(Line("L1", "Line 1", activeMapId: null));
+        _config.Maps.Add(new MapDto("map-a", "L1", "Map A", []));
+        RenderComponent<MudBlazor.MudPopoverProvider>();
+        var cut = RenderComponent<ConfigExplorer>();
+
+        OpenMapsTab(cut);
+        Assert.Empty(cut.FindAll("[data-testid=map-active]"));
+        cut.Find("[data-testid=set-active-map]").Click();
+
+        Assert.NotNull(_config.LastSavedLine);
+        Assert.Equal("L1", _config.LastSavedLine!.LineId);
+        Assert.Equal("map-a", _config.LastSavedLine!.ActiveMapId);
+        Assert.Contains("Line 1", cut.Find("[data-testid=map-active]").TextContent, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid=set-active-map]"));
+    }
+
+    [Fact]
+    public async Task Changing_a_maps_line_clears_its_assignments()
+    {
+        _config.Lines.Add(Line("L1", "Line 1", activeMapId: null));
+        _config.Lines.Add(Line("L2", "Line 2", activeMapId: null));
+        _config.FirePoints.Add(new FirePointDto("fp-1", "label-1", "Middle", 0));
+        _config.Maps.Add(new MapDto("map-a", "L1", "Map A", [new FirePointAssignment("fp-1", ["PR1"])]));
+        RenderComponent<MudBlazor.MudPopoverProvider>();
+        var cut = RenderComponent<ConfigExplorer>();
+
+        OpenMapsTab(cut);
+        var lineSelect = cut.FindComponents<MudBlazor.MudSelect<string>>()
+            .Single(c => c.Instance.UserAttributes.TryGetValue("data-testid", out var id) && Equals(id, "map-line"));
+        await cut.InvokeAsync(() => lineSelect.Instance.ValueChanged.InvokeAsync("L2"));
+        cut.Find("[data-testid=save-map]").Click();
+
+        var savedMap = Assert.Single(_config.SavedMaps);
+        Assert.Equal("L2", savedMap.LineId);
+        Assert.Empty(savedMap.Assignments);
+    }
+
+    [Fact]
+    public void Delete_lane_confirms_then_cascades()
+    {
+        _config.Lines.Add(Line("L1", "Line 1", activeMapId: null));
+        RenderComponent<MudBlazor.MudPopoverProvider>();
+        var dialogs = RenderComponent<MudBlazor.MudDialogProvider>();
+        var cut = RenderComponent<ConfigExplorer>();
+
+        // Cancel leaves everything in place.
+        cut.Find("[data-testid=delete-lane]").Click();
+        dialogs.WaitForAssertion(() => Assert.NotEmpty(dialogs.FindAll(".mud-dialog")));
+        Assert.Contains("printer", dialogs.Find(".mud-dialog").TextContent, StringComparison.Ordinal);
+        dialogs.FindAll(".mud-dialog button").Single(b => b.TextContent.Contains("Cancel", StringComparison.Ordinal)).Click();
+        Assert.Empty(_config.CascadeLineDeletes);
+
+        // Confirming uses the cascading delete (never the refusing plain delete).
+        cut.Find("[data-testid=delete-lane]").Click();
+        dialogs.WaitForAssertion(() => Assert.NotEmpty(dialogs.FindAll(".mud-dialog")));
+        dialogs.FindAll(".mud-dialog button").Single(b => b.TextContent.Contains("Delete", StringComparison.Ordinal)).Click();
+
+        cut.WaitForAssertion(() => Assert.Equal(["L1"], _config.CascadeLineDeletes));
+        Assert.Empty(_config.PlainLineDeletes);
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=lane-empty]")));
+    }
+
+    private static LineDto Line(string id, string name, string? activeMapId) =>
+        new(id, name, 1, [], [], activeMapId, LineControlPolicy.AllowDegraded, [], 0.25, 24, true, false);
+
+    private static void OpenMapsTab(IRenderedComponent<ConfigExplorer> cut)
+    {
+        cut.FindAll(".mud-tab")
+            .First(t => t.TextContent.Contains("Maps", StringComparison.Ordinal))
+            .Click();
+        cut.Find("[data-testid=map-panel] .mud-expand-panel-header").Click();
+    }
+
     private sealed class FakeConfig
         : IConfigTreeQuery, ISettingsEditor, ILabelDefEditor, IMandaStationEditor,
           ILineEditor, IPrinterEditor, IFirePointEditor, IMapEditor, IOrientationEditor
@@ -158,6 +287,18 @@ public sealed class ConfigExplorerTests : TestContext
         public FirePointDto? LastSavedFirePoint { get; private set; }
         public int LineSaves { get; private set; }
         public LineDto? LastSavedLine { get; private set; }
+
+        // Configurable backing data for interaction tests (empty by default).
+        public List<LineDto> Lines { get; } = [];
+        public List<MapDto> Maps { get; } = [];
+        public List<FirePointDto> FirePoints { get; } = [];
+        public List<PrinterDto> Printers { get; } = [new PrinterDto("PR1", "L1", "Printer 1", "1.1.1.1", 9100, "side-orient", 1, "", "", 0, 0, 0)];
+        public List<PrinterDto> SavedPrinters { get; } = [];
+        public List<MapDto> SavedMaps { get; } = [];
+        public List<string> PlainLineDeletes { get; } = [];
+        public List<string> CascadeLineDeletes { get; } = [];
+        public Func<PrinterDto, CommandResult> PrinterSaveResult { get; set; } = _ => CommandResult.Ok();
+        private int _lineSeq;
 
         public Task<ConfigTreeNode> GetTreeAsync(CancellationToken ct = default)
         {
@@ -209,33 +350,50 @@ public sealed class ConfigExplorerTests : TestContext
 
         // Line
         Task<IReadOnlyList<LineDto>> IConfigEditor<LineDto>.ListAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<LineDto>>([]);
+            Task.FromResult<IReadOnlyList<LineDto>>(Lines.ToList());
         Task<LineDto?> IConfigEditor<LineDto>.GetAsync(string id, CancellationToken ct) =>
-            Task.FromResult<LineDto?>(new LineDto(id, "L", 1, [], [], null, LineControlPolicy.AllowDegraded, [], 0.25, 24, true, false));
+            Task.FromResult<LineDto?>(Lines.FirstOrDefault(l => l.LineId == id)
+                ?? new LineDto(id, "L", 1, [], [], null, LineControlPolicy.AllowDegraded, [], 0.25, 24, true, false));
         Task<CommandResult> IConfigEditor<LineDto>.SaveAsync(LineDto e, CancellationToken ct)
         {
             LineSaves++;
             LastSavedLine = e;
+            var id = e.LineId ?? $"line-new-{++_lineSeq}";
+            Lines.RemoveAll(l => l.LineId == id);
+            Lines.Add(e with { LineId = id });
+            return Task.FromResult(CommandResult.Ok("Saved.", id));
+        }
+        Task<CommandResult> IConfigEditor<LineDto>.DeleteAsync(string id, CancellationToken ct)
+        {
+            PlainLineDeletes.Add(id);
             return Task.FromResult(CommandResult.Ok());
         }
-        Task<CommandResult> IConfigEditor<LineDto>.DeleteAsync(string id, CancellationToken ct) =>
-            Task.FromResult(CommandResult.Ok());
+        public Task<CommandResult> DeleteWithDependentsAsync(string lineId, CancellationToken ct = default)
+        {
+            CascadeLineDeletes.Add(lineId);
+            Lines.RemoveAll(l => l.LineId == lineId);
+            return Task.FromResult(CommandResult.Ok("Deleted lane."));
+        }
 
         // Printer
         Task<IReadOnlyList<PrinterDto>> IConfigEditor<PrinterDto>.ListAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<PrinterDto>>([new PrinterDto("PR1", "L1", "Printer 1", "1.1.1.1", 9100, "side-orient", 1, "", "", 0, 0, 0)]);
+            Task.FromResult<IReadOnlyList<PrinterDto>>(Printers.ToList());
         Task<PrinterDto?> IConfigEditor<PrinterDto>.GetAsync(string id, CancellationToken ct) =>
             Task.FromResult<PrinterDto?>(new PrinterDto(id, "L1", "P", "1.1.1.1", 9100, "side-orient", 1, "", "", 0, 0, 0));
-        Task<CommandResult> IConfigEditor<PrinterDto>.SaveAsync(PrinterDto e, CancellationToken ct) =>
-            Task.FromResult(CommandResult.Ok());
+        Task<CommandResult> IConfigEditor<PrinterDto>.SaveAsync(PrinterDto e, CancellationToken ct)
+        {
+            var result = PrinterSaveResult(e);
+            if (result.Success) { SavedPrinters.Add(e); }
+            return Task.FromResult(result);
+        }
         Task<CommandResult> IConfigEditor<PrinterDto>.DeleteAsync(string id, CancellationToken ct) =>
             Task.FromResult(CommandResult.Ok());
         public Task<IReadOnlyList<PrinterDto>> ListForLineAsync(string lineId, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<PrinterDto>>([]);
+            Task.FromResult<IReadOnlyList<PrinterDto>>(Printers.Where(p => p.LineId == lineId).ToList());
 
         // FirePoint
         Task<IReadOnlyList<FirePointDto>> IConfigEditor<FirePointDto>.ListAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<FirePointDto>>([]);
+            Task.FromResult<IReadOnlyList<FirePointDto>>(FirePoints.ToList());
         Task<FirePointDto?> IConfigEditor<FirePointDto>.GetAsync(string id, CancellationToken ct) =>
             Task.FromResult<FirePointDto?>(new FirePointDto(id, "label-1", "Middle", 0));
         Task<CommandResult> IConfigEditor<FirePointDto>.SaveAsync(FirePointDto e, CancellationToken ct)
@@ -249,15 +407,18 @@ public sealed class ConfigExplorerTests : TestContext
 
         // Map
         Task<IReadOnlyList<MapDto>> IConfigEditor<MapDto>.ListAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<MapDto>>([]);
+            Task.FromResult<IReadOnlyList<MapDto>>(Maps.ToList());
         Task<MapDto?> IConfigEditor<MapDto>.GetAsync(string id, CancellationToken ct) =>
-            Task.FromResult<MapDto?>(new MapDto(id, "L1", "Map A", []));
-        Task<CommandResult> IConfigEditor<MapDto>.SaveAsync(MapDto e, CancellationToken ct) =>
-            Task.FromResult(CommandResult.Ok());
+            Task.FromResult<MapDto?>(Maps.FirstOrDefault(m => m.MapId == id) ?? new MapDto(id, "L1", "Map A", []));
+        Task<CommandResult> IConfigEditor<MapDto>.SaveAsync(MapDto e, CancellationToken ct)
+        {
+            SavedMaps.Add(e);
+            return Task.FromResult(CommandResult.Ok());
+        }
         Task<CommandResult> IConfigEditor<MapDto>.DeleteAsync(string id, CancellationToken ct) =>
             Task.FromResult(CommandResult.Ok());
         Task<IReadOnlyList<MapDto>> IMapEditor.ListForLineAsync(string lineId, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<MapDto>>([]);
+            Task.FromResult<IReadOnlyList<MapDto>>(Maps.Where(m => m.LineId == lineId).ToList());
 
         // Orientation
         Task<IReadOnlyList<OrientationDto>> IConfigEditor<OrientationDto>.ListAsync(CancellationToken ct) =>

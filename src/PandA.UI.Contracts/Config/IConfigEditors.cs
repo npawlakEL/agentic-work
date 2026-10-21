@@ -35,8 +35,15 @@ public interface IOrientationEditor : IConfigEditor<OrientationDto>;
 /// <summary>CRUD for MandA stations.</summary>
 public interface IMandaStationEditor : IConfigEditor<MandaStationDto>;
 
-/// <summary>CRUD for lines.</summary>
-public interface ILineEditor : IConfigEditor<LineDto>;
+/// <summary>
+/// CRUD for lines. Plain <see cref="IConfigEditor{TDto}.DeleteAsync"/> refuses while the line still owns
+/// printers or maps; <see cref="DeleteWithDependentsAsync"/> removes the line together with its printers and maps.
+/// </summary>
+public interface ILineEditor : IConfigEditor<LineDto>
+{
+    /// <summary>Delete a line and cascade-delete every printer and map that belongs to it (nothing is left orphaned).</summary>
+    Task<CommandResult> DeleteWithDependentsAsync(string lineId, CancellationToken ct = default);
+}
 
 /// <summary>CRUD for printers. <see cref="ListForLineAsync"/> scopes to one line.</summary>
 public interface IPrinterEditor : IConfigEditor<PrinterDto>
