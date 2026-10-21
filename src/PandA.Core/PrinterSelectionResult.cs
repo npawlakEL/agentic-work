@@ -6,6 +6,9 @@ public enum LabelSelectionStatus
 
     /// <summary>No eligible printer maps this label's type (source: skip label, not fail carton).</summary>
     NoPrinter = 1,
+
+    /// <summary>A printer was selected but dispatching the label to it failed; the label is not printed.</summary>
+    DispatchFailed = 2,
 }
 
 /// <summary>The printer chosen for one label of a carton (or none).</summary>
@@ -16,6 +19,9 @@ public sealed record LabelAssignment(Label Label, string? PrinterId, LabelSelect
 
     public static LabelAssignment NoPrinter(Label label) =>
         new(label, null, LabelSelectionStatus.NoPrinter);
+
+    public static LabelAssignment DispatchFailed(Label label, string printerId) =>
+        new(label, printerId, LabelSelectionStatus.DispatchFailed);
 }
 
 /// <summary>Outcome of selecting printers for every label in a carton's <see cref="PandaLabelSet"/>.</summary>

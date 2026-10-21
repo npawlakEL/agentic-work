@@ -63,7 +63,15 @@ public sealed class VerifyStationService : IVerifyStationService
             return new VerifyStationResult(VerifyStationStatus.NoActiveOrder, Verify: null, PrinterPaused: false, 0);
         }
 
-        var verify = _verification.Verify(order.Labels, scanned, options, xref);
+        // Per-carton advice toggles (TransportOrder.Bypass / VerifyEnabled) narrow the caller's options: verify
+        // runs only when both the station and the carton enable it; either may mark the carton bypassed.
+        var effective = options with
+        {
+            VerifyEnabled = options.VerifyEnabled && order.VerifyEnabled,
+            Bypass = options.Bypass || order.Bypass,
+        };
+
+        var verify = _verification.Verify(order.Labels, scanned, effective, xref, order.TuId);
         // F23: wave auto-complete here.
 
         // Pass and Ignore (clean bypass) let the carton proceed and clear the fail streak. A bypass that

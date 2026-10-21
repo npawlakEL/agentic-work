@@ -7,10 +7,10 @@ public enum InductStatus
     /// <summary>Every label was dispatched to a printer.</summary>
     Printed = 0,
 
-    /// <summary>Some labels printed; at least one had no eligible printer.</summary>
+    /// <summary>Some labels printed; at least one had no eligible printer or failed to dispatch.</summary>
     PartiallyPrinted = 1,
 
-    /// <summary>No label could be printed (no eligible printer for any type).</summary>
+    /// <summary>No label could be printed (no eligible printer for any type, or every dispatch failed).</summary>
     NoPrinter = 2,
 
     /// <summary>A transport order exists but has no labels to print.</summary>
@@ -73,6 +73,9 @@ public sealed class InductResult
     public static InductResult NoReprint() => new(InductStatus.NoReprint, []);
 
     public static InductResult NoProfile() => new(InductStatus.NoProfile, []);
+
+    /// <summary>Nothing could be printed: no available printer (or every dispatch failed).</summary>
+    public static InductResult NoPrinter() => new(InductStatus.NoPrinter, []);
 
     /// <summary>F10 — an exception label was printed against <paramref name="cartonId"/> and routed by <paramref name="routing"/>.</summary>
     public static InductResult Exception(string cartonId, RoutingCriterion routing)

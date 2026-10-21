@@ -12,10 +12,16 @@ public sealed class PrinterConfig
         int port,
         IEnumerable<string> labelMap,
         ApplyOrientation printerType = ApplyOrientation.Side,
-        int configOrder = 0)
+        int configOrder = 0,
+        int defaultApplyDistance = 0,
+        decimal labelWidthInches = 4m)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(printerId);
         ArgumentNullException.ThrowIfNull(labelMap);
+        if (labelWidthInches <= 0m)
+        {
+            throw new ArgumentOutOfRangeException(nameof(labelWidthInches), labelWidthInches, "Label width must be greater than zero inches.");
+        }
 
         PrinterId = printerId;
         Ip = ip;
@@ -23,7 +29,18 @@ public sealed class PrinterConfig
         LabelMap = [.. labelMap];
         PrinterType = printerType;
         ConfigOrder = configOrder;
+        DefaultApplyDistance = defaultApplyDistance;
+        LabelWidthInches = labelWidthInches;
     }
+
+    /// <summary>
+    /// DYNAP (decision-016): per-printer base apply offset in PLC pulses (source <c>PrinterDetails</c>
+    /// <c>DefaultApplyDistance</c>). Added to every resolved apply pulse. Defaults to 0.
+    /// </summary>
+    public int DefaultApplyDistance { get; }
+
+    /// <summary>DYNAP (decision-016): width of the label this printer applies, in inches. Defaults to 4.</summary>
+    public decimal LabelWidthInches { get; }
 
     public string PrinterId { get; }
 

@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using PandA.Core.Concurrency;
 using PandA.Core.Induct;
 using PandA.Core.Labels;
 using PandA.Core.Ports;
 using PandA.Core.Settings;
 using PandA.Core.Verification;
+using PandA.Core.Zpl;
 
 namespace PandA.Core;
 
@@ -46,6 +48,7 @@ public sealed class InductService : IInductService
     private readonly ICartonRunRepository? _runs;
     private readonly IXRefStore? _xref;
     private readonly IExceptionLabelSource? _exceptionLabels;
+    private readonly ILockProvider _locks;
     private readonly ILogger<InductService> _logger;
     private readonly FirePointResolver _firePoints = new();
     private readonly ApplyPointResolver _applyPoints = new();
@@ -61,7 +64,8 @@ public sealed class InductService : IInductService
         ICartonRunRepository? runs = null,
         IXRefStore? xref = null,
         IExceptionLabelSource? exceptionLabels = null,
-        ILogger<InductService>? logger = null)
+        ILogger<InductService>? logger = null,
+        ILockProvider? locks = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _lines = lines ?? throw new ArgumentNullException(nameof(lines));
@@ -73,6 +77,7 @@ public sealed class InductService : IInductService
         _runs = runs;
         _xref = xref;
         _exceptionLabels = exceptionLabels;
+        _locks = locks ?? InProcessLockProvider.Shared;
         _logger = logger ?? NullLogger<InductService>.Instance;
     }
 
@@ -92,15 +97,61 @@ public sealed class InductService : IInductService
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentException.ThrowIfNullOrWhiteSpace(blindLabel);
 
+        // Serialize inducts of the same carton (platform-settings F13 / source PA_Lock) so a duplicate
+        // re-induct cannot pass the CanPrint check while the first run is still dispatching.
+        await using var scanLock = await _locks
+            .AcquireAsync(InductLockName(blindLabel), cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        return await InductLockedAsync(scan, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string InductLockName(string tuId) => "Induct_" + tuId.ToUpperInvariant();
+
+    private async ValueTask<InductResult> InductLockedAsync(InductScan scan, CancellationToken cancellationToken)
+    {
+        var blindLabel = scan.BlindLabel;
+
         _ = _settings;
 
         var order = await _store.FindActiveByTuIdAsync(blindLabel, cancellationToken).ConfigureAwait(false);
+        IAsyncDisposable? resolvedLock = null;
         if (order is null)
         {
             // F18: a non-BL scan (oLPN/UPC/…) doesn't match a blind label directly; resolve it through the
             // barcode cross-reference populated at advice time.
             order = await ResolveByBarcodeAsync(scan, cancellationToken).ConfigureAwait(false);
+            if (order is not null && !string.Equals(order.TuId, blindLabel, StringComparison.OrdinalIgnoreCase))
+            {
+                // Also hold the resolved carton's own lock, then re-read it so CanPrint reflects any run that
+                // completed while we waited.
+                resolvedLock = await _locks
+                    .AcquireAsync(InductLockName(order.TuId), cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+                order = await _store.FindActiveByTuIdAsync(order.TuId, cancellationToken).ConfigureAwait(false) ?? order;
+            }
         }
+
+        try
+        {
+            return await InductOrderAsync(scan, order, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (resolvedLock is not null)
+            {
+                await resolvedLock.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async ValueTask<InductResult> InductOrderAsync(
+        InductScan scan,
+        TransportOrder? order,
+        CancellationToken cancellationToken)
+    {
+        var lineId = scan.LineId;
+        var blindLabel = scan.BlindLabel;
 
         if (order is null)
         {
@@ -195,9 +246,11 @@ public sealed class InductService : IInductService
         var now = _clock.UtcNow;
         var printersById = context.Config.Printers.ToDictionary(p => p.PrinterId, StringComparer.OrdinalIgnoreCase);
         var runPrinterRecorded = false;
+        var outcomes = selection.Assignments.ToList();
 
-        foreach (var assignment in selection.Assignments)
+        for (var i = 0; i < outcomes.Count; i++)
         {
+            var assignment = outcomes[i];
             if (assignment.Status != LabelSelectionStatus.Assigned || assignment.PrinterId is null)
             {
                 continue;
@@ -224,12 +277,17 @@ public sealed class InductService : IInductService
                 // DYNAP (decision-016): convert the human APPLY point (inch/edge) into a carton-aware PLC
                 // pulse when the carton's physical dimensions are known. PRINT point stays static. Top-apply
                 // additionally needs tamp kinematics (not yet commissioned) so it is left null for now.
-                if (firePoint is { } fp
+                // The line's DynamicPrintPoint switch disables the dynamic pulse entirely.
+                if (context.Config.DynamicPrintPoint
+                    && firePoint is { } fp
                     && order.InductMeasurements is { } m
                     && m.Length > 0
                     && printer.PrinterType == ApplyOrientation.Side)
                 {
-                    var applyConfig = new ApplyPointConfig(EncoderResolution: context.Config.EncoderResolution);
+                    var applyConfig = new ApplyPointConfig(
+                        EncoderResolution: context.Config.EncoderResolution,
+                        LabelWidthInches: printer.LabelWidthInches,
+                        DefaultApplyDistance: printer.DefaultApplyDistance);
                     // Side-apply math ignores height; Length is already in step pulses. When Top-apply is
                     // commissioned, Height (PLC units) must be converted to inches before it feeds the
                     // tamp-kinematic lead correction (which is inch-based). Gated to Side keeps that latent.
@@ -238,17 +296,31 @@ public sealed class InductService : IInductService
                 }
             }
 
-            // F12 (decision-014): request Zebra host status by appending ~HS when the line opts in.
-            var zpl = context.Config.PrinterStatusSuffix ? ZplStatusSuffix.Append(label.Zpl) : label.Zpl;
+            var zpl = PrepareZpl(context.Config, label.Zpl);
 
             // NOTE (deferred): FirePoint.NeglectPrint (source PrintFirePoint LIKE '0%' → "apply but do
             // not print") is not yet honored here — apply-only dispatch requires the gateway/PrintJob to
             // carry an "apply without ZPL" mode, which lands with Top-apply tamp commissioning. No seeded
             // profile currently sets a neglect-print fire point, so this path is unreachable today.
 
-            await _gateway.SendAsync(
-                new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, zpl, firePoint, applyPulse),
-                cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _gateway.SendAsync(
+                    new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, zpl, firePoint, applyPulse),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One label's dispatch failure must not strand the carton: record it as not printed and keep
+                // dispatching the rest so the per-label state and overall outcome stay consistent.
+                outcomes[i] = LabelAssignment.DispatchFailed(label, printer.PrinterId);
+                _logger.LogError(
+                    ex,
+                    "Failed to dispatch label {LabelType} for transport order {TuId} to printer {PrinterId} on line {LineId}.",
+                    label.LabelType, order.TuId, printer.PrinterId, lineId);
+                continue;
+            }
+
             _logger.LogInformation(
                 "Dispatched label {LabelType} for transport order {TuId} to printer {PrinterId} on line {LineId}.",
                 label.LabelType, order.TuId, printer.PrinterId, lineId);
@@ -263,7 +335,7 @@ public sealed class InductService : IInductService
             order.MarkLabelPrinted(label.LabelType, printer.PrinterId, now);
         }
 
-        var result = InductResult.FromAssignments(selection.Assignments);
+        var result = InductResult.FromAssignments(outcomes);
         // F08: routing here.
 
         // Only a FULL run counts as a print run and increments the monotonic counter (decision-003).
@@ -275,16 +347,28 @@ public sealed class InductService : IInductService
                 "Completed print run for transport order {TuId} on line {LineId}; print count is {PrintCount}.",
                 order.TuId, lineId, order.PrintCount);
         }
-        else if (result.Status == InductStatus.PartiallyPrinted)
+        else if (result.Status == InductStatus.PartiallyPrinted
+            || outcomes.Any(a => a.Status == LabelSelectionStatus.DispatchFailed))
         {
-            // Persist per-label print state, but do not count the run or advance status.
+            // A dispatch was attempted: persist per-label print state, but do not count the run or advance
+            // status. (A pure no-eligible-printer outcome dispatched nothing and is not persisted.)
             await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
             _logger.LogWarning(
-                "Partially printed transport order {TuId} on line {LineId}.",
-                order.TuId, lineId);
+                "Transport order {TuId} on line {LineId} not fully printed ({Status}).",
+                order.TuId, lineId, result.Status);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Final ZPL for dispatch: F11 VetLabel sanitization when the line's <c>FilterLabels</c> is on, then the
+    /// F12 <c>~HS</c> host-status suffix when enabled (source <c>sdisp_PA_Print</c> order).
+    /// </summary>
+    private static string PrepareZpl(LineConfig config, string zpl)
+    {
+        var prepared = config.FilterLabels ? ZplSanitizer.Sanitize(zpl) : zpl;
+        return config.PrinterStatusSuffix ? ZplStatusSuffix.Append(prepared) : prepared;
     }
 
     /// <summary>
@@ -344,9 +428,10 @@ public sealed class InductService : IInductService
     /// F10 (decision-021) — emit a locally-generated exception label for an unmatched carton. Gated by the
     /// effective <c>PrintExceptionLabels</c> flag (a defined global overrides per-line) and a non-Bypass read
     /// that maps to an exception reason. Synthesizes a
-    /// human-readable id (<c>{Reason}-{seq}</c>), builds the ZPL from the injected
+    /// human-readable unique id (<c>{Reason}-{seq}-{unique}</c>), builds the ZPL from the injected
     /// <see cref="IExceptionLabelSource"/> (LocalTemplate by default; DCMS/eHub via the adapter), prints it to
-    /// a printer of the line's apply orientation (Side if any side printer, else Top), records the synthetic
+    /// an available printer of the line's apply orientation (Side if any side printer, else Top; <c>NoPrinter</c>
+    /// when none is available), records the synthetic
     /// carton as printed (F-LOG1), and returns a verify-then-reject routing criterion (F08). Returns
     /// <c>null</c> when exceptions are disabled, no source is wired, or the read yields no exception reason.
     /// </summary>
@@ -383,13 +468,23 @@ public sealed class InductService : IInductService
             ? ApplyOrientation.Side
             : ApplyOrientation.Top;
 
-        var printer = context.Config.Printers.FirstOrDefault(p => p.PrinterType == orientation);
-        if (printer is null)
+        if (!context.Config.Printers.Any(p => p.PrinterType == orientation))
         {
             _logger.LogWarning(
                 "Exception carton on line {LineId} has no {Orientation} printer; label not emitted.",
                 scan.LineId, orientation);
             return null;
+        }
+
+        // Pick among available (online, non-spare) printers of that orientation with the same ranking as
+        // normal labels (least-recently-printed / configured order).
+        var printer = SelectExceptionPrinter(context, orientation);
+        if (printer is null)
+        {
+            _logger.LogWarning(
+                "Exception carton on line {LineId} has no available {Orientation} printer; label not emitted.",
+                scan.LineId, orientation);
+            return InductResult.NoPrinter();
         }
 
         var cartonId = ExceptionLabelPolicy.MintCartonId(exceptionType, scan.SeqNum);
@@ -404,9 +499,27 @@ public sealed class InductService : IInductService
             return null;
         }
 
-        await _gateway.SendAsync(
-            new PrintJob(printer.PrinterId, printer.Ip, printer.Port, build.LabelType, build.Lpn, build.Zpl, null, null),
-            ct).ConfigureAwait(false);
+        // F11/F12: exception labels go through the same VetLabel + ~HS pipeline as normal labels.
+        var zpl = PrepareZpl(context.Config, build.Zpl);
+        try
+        {
+            await _gateway.SendAsync(
+                new PrintJob(printer.PrinterId, printer.Ip, printer.Port, build.LabelType, build.Lpn, zpl, null, null),
+                ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to dispatch {Reason} exception label {CartonId} to printer {PrinterId} on line {LineId}.",
+                exceptionType, cartonId, printer.PrinterId, scan.LineId);
+            return InductResult.NoPrinter();
+        }
+
+        if (context.States.TryGetValue(printer.PrinterId, out var printerState))
+        {
+            printerState.LastPrinted = _clock.UtcNow;
+        }
 
         // F-LOG1: record the synthetic exception carton as an audited run, marked with its induct status.
         if (_runs is { } runs)
@@ -441,6 +554,41 @@ public sealed class InductService : IInductService
             exceptionType, cartonId, printer.PrinterId, scan.LineId);
 
         return InductResult.Exception(cartonId, routing);
+    }
+
+    /// <summary>
+    /// F10 — choose the exception-label printer among the line's printers of <paramref name="orientation"/>
+    /// via the injected selection service (same availability filter + load-balance ranking as normal labels).
+    /// Exception labels are not in any printer's LabelMap, so each candidate is projected as able to print
+    /// the exception type. Returns null when none is available.
+    /// </summary>
+    private PrinterConfig? SelectExceptionPrinter(LineContext context, ApplyOrientation orientation)
+    {
+        var candidates = context.Config.Printers
+            .Where(p => p.PrinterType == orientation)
+            .ToDictionary(p => p.PrinterId, StringComparer.OrdinalIgnoreCase);
+
+        var view = new LineConfig(
+            context.Config.LineId,
+            candidates.Values.Select(p => new PrinterConfig(
+                p.PrinterId,
+                p.Ip,
+                p.Port,
+                [ExceptionBuildResult.ExceptionLabelType],
+                p.PrinterType,
+                p.ConfigOrder,
+                p.DefaultApplyDistance,
+                p.LabelWidthInches)),
+            context.Config.LoadBalance);
+
+        var probe = new PandaLabelSet(
+            [new Label(ExceptionBuildResult.ExceptionLabelType, ExceptionBuildResult.ExceptionLpn, string.Empty)]);
+        var assignment = _selection.Select(view, context.States, probe).Assignments.FirstOrDefault();
+
+        return assignment is { Status: LabelSelectionStatus.Assigned, PrinterId: { } id }
+            && candidates.TryGetValue(id, out var chosen)
+            ? chosen
+            : null;
     }
 
     /// <summary>

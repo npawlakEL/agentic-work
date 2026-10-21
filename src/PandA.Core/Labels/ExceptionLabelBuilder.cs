@@ -24,13 +24,38 @@ public sealed class ExceptionLabelBuilder
             return ExceptionBuildResult.NoTemplate();
         }
 
-        var zpl = template.Template.Replace("<CartonID>", cartonId, StringComparison.Ordinal);
+        var zpl = template.Template.Replace("<CartonID>", EscapeFieldData(cartonId), StringComparison.Ordinal);
 
         if (ExceptionLabelPolicy.UsesLpn(type))
         {
-            zpl = zpl.Replace("<LPN>", lpn ?? string.Empty, StringComparison.Ordinal);
+            zpl = zpl.Replace("<LPN>", EscapeFieldData(lpn), StringComparison.Ordinal);
         }
 
         return ExceptionBuildResult.Success(zpl);
+    }
+
+    /// <summary>
+    /// Neutralise a value substituted into ZPL field data: the raw scan text must not be able to inject ZPL
+    /// commands, so the format/control prefixes <c>^</c> and <c>~</c> and any control characters are dropped.
+    /// </summary>
+    public static string EscapeFieldData(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var c in value)
+        {
+            if (c is '^' or '~' || char.IsControl(c))
+            {
+                continue;
+            }
+
+            builder.Append(c);
+        }
+
+        return builder.ToString();
     }
 }

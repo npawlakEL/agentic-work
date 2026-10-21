@@ -45,7 +45,7 @@ public sealed class InductServiceTests
         Assert.Equal(2, _gateway.Jobs.Count);
         Assert.Equal("Ship1", _gateway.Jobs.Single(j => j.LabelType == "Shipping").PrinterId);
         Assert.Equal("Cont1", _gateway.Jobs.Single(j => j.LabelType == "Content").PrinterId);
-        Assert.Equal("^XAShipping^XZ", _gateway.Jobs.Single(j => j.LabelType == "Shipping").Zpl);
+        Assert.Equal("^XA^LH13,0Shipping^XZ", _gateway.Jobs.Single(j => j.LabelType == "Shipping").Zpl); // F11 VetLabel on by default
 
         var stored = await _store.FindActiveByTuIdAsync("BLIND1");
         Assert.Equal(TransportOrderStatus.Printed, stored!.Status);
@@ -208,13 +208,13 @@ public sealed class InductServiceTests
 
         await _induct.InductAsync("L1", "BLIND1");
 
-        Assert.Equal("^XAShipping^XZ~HS", _gateway.Jobs.Single(j => j.LabelType == "Shipping").Zpl);
+        Assert.Equal("^XA^LH13,0Shipping^XZ~HS", _gateway.Jobs.Single(j => j.LabelType == "Shipping").Zpl);
     }
 
     [Fact]
     public async Task Induct_WithoutPrinterStatusSuffix_LeavesZplUnchanged()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)])); // default: no suffix
+        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], filterLabels: false)); // default: no suffix
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await _induct.InductAsync("L1", "BLIND1");
@@ -398,7 +398,7 @@ public sealed class InductServiceTests
         var result = await induct.InductAsync(new InductScan("L1", "???", SeqNum: 481));
 
         Assert.Equal(InductStatus.ExceptionLabel, result.Status);
-        Assert.Equal("NoRead-000481", result.ExceptionCartonId);
+        Assert.StartsWith("NoRead-000481-", result.ExceptionCartonId, StringComparison.Ordinal);
         Assert.Equal("Fail", result.Routing!.Value);
 
         var job = Assert.Single(_gateway.Jobs);
@@ -443,7 +443,7 @@ public sealed class InductServiceTests
         await induct.InductAsync(new InductScan("L1", "!!!", SeqNum: 7));
 
         var record = Assert.Single(runs.Records);
-        Assert.Equal("NoData-000007", record.TuId);
+        Assert.StartsWith("NoData-000007-", record.TuId, StringComparison.Ordinal);
         Assert.Equal("Ship1", record.AssignedPrinter);
         Assert.Equal(CartonStatus.NoData, record.StatusAtInduct);
     }

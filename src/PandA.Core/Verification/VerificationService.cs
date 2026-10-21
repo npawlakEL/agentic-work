@@ -13,12 +13,15 @@ public sealed class VerificationService : IVerificationService
     private static readonly HashSet<string> AlwaysVerifiedTypes =
         new(StringComparer.OrdinalIgnoreCase) { "Shipping", "Exception" };
 
+    private const string BlindLabelType = "BlindLabel";
+
     /// <inheritdoc />
     public VerifyResult Verify(
         PandaLabelSet expected,
         IReadOnlyList<ScannedLabel> scanned,
         VerifyOptions options,
-        IReadOnlyList<LabelXref>? xref = null)
+        IReadOnlyList<LabelXref>? xref = null,
+        string? blindLabel = null)
     {
         ArgumentNullException.ThrowIfNull(expected);
         ArgumentNullException.ThrowIfNull(scanned);
@@ -50,7 +53,7 @@ public sealed class VerificationService : IVerificationService
         }
 
         var acceptable = BuildXrefLookup(xref);
-        var expectedLabels = BuildExpected(expected, options, acceptable);
+        var expectedLabels = BuildExpected(expected, options, acceptable, blindLabel);
         var scannedLabels = FilterScanned(scanned, options);
 
         var details = new List<VerifyLabelDetail>();
@@ -80,8 +83,9 @@ public sealed class VerificationService : IVerificationService
             return Fail(details, ToOutcome(reason));
         }
 
-        // Any expected label never presented to the scanner is missing from the box → fail.
-        var missing = expectedLabels.FirstOrDefault(e => !e.Consumed);
+        // Any expected label never presented to the scanner is missing from the box → fail. The synthesized
+        // blind-label slot is optional: a scanner slot with no blind-label read is not a failure.
+        var missing = expectedLabels.FirstOrDefault(e => !e.Consumed && !e.Optional);
         if (missing is not null)
         {
             details.Add(new VerifyLabelDetail(missing.LabelType, missing.Primary, null, VerifyLabelReason.Missing));
@@ -158,7 +162,8 @@ public sealed class VerificationService : IVerificationService
     private static List<ExpectedLabel> BuildExpected(
         PandaLabelSet expected,
         VerifyOptions options,
-        Dictionary<string, HashSet<string>> xref)
+        Dictionary<string, HashSet<string>> xref,
+        string? blindLabel)
     {
         var result = new List<ExpectedLabel>();
         foreach (var label in expected.Labels)
@@ -188,6 +193,22 @@ public sealed class VerificationService : IVerificationService
             result.Add(new ExpectedLabel(label.LabelType, label.Lpn, acceptable));
         }
 
+        // Source @VerifyLabels UNIONs the blind label (and its BlindLabel-tagged xref barcodes) into the
+        // expected set, so a buffer slot carrying the blind-label read verifies against the carton's TuId.
+        // Subject to the content toggle like any non-Shipping/Exception type.
+        if (!string.IsNullOrWhiteSpace(blindLabel)
+            && options.VerifyContentLabel
+            && !result.Exists(e => string.Equals(e.LabelType, BlindLabelType, StringComparison.OrdinalIgnoreCase)))
+        {
+            var acceptable = new HashSet<string>(StringComparer.Ordinal) { blindLabel };
+            if (xref.TryGetValue(BlindLabelType, out var alts))
+            {
+                acceptable.UnionWith(alts);
+            }
+
+            result.Add(new ExpectedLabel(BlindLabelType, blindLabel, acceptable) { Optional = true });
+        }
+
         return result;
     }
 
@@ -210,5 +231,8 @@ public sealed class VerificationService : IVerificationService
         public HashSet<string> Acceptable { get; } = acceptable;
 
         public bool Consumed { get; set; }
+
+        /// <summary>When true, a never-read slot is not reported as missing.</summary>
+        public bool Optional { get; init; }
     }
 }

@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using PandA.Core.Concurrency;
 
 namespace PandA.Core;
 
@@ -17,16 +19,48 @@ namespace PandA.Core;
 /// </summary>
 public sealed class LaneEvalService
 {
-    private readonly ILogger<LaneEvalService> _logger;
+    // In-process per-line serialization for the synchronous Evaluate path (lines are few, so this is bounded).
+    private static readonly ConcurrentDictionary<string, object> LineMonitors = new(StringComparer.OrdinalIgnoreCase);
 
-    public LaneEvalService(ILogger<LaneEvalService>? logger = null)
+    private readonly ILogger<LaneEvalService> _logger;
+    private readonly ILockProvider? _locks;
+
+    public LaneEvalService(ILogger<LaneEvalService>? logger = null, ILockProvider? locks = null)
     {
         _logger = logger ?? NullLogger<LaneEvalService>.Instance;
+        _locks = locks;
+    }
+
+    /// <summary>
+    /// <see cref="Evaluate"/> under the per-line <c>LaneEval_{lineId}</c> lock from the injected
+    /// <see cref="ILockProvider"/> (platform-settings F13), so concurrent printer/zone signals for the same
+    /// line serialize their <see cref="PrinterState"/> mutations. Different lines do not block each other.
+    /// </summary>
+    public async ValueTask<LaneEvalResult> EvaluateAsync(
+        LineConfig line,
+        IReadOnlyDictionary<string, PrinterState> states,
+        ZoneState zone,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        var locks = _locks ?? InProcessLockProvider.Shared;
+        var handle = await locks
+            .AcquireAsync("LaneEval_" + line.LineId, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            return Evaluate(line, states, zone, now);
+        }
+        finally
+        {
+            await handle.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <summary>
     /// Evaluate one line. <paramref name="now"/> stamps <see cref="PrinterState.LastStatusUpdate"/>
-    /// on any promote/demote so the newest change is preferred next time.
+    /// on any promote/demote so the newest change is preferred next time. Serialized per line in-process.
     /// </summary>
     public LaneEvalResult Evaluate(
         LineConfig line,
@@ -38,6 +72,18 @@ public sealed class LaneEvalService
         ArgumentNullException.ThrowIfNull(states);
         ArgumentNullException.ThrowIfNull(zone);
 
+        lock (LineMonitors.GetOrAdd(line.LineId, static _ => new object()))
+        {
+            return EvaluateCore(line, states, zone, now);
+        }
+    }
+
+    private LaneEvalResult EvaluateCore(
+        LineConfig line,
+        IReadOnlyDictionary<string, PrinterState> states,
+        ZoneState zone,
+        DateTimeOffset now)
+    {
         // Zone down => the whole line is shut regardless of printer health (source sdisp_PA_Status_Zone).
         if (!zone.ZoneOnline)
         {

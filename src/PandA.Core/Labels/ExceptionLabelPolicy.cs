@@ -1,3 +1,4 @@
+using System.Globalization;
 using PandA.Core.Induct;
 
 namespace PandA.Core.Labels;
@@ -49,7 +50,19 @@ public static class ExceptionLabelPolicy
     public static bool UsesLpn(ExceptionType type) =>
         type is ExceptionType.Duplicate or ExceptionType.NoInformation or ExceptionType.NotReceived;
 
-    /// <summary>Mint the synthetic human-readable exception carton id: <c>{Reason}-{seq:000000}</c>.</summary>
-    public static string MintCartonId(ExceptionType type, int seq) =>
-        $"{ReasonName(type)}-{seq:000000}";
+    // Process-wide monotonic suffix, seeded from wall-clock ms so ids also stay distinct across restarts.
+    private static long _mintCounter = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+    /// <summary>
+    /// Mint the synthetic human-readable exception carton id: <c>{Reason}-{seq:000000}-{unique}</c>. The
+    /// scanner sequence number alone is not unique (it defaults to 0 and wraps), so a process-wide monotonic
+    /// hex suffix guarantees two exception cartons never share an id.
+    /// </summary>
+    public static string MintCartonId(ExceptionType type, int seq)
+    {
+        var unique = Interlocked.Increment(ref _mintCounter);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{ReasonName(type)}-{seq:000000}-{unique:X}");
+    }
 }

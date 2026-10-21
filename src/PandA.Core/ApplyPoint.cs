@@ -66,7 +66,12 @@ public sealed record ApplyPoint
         };
 
         var numberPart = trimmed[..^1];
-        if (!decimal.TryParse(numberPart, NumberStyles.Number, CultureInfo.InvariantCulture, out var inches))
+        // No AllowThousands: "1,5L" must not silently parse as 15 inches.
+        const NumberStyles styles = NumberStyles.AllowLeadingSign
+            | NumberStyles.AllowDecimalPoint
+            | NumberStyles.AllowLeadingWhite
+            | NumberStyles.AllowTrailingWhite;
+        if (!decimal.TryParse(numberPart, styles, CultureInfo.InvariantCulture, out var inches))
         {
             throw new FormatException($"Invalid apply-point distance '{numberPart}' in '{text}'.");
         }
