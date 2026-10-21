@@ -51,7 +51,7 @@ public sealed class ReviewFindingsTests
     [Fact]
     public async Task Finding1_FilterLabelsOn_SanitizesNormalLabelZpl_BeforeHsSuffix()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printerStatusSuffix: true));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printerStatusSuffix: true));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await Induct().InductAsync("L1", "BLIND1");
@@ -62,7 +62,7 @@ public sealed class ReviewFindingsTests
     [Fact]
     public async Task Finding1_FilterLabelsOff_LeavesZplUnsanitized()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], filterLabels: false));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], filterLabels: false));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await Induct().InductAsync("L1", "BLIND1");
@@ -73,7 +73,7 @@ public sealed class ReviewFindingsTests
     [Fact]
     public async Task Finding1_FilterLabelsOn_SanitizesExceptionLabelZpl()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
 
         await ExceptionInduct().InductAsync(new InductScan("L1", "???", SeqNum: 1));
 
@@ -93,13 +93,14 @@ public sealed class ReviewFindingsTests
     }
 
     [Fact]
-    public async Task Finding2_OrderVerifyDisabledAndBypassed_IsIgnored_EvenWhenStationVerifies()
+    public async Task Finding2_OrderVerifyDisabledAndBypassed_PassesOnCartonIdRead_EvenWhenStationVerifies()
     {
         await SeedOrderAsync("BL1", bypass: true, verifyEnabled: false);
 
-        var result = await VerifyStation().VerifyAsync("BL1", [], new VerifyOptions(), failThreshold: 3);
+        // Owner ruling 2026-10-21 (R4; was Ignore with no reads): a bypass carton passes when its id is read.
+        var result = await VerifyStation().VerifyAsync("BL1", [new ScannedLabel("BlindLabel", "BL1")], new VerifyOptions(), failThreshold: 3);
 
-        Assert.Equal(VerifyOutcome.Ignore, result.Verify!.Outcome);
+        Assert.Equal(VerifyOutcome.Pass, result.Verify!.Outcome);
         Assert.Equal(VerifyStationStatus.Verified, result.Status);
     }
 
@@ -185,7 +186,7 @@ public sealed class ReviewFindingsTests
     [Fact]
     public async Task Finding4_ExceptionLabel_SkipsUnavailablePrinter()
     {
-        _lines.Add(
+        _lines.AddCommissioned(
             new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0), Printer("Ship2", ["Shipping"], 1)], printExceptionLabels: true),
             [new PrinterState("Ship1", plcOnline: false), new PrinterState("Ship2")]);
 
@@ -198,7 +199,7 @@ public sealed class ReviewFindingsTests
     [Fact]
     public async Task Finding4_ExceptionLabel_NoAvailablePrinter_ReturnsNoPrinter()
     {
-        _lines.Add(
+        _lines.AddCommissioned(
             new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0), Printer("Ship2", ["Shipping"], 1)], printExceptionLabels: true),
             [new PrinterState("Ship1", isSpare: true), new PrinterState("Ship2", engineOnline: false)]);
 
@@ -212,7 +213,7 @@ public sealed class ReviewFindingsTests
     public async Task Finding4_ExceptionLabel_StampsLastPrinted()
     {
         var states = new[] { new PrinterState("Ship1") };
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true), states);
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true), states);
 
         await ExceptionInduct().InductAsync(new InductScan("L1", "???", SeqNum: 1));
 
@@ -242,7 +243,7 @@ public sealed class ReviewFindingsTests
     public async Task Finding6_ApplyPulse_IncludesPrinterDefaultApplyDistance()
     {
         // "1L" at 0.2 in/pulse = 5 pulses, plus the printer's DefaultApplyDistance of 10.
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0, defaultApplyDistance: 10)],
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0, defaultApplyDistance: 10)],
             activeProfile: SideProfile("Ship1", "1L")));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
@@ -257,7 +258,7 @@ public sealed class ReviewFindingsTests
     public async Task Finding6_ApplyPulse_UsesPrinterLabelWidth(int widthInches, int expectedPulse)
     {
         // Trailing "0T": length 100 - (0 + width) / 0.2.
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0, labelWidthInches: widthInches)],
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0, labelWidthInches: widthInches)],
             activeProfile: SideProfile("Ship1", "0T")));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
@@ -269,7 +270,7 @@ public sealed class ReviewFindingsTests
     [Fact]
     public async Task Finding6_DynamicPrintPointOff_LeavesApplyPulseNull()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)],
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)],
             activeProfile: SideProfile("Ship1", "1L"), dynamicPrintPoint: false));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
@@ -289,7 +290,7 @@ public sealed class ReviewFindingsTests
     [Fact]
     public async Task Finding7_TwoNoReadInducts_WithSameSeqNum_MintDistinctCartonIds()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
         var induct = ExceptionInduct();
 
         var first = await induct.InductAsync(new InductScan("L1", "???"));
@@ -335,7 +336,7 @@ public sealed class ReviewFindingsTests
     [Fact]
     public async Task Finding9_OneLabelDispatchThrows_OthersPrint_PartiallyPrinted_OrderSaved()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0), Printer("Cont1", ["Content"], 1)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0), Printer("Cont1", ["Content"], 1)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping", "Content"));
         var gateway = new FailingGateway("Cont1");
 
@@ -354,7 +355,7 @@ public sealed class ReviewFindingsTests
     [Fact]
     public async Task Finding9_AllDispatchesThrow_ReturnsNoPrinter()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         var result = await Induct(new FailingGateway("Ship1")).InductAsync("L1", "BLIND1");
@@ -385,7 +386,7 @@ public sealed class ReviewFindingsTests
     public async Task Finding10_ConcurrentDuplicateInduct_PrintsOnce()
     {
         var tuId = "DUP-" + Guid.NewGuid().ToString("N");
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", tuId, Labels("Shipping"));
         var gateway = new GatedGateway();
         var induct = Induct(gateway, TestServices.Locks());

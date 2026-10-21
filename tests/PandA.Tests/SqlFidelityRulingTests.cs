@@ -55,7 +55,7 @@ public sealed class SqlFidelityRulingTests
     [Fact]
     public async Task Item1_GapError_WithResolvedOrder_PrintsNothing_AndNoExceptionLabel()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
         await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
         var settings = await Settings(KnownSettings.PrintExceptionLabels, true, seed: false);
 
@@ -76,7 +76,7 @@ public sealed class SqlFidelityRulingTests
     [Fact]
     public async Task Item13b_MinGap_DefaultsToTheMinGapSetting()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
         await Advice().AdviseAsync("L1", "BL2", Labels(("Shipping", "S2")));
         var induct = Induct(); // seeded MinGap = 20 (source Settings seed), no IMinGapProvider
@@ -93,7 +93,7 @@ public sealed class SqlFidelityRulingTests
     [Fact]
     public async Task Item2_BypassOrder_PrintsNothing_AndNoExceptionLabel()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
         var order = await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
         order.SetAdviceMetadata(bypass: true);
         await _store.SaveAsync(order);
@@ -110,7 +110,7 @@ public sealed class SqlFidelityRulingTests
     [Fact]
     public async Task Item4_ExceptionCarton_IsPersisted_AndFailsVerify_WithCode0_RejectAndThreshold()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
         var settings = await Settings(KnownSettings.PrintExceptionLabels, true, seed: false);
         var induct = await Induct(settings, exceptions: true).InductAsync(new InductScan("L1", "BL-UNADVISED", SeqNum: 7));
         Assert.Equal(InductStatus.ExceptionLabel, induct.Status);
@@ -158,7 +158,7 @@ public sealed class SqlFidelityRulingTests
     {
         if (await _lines.GetLineAsync("L1") is null)
         {
-            _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0), Printer("Cont1", ["Content"], 1)]));
+            _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0), Printer("Cont1", ["Content"], 1)]));
         }
 
         await Advice().AdviseAsync("L1", tuId, Labels(("Shipping", "S-" + tuId), ("Content", "C-" + tuId)));
@@ -218,7 +218,7 @@ public sealed class SqlFidelityRulingTests
     [Fact]
     public async Task Item6_ReprintLabelsOn_AlreadyPrintedCarton_PrintsAgain_WithoutAuthorization()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
         var induct = Induct(await Settings(KnownSettings.ReprintLabels, true));
         await induct.InductAsync("L1", "BL1");
@@ -233,7 +233,7 @@ public sealed class SqlFidelityRulingTests
     [Fact]
     public async Task Item6_ReprintLabelsOff_AlreadyPrintedCarton_NeedsAuthorization()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
         var induct = Induct(await Settings(KnownSettings.ReprintLabels, false));
         await induct.InductAsync("L1", "BL1");
@@ -245,7 +245,7 @@ public sealed class SqlFidelityRulingTests
     [Fact]
     public async Task Item7_ReAdvice_ReprintOff_UpdatesData_ButDoesNotReArmPrintedCarton()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         var settings = await Settings(KnownSettings.ReprintLabels, false);
         await Advice(settings).AdviseAsync("L1", "BL1", Labels(("Shipping", "OLD")));
         await Induct(settings).InductAsync("L1", "BL1");
@@ -261,7 +261,7 @@ public sealed class SqlFidelityRulingTests
     [Fact]
     public async Task Item7_ReAdvice_ReprintOn_ReArmsPrintedCarton()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         var settings = await Settings(KnownSettings.ReprintLabels, true);
         await Advice(settings).AdviseAsync("L1", "BL1", Labels(("Shipping", "OLD")));
         await Induct(settings).InductAsync("L1", "BL1");
@@ -278,7 +278,7 @@ public sealed class SqlFidelityRulingTests
     public async Task Item8_MissingFirePointRow_SkipsThatLabel_OthersPrint()
     {
         var profile = new FirePointProfile("P", [(("Ship1", "Shipping"), new FirePoint(2, 800, 3, ApplyPoint.Parse("1L")))]);
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0), Printer("Cont1", ["Content"], 1)], activeProfile: profile));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0), Printer("Cont1", ["Content"], 1)], activeProfile: profile));
         await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1"), ("Content", "C1")));
 
         var result = await Induct().InductAsync("L1", "BL1");
@@ -293,7 +293,7 @@ public sealed class SqlFidelityRulingTests
     {
         var profile = new FirePointProfile("P", [(("Ship1", "Shipping"), new FirePoint(2, 0, 3, ApplyPoint.Parse("1L")))]);
         var state = new PrinterState("Ship1");
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: profile), [state]);
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: profile), [state]);
         await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
 
         var result = await Induct().InductAsync("L1", "BL1");
@@ -315,7 +315,7 @@ public sealed class SqlFidelityRulingTests
     public async Task Item9_DispatchFailure_StillStampsLastPrinted()
     {
         var state = new PrinterState("Ship1");
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]), [state]);
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]), [state]);
         await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
 
         var result = await Induct(gateway: new FailingGateway()).InductAsync("L1", "BL1");
@@ -329,7 +329,7 @@ public sealed class SqlFidelityRulingTests
     [Fact]
     public async Task Item10_SlotIsDrawnOnEveryInduct_IncludingNoPrint_AndRidesThePrintJob()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
         var induct = Induct(slots: new InMemorySlotIndexProvider());
 
@@ -347,15 +347,15 @@ public sealed class SqlFidelityRulingTests
     {
         var slots = new InMemorySlotIndexProvider(initialSlot: 300);
 
-        Assert.Equal(300, await slots.NextSlotAsync());
-        Assert.Equal(1, await slots.NextSlotAsync());
+        Assert.Equal(300, await slots.NextSlotAsync("PLC:1"));
+        Assert.Equal(1, await slots.NextSlotAsync("PLC:1"));
     }
 
     // ---- 11 + 12. Blind label required; reason codes, reject history, destinations ----------------
 
     private async Task<(VerifyStationService Verify, InMemoryRejectHistoryRepository Rejects)> VerifyFixtureAsync(IXRefStore? xref = null)
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         var order = await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
         order.SetAdviceMetadata(verifyPassDest: "Ship Lane", verifyFailDest: "Reject Lane");
         await _store.SaveAsync(order);
@@ -371,7 +371,8 @@ public sealed class SqlFidelityRulingTests
 
         var result = await verify.VerifyAsync("BL1", [new ScannedLabel("Shipping", "S1")], new VerifyOptions(), failThreshold: 3);
 
-        Assert.Equal(VerifyStationStatus.HeldForIntervention, result.Status);
+        // Reprint Labels defaults on → a verify fail re-arms the carton (owner ruling 2026-10-21, R7).
+        Assert.Equal(VerifyStationStatus.ReArmed, result.Status);
         Assert.Equal(VerifyReasonCode.BlindLabelNotDetected, result.Routing!.ReasonCode);
         Assert.Equal(VerifyReasonCode.BlindLabelNotDetected, Assert.Single(rejects.Records).Code);
     }
@@ -451,13 +452,15 @@ public sealed class SqlFidelityRulingTests
     // ---- 13a. OverwriteLabelData -------------------------------------------------------------------
 
     [Fact]
-    public async Task Item13a_OverwriteLabelDataOff_DuplicateUnprintedAdvice_OldestWins()
+    public async Task Item13a_OverwriteLabelDataOff_IsSuperseded_DuplicateUnprintedAdvice_NewWins()
     {
-        await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "FIRST")));
-        await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "SECOND")));
+        // Owner ruling 2026-10-21 (R8) overrules "oldest unprinted wins": new label data always overwrites.
+        var settings = await Settings(KnownSettings.OverwriteLabelData, false);
+        await Advice(settings).AdviseAsync("L1", "BL1", Labels(("Shipping", "FIRST")));
+        await Advice(settings).AdviseAsync("L1", "BL1", Labels(("Shipping", "SECOND")));
 
         var order = await _store.FindActiveByTuIdAsync("BL1");
-        Assert.Equal("FIRST", Assert.Single(order!.Labels.Labels).Lpn);
+        Assert.Equal("SECOND", Assert.Single(order!.Labels.Labels).Lpn);
     }
 
     [Fact]

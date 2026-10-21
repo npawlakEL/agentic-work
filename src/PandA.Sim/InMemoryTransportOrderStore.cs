@@ -87,6 +87,25 @@ public sealed class InMemoryTransportOrderStore : ITransportOrderStore
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask<bool> DeleteAsync(string tuId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Remove(tuId));
+    }
+
+    public ValueTask<IReadOnlyList<string>> FindTuIdsByWaveAsync(string waveId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(waveId);
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            IReadOnlyList<string> tuIds = [.. _byTuId.Values
+                .Where(o => string.Equals(o.WaveId, waveId, StringComparison.OrdinalIgnoreCase))
+                .Select(o => o.TuId)];
+            return ValueTask.FromResult(tuIds);
+        }
+    }
+
     /// <summary>Drop the order for <paramref name="tuId"/> (e.g. once its carton has left the simulated line).</summary>
     public bool Remove(string tuId)
     {

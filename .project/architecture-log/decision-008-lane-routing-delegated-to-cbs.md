@@ -59,3 +59,11 @@ The real econtroller platform already owns destination selection through
 ## Amendment — owner ruling 2026-10-21
 
 The verify routing criterion now carries `Pass|Fail`, the source reject reason code and the destination (`TransportOrder.VerifyPassDest` / `VerifyFailDest`, defaults `Verify - PASS` / `Verify - FAIL`), matching source procs `sdisp_TOOL_PA_VerifyLabel` L470 and `sdisp_TOOL_PA_GetFinalLaneFromStatus` L83-90. An unknown carton at verify routes `Fail` with code 0.
+
+## Amendment — owner ruling 2026-10-21, R9 (no profile → no print)
+
+A label whose line has **no active fire-point profile** is treated like a missing fire point: it is **not
+printed** (`LabelSelectionStatus.NoFirePoint`), a Warning is logged with carton, printer and line, and the
+remaining labels are evaluated the same way (so a line with no profile prints nothing). Previously such labels
+printed with a null fire point. Tests: `OwnerRulings20261021Tests.R9_*`,
+`InductServiceTests.Induct_NoActiveProfile_PrintsNothing`.

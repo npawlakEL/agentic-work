@@ -103,15 +103,30 @@ public sealed class VerificationMatrixTests
     // ---- Verify enabled / bypass (A6) -----------------------------------------------------------
 
     [Fact]
-    public void Disabled_WithBypass_Ignores()
+    public void Disabled_WithBypass_ToteIdRead_Passes()
+    {
+        // Owner ruling 2026-10-21 (R4; was Ignore/code 3): the tote id "C123" read under any label name passes.
+        var result = _sut.Verify(
+            Expected(("Shipping", "SHIP1")),
+            Scan(("Shipping", "C123")),
+            new VerifyOptions(VerifyEnabled: false, Bypass: true),
+            blindLabel: "C123");
+
+        Assert.Equal(VerifyOutcome.Pass, result.Outcome);
+        Assert.Equal(VerifyLabelReason.Matched, Assert.Single(result.Details).Reason);
+        Assert.Equal(VerifyReasonCode.VerificationPassed, VerifyReasonCodes.For(result));
+    }
+
+    [Fact]
+    public void Enabled_WithBypass_ToteIdRead_Passes_WithoutComparingLabels()
     {
         var result = _sut.Verify(
             Expected(("Shipping", "SHIP1")),
-            Scan(("Shipping", "ANYTHING")),
-            new VerifyOptions(VerifyEnabled: false, Bypass: true));
+            Scan(("BlindLabel", "C123")),
+            new VerifyOptions(VerifyEnabled: true, Bypass: true),
+            blindLabel: "C123");
 
-        Assert.Equal(VerifyOutcome.Ignore, result.Outcome);
-        Assert.Empty(result.Details);
+        Assert.Equal(VerifyOutcome.Pass, result.Outcome);
     }
 
     [Fact]

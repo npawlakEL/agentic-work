@@ -101,7 +101,7 @@ public sealed class ReprintLifecycleMatrixTests
         BuildInduct(LineConfig line, IEnumerable<PrinterState>? states = null, InMemorySettingsProvider? settings = null)
     {
         var store = new CountingTransportOrderStore();
-        var lines = new InMemoryLineProvider().Add(line, states);
+        var lines = new InMemoryLineProvider().AddCommissioned(line, states);
         var gw = new CapturingPrinterGateway();
         var svc = TestServices.Induct(store, lines, gw, new TestClock(T0), settings ?? new InMemorySettingsProvider());
         return (svc, store, gw);

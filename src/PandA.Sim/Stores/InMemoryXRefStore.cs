@@ -84,4 +84,16 @@ public sealed class InMemoryXRefStore : IXRefStore
             return ValueTask.FromResult(removed);
         }
     }
+
+    public ValueTask<int> RemoveByTuIdAsync(string tuId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tuId);
+        ct.ThrowIfCancellationRequested();
+
+        lock (_gate)
+        {
+            var removed = _entries.RemoveAll(entry => string.Equals(entry.TuId, tuId, StringComparison.Ordinal));
+            return ValueTask.FromResult(removed);
+        }
+    }
 }

@@ -14,8 +14,9 @@ public enum TransportOrderStatus
     Verified = 2,
 
     /// <summary>
-    /// Verify failed. The carton is held for manual intervention; it is NOT automatically made printable
-    /// again (decision-003 — corrects the source auto-re-arm hole).
+    /// Verify failed with <c>Reprint Labels</c> off. The carton is held for manual intervention (decision-003).
+    /// With <c>Reprint Labels</c> on, a verify fail instead re-arms the carton back to <see cref="Advised"/>
+    /// (owner ruling 2026-10-21, R7; see <see cref="TransportOrder.VerifyFailRearmed"/>).
     /// </summary>
     HeldForIntervention = 3,
 
@@ -165,6 +166,14 @@ public sealed class TransportOrder
     /// </summary>
     public bool TrackingRearmed { get; private set; }
 
+    /// <summary>
+    /// True when a verify fail re-armed the carton because <c>Reprint Labels</c> was on (owner ruling 2026-10-21,
+    /// R7 — the source <c>sdisp_TOOL_PA_VerifyLabel</c> L460-467 <c>Printed=0, ActiveRecord=1</c>). Permits the
+    /// next print run while the carton stays in <see cref="TransportOrderStatus.Advised"/>; cleared when that run
+    /// completes. No attempt cap: every further verify fail re-arms again while the setting is on.
+    /// </summary>
+    public bool VerifyFailRearmed { get; private set; }
+
     /// <summary>Per-label-type print outcome for the current run.</summary>
     public IReadOnlyCollection<LabelPrintState> PrintStates => _printStates.Values;
 
@@ -175,13 +184,14 @@ public sealed class TransportOrder
     }
 
     /// <summary>
-    /// True when the carton may be printed now: never printed and freshly advised, or an operator has
-    /// authorized a reprint (decision-003). A held/printed/verified carton without authorization may not.
+    /// True when the carton may be printed now: never printed and freshly advised, an operator has
+    /// authorized a reprint (decision-003), or the system re-armed it (tracking recovery / verify-fail re-arm).
+    /// A held/printed/verified carton without authorization may not.
     /// </summary>
     public bool CanPrint =>
         (PrintCount == 0 && Status == TransportOrderStatus.Advised)
         || Status == TransportOrderStatus.ReprintAuthorized
-        || (TrackingRearmed && Status == TransportOrderStatus.Advised);
+        || ((TrackingRearmed || VerifyFailRearmed) && Status == TransportOrderStatus.Advised);
 
     /// <summary>
     /// Induct print gate honoring the global <c>Reprint Labels</c> setting (source
@@ -246,6 +256,7 @@ public sealed class TransportOrder
         VerifyFailedAt = null;
         ReprintAuthorizationReason = null;
         TrackingRearmed = false;
+        VerifyFailRearmed = false;
         SetAdviceMetadata(waveId, profileName, bypass, verifyEnabled, verifyPassDest, verifyFailDest);
         _printStates = BuildPrintStates(labels);
     }
@@ -356,6 +367,7 @@ public sealed class TransportOrder
         Status = TransportOrderStatus.Printed;
         ReprintAuthorizationReason = null;
         TrackingRearmed = false;
+        VerifyFailRearmed = false;
     }
 
     /// <summary>Verify passed: carton is complete and may proceed (source ActiveRecord=0, VerifyTime set).</summary>
@@ -366,13 +378,29 @@ public sealed class TransportOrder
     }
 
     /// <summary>
-    /// Verify failed: hold the carton for manual intervention. The carton is NOT re-armed automatically
-    /// (decision-003). The advised set and print history are preserved.
+    /// Verify failed. With <paramref name="rearm"/> false (<c>Reprint Labels</c> off) the carton is held for
+    /// manual intervention (decision-003). With <paramref name="rearm"/> true (<c>Reprint Labels</c> on — owner
+    /// ruling 2026-10-21, R7) it is re-armed: back to <see cref="TransportOrderStatus.Advised"/> with its per-label
+    /// print states reset so its next induct prints it again — indefinitely, no attempt cap. The advised set,
+    /// the monotonic <see cref="PrintCount"/> and the first/last printed timestamps are preserved either way.
     /// </summary>
-    public void MarkVerifyFailed(DateTimeOffset failedAt)
+    public void MarkVerifyFailed(DateTimeOffset failedAt, bool rearm = false)
     {
-        Status = TransportOrderStatus.HeldForIntervention;
         VerifyFailedAt = failedAt;
+        if (!rearm)
+        {
+            Status = TransportOrderStatus.HeldForIntervention;
+            return;
+        }
+
+        Status = TransportOrderStatus.Advised;
+        VerifyFailRearmed = true;
+        VerifiedAt = null;
+        ReprintAuthorizationReason = null;
+        foreach (var state in _printStates.Values)
+        {
+            state.Reset();
+        }
     }
 
     /// <summary>

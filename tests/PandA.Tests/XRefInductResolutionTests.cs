@@ -40,7 +40,7 @@ public sealed class XRefInductResolutionTests
     [Fact]
     public async Task Induct_ByOlpnBarcode_ResolvesViaXref_AndPrints()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1")]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1")]));
         await _advice.AdviseAsync(new AdviceMessage(
             "L1", "BLIND1", Labels(),
             Barcodes: [new AdviceBarcode("OLPN9", BarcodeType.oLPN)]));
@@ -55,7 +55,7 @@ public sealed class XRefInductResolutionTests
     [Fact]
     public async Task Induct_UnknownBarcode_WithXref_ReturnsNoActiveOrder()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1")]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1")]));
         await _advice.AdviseAsync(new AdviceMessage(
             "L1", "BLIND1", Labels(),
             Barcodes: [new AdviceBarcode("OLPN9", BarcodeType.oLPN)]));
@@ -69,7 +69,7 @@ public sealed class XRefInductResolutionTests
     [Fact]
     public async Task Induct_SharedBarcode_ElectsLeastPrintedCarton()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1")]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1")]));
         // Two cartons in different waves share the same UPC.
         await _advice.AdviseAsync(new AdviceMessage(
             "L1", "BL-OLD", Labels(), Barcodes: [new AdviceBarcode("UPC5", BarcodeType.UPC)]));

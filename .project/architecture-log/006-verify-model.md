@@ -16,7 +16,7 @@
   tagged `BlindLabel`. Drop rows with null/empty barcode or `LabelName='Orientation'`.
 - **Content toggle (`VerifyContentLabel`):** when 0, verify only `Shipping`/`Exception` (drop other types
   from both scanned and expected).
-- **Enable/bypass:** `VerifyEnable=0` → if `Bypass=1` ⇒ `VerifyPass=3` (ignore/skip), else `0`.
+- **Enable/bypass:** `VerifyEnable=0` → if `Bypass=1` ⇒ `VerifyPass=3` (ignore/skip), else `0`. *(Port: superseded by owner ruling 2026-10-21 R4 — a bypass carton passes when its carton id is read, otherwise fails; decision-004 amendment.)*
   No PandaData record ⇒ `VerifyPass=0` (reject).
 
 ## B. Per-label comparison (cursor over scanned labels)

@@ -6,7 +6,7 @@ public static class KnownSettings
         new("Reprint Labels", true, "Allow labels to be reprinted globally (source fallback 1 when unset; decision-013 D2).");
 
     public static readonly SettingsDescriptor<bool> OverwriteLabelData =
-        new("OverwriteLabelData", false, "Duplicate advice: 1 replaces the existing advice; 0 appends and the oldest unprinted advice wins.");
+        new("OverwriteLabelData", false, "Superseded/ignored (owner ruling 2026-10-21, R8): new advice always overwrites the existing label data. Kept so the source settings table still loads.");
 
     public static readonly SettingsDescriptor<bool> PrintExceptionLabels =
         new("PrintExceptionLabels", false, "Print local exception labels.");

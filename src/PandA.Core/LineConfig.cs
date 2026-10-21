@@ -25,7 +25,8 @@ public sealed class LineConfig
         string? defaultProfile = null,
         bool filterLabels = true,
         bool? printExceptionLabels = null,
-        bool? twoPrinterRule = null)
+        bool? twoPrinterRule = null,
+        int? plcNumber = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentNullException.ThrowIfNull(printers);
@@ -49,6 +50,7 @@ public sealed class LineConfig
         FilterLabels = filterLabels;
         PrintExceptionLabels = printExceptionLabels;
         TwoPrinterRule = twoPrinterRule;
+        PlcNumber = plcNumber is > 0 ? plcNumber : null;
     }
 
     public string LineId { get; }
@@ -108,4 +110,11 @@ public sealed class LineConfig
     /// exactly one online printer slow instead of promoting a spare (source <c>sdisp_PA_LaneEval</c>).
     /// </summary>
     public bool? TwoPrinterRule { get; }
+
+    /// <summary>
+    /// The line's PLC number (UI <c>LineDto.PlcNumber</c>), identifying the PLC/controller the line belongs to.
+    /// Lines with the same PLC number share one carton-assign slot counter (owner ruling 2026-10-21, R2; see
+    /// <see cref="Slots.SlotControllerKey"/>). <c>null</c> (or a non-positive value) = unset → the line is its own controller.
+    /// </summary>
+    public int? PlcNumber { get; }
 }

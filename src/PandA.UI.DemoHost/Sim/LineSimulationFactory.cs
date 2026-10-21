@@ -45,7 +45,8 @@ internal static class LineSimulationFactory
             bufferOrder: new LabelBufferOrder(line.BufferOrder.Select((labelType, index) => new LabelBufferPosition(index + 1, labelType))),
             activeProfile: profile,
             encoderResolution: (decimal)line.EncoderResolutionInchesPerPulse,
-            twoPrinterRule: line.TwoPrinterRuleEnabled);
+            twoPrinterRule: line.TwoPrinterRuleEnabled,
+            plcNumber: line.PlcNumber);
 
         var lineProvider = new InMemoryLineProvider(db.PrinterStates).Add(config, printers.Select(p =>
         {
@@ -91,6 +92,7 @@ internal static class LineSimulationFactory
             db.CreateThresholdTracker(),
             clock,
             db.Locks,
+            settings,
             NullLogger<VerifyStationService>.Instance,
             new DemoRejectHistoryRepository(store, line.LineId!, profile?.Name ?? string.Empty));
 

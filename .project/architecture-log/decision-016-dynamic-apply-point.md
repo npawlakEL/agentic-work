@@ -87,3 +87,11 @@ shorter carton → larger correction → fires earlier. Matches physical behavio
 - Source: `8.0_CreateSP/sdisp_TOOL_CUSTOM_DynamicApplyPoint.sql`; table `PandaCartonList`
   (CartonLength/Width/Height/Weight/FrontGap). decision-011 (fire-point Map/Profile model;
   print=int static, apply=inch+edge).
+
+## Amendment — owner ruling 2026-10-21, R12 (apply-point logging)
+
+`InductService` logs each calculated dynamic apply point at **Debug** (carton TuId, printer id, the apply
+point, the resulting pulse, carton length) and invalid apply inputs at **Warning** (with TuId and printer id),
+mirroring the LogLevel-30 events in `sdisp_TOOL_CUSTOM_DynamicApplyPoint.sql`. An invalid input no longer
+aborts the induct: the label prints with the static apply point (null `ApplyPulse`). The rounding
+`Math.Round(…, MidpointRounding.AwayFromZero)` is **kept** (owner choice). Tests: `OwnerRulings20261021Tests.R12_*`.

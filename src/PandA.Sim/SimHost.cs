@@ -52,7 +52,7 @@ public sealed class SimHost
         _induct = new InductService(
             _store, _lines, new PrinterSelectionService(), _gateway, _clock, settings,
             _db.PrinterStates, _db.Locks, _db.Slots, _db.Runs);
-        _verify = new VerifyStationService(_store, new VerificationService(), _db.CreateThresholdTracker(), _clock, _db.Locks);
+        _verify = new VerifyStationService(_store, new VerificationService(), _db.CreateThresholdTracker(), _clock, _db.Locks, settings);
         Seed();
     }
 

@@ -161,14 +161,29 @@ public sealed class VerificationServiceTests
     }
 
     [Fact]
-    public void Disabled_WithBypass_Ignores()
+    public void Disabled_WithBypass_CartonIdRead_Passes()
+    {
+        // Owner ruling 2026-10-21 (R4; was Ignore): a bypass carton whose id is read passes.
+        var result = _sut.Verify(
+            Expected(("Shipping", "SHIP1")),
+            Scanned(("BlindLabel", "C123"), ("Shipping", "WRONG")),
+            new VerifyOptions(VerifyEnabled: false, Bypass: true),
+            blindLabel: "C123");
+
+        Assert.Equal(VerifyOutcome.Pass, result.Outcome);
+    }
+
+    [Fact]
+    public void Disabled_WithBypass_CartonIdNotRead_FailsMissing()
     {
         var result = _sut.Verify(
             Expected(("Shipping", "SHIP1")),
             Scanned(("Shipping", "WRONG")),
-            new VerifyOptions(VerifyEnabled: false, Bypass: true));
+            new VerifyOptions(VerifyEnabled: false, Bypass: true),
+            blindLabel: "C123");
 
-        Assert.Equal(VerifyOutcome.Ignore, result.Outcome);
+        Assert.Equal(VerifyOutcome.Fail, result.Outcome);
+        Assert.Equal(VerifyLabelReason.Missing, Assert.Single(result.Details).Reason);
     }
 
     [Fact]

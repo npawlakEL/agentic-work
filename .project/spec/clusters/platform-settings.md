@@ -38,7 +38,7 @@ Settings(
 | RecID | VariableName | Seed Value | Proc-default if auto-created | Notes |
 |---|---|---|---|---|
 | 17 | `Reprint Labels` | **0** | 1 (in LookupCarton call) | Seed wins; default-deny reprints |
-| 27 | `OverwriteLabelData` | 0 | 0 | Append/oldest-wins by default |
+| 27 | `OverwriteLabelData` | 0 | 0 | **Superseded/ignored** — new advice always overwrites (owner ruling 2026-10-21, R8) |
 | 12 | `PrintExceptionLabels` | 0 | 1 | Seed overrides; no exception labels default |
 | 1 | `DCMSExceptions` | 0 | 0 | Local exception labels |
 | 9 | `MinGap` | 20 | 20 | Carton-gap threshold (units: PLC distance ticks) |
@@ -284,7 +284,8 @@ PandA.Sim/Stores/InMemoryXRefStore.cs             — dictionary-backed
 1. `XRefService.AssociateAsync(tuId, oLPN, waveId)` succeeds when the carton exists in an active (non-COMPLETED) wave with the given `waveId`.
 2. `XRefService.AssociateAsync` returns `ErrorCode=AlreadyAssociated` when the carton already has an oLPN xref row.
 3. `XRefService.AssociateAsync` returns `ErrorCode=NotFound` when no xref matches `(OrderID, WaveID)` in an active wave.
-4. `XRefService.DisassociateAsync(oLPN)` deletes the xref row and returns the count deleted.
+4. `XRefService.DisassociateAsync(oLPN)` deletes the xref row, logs the deletion at Information (`Deleted oLPN … which was N record(s) in xref`, source L37-51) and returns the count deleted (owner ruling 2026-10-21, R11).
+4a. Purging a carton or wave (`CartonPurgeService.PurgeCartonAsync` / `PurgeWaveAsync`) deletes the carton's transport order **and all its xref rows** (`IXRefStore.RemoveByTuIdAsync`; source `sdisp_TOOL_CUSTOM_Wave_Delete` L69), logging at Information (R11).
 5. After `AssociateAsync`, `IXRefStore.FindActiveByBarcodeAsync(oLPN)` returns the associated `TransportOrder`.
 6. `InductService` with a scan of an oLPN barcode (no BL xref) resolves to the correct `TransportOrder` via `FindActiveByBarcodeAsync`.
 7. `CartonAdviceService.AdviseAsync` inserts xref rows for BL/UPC/GTIN/EAN/ItemID from the `PandaLabelSet` when provided.
@@ -331,10 +332,10 @@ PandA.Core/Domain/InductResult.cs         — add SlotIndex property
 ```
 
 **Multi-host contract (decision-010, owner 2026-10-21):** PandA runs as multiple hosts over the shared eController database, so the slot counter is a **shared atomic counter**. A per-process counter is not valid.
-- Every host draws from one 1..300 CYCLE sequence, just as every caller of the source drew from `dbo.CartonAssignSeq`.
+- Every host draws from the same 1..300 CYCLE sequence **for a given controller**.
 - The eController adapter implements it as a `PandaCounter` row advanced by a conditional-update CAS loop (`Update().Set(Value = next, Version = v + 1).Where(Key == k && Version == v)`, affected rows == 1). See the decision-010 adapter guide §5.
 - There is no SQL `SEQUENCE`; it is not portable across eController backends.
-- **Scope:** one global counter today, because no PLC identifier is available at induct. When a PLC id is available, the adapter keys one counter row per PLC (`CartonAssignSeq:{plcId}`). Each PLC has its own `vPA.Assign[]` array, so per-PLC counters are equivalent and remove cross-PLC contention.
+- **Scope (owner ruling 2026-10-21, R2):** one counter **per PLC/controller**. `ISlotIndexProvider.NextSlotAsync(controllerKey, ct)`; `SlotControllerKey.For(line)` yields `PLC:{PlcNumber}` (or `LINE:{LineId}` when the line has no PLC number). Each PLC has its own `vPA.Assign[]` array, so slots only need to be unique per controller. Lines sharing a PLC number share a counter. `InMemorySlotIndexProvider` keeps an independent CAS counter per key; the adapter keys one `PandaCounter` row per controller (`CartonAssignSeq:{controllerKey}`). Tests: `OwnerRulings20261021Tests.R2_*`.
 
 ### Dependencies
 - Depends on `InductService` (slot assigned at induct time, stored on `InductResult`)

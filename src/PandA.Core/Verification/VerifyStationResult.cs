@@ -3,10 +3,10 @@ namespace PandA.Core.Verification;
 /// <summary>Station-level outcome of a verify scan, tying the pure verify result to the carton lifecycle.</summary>
 public enum VerifyStationStatus
 {
-    /// <summary>Verify passed (or was bypassed); the carton is marked verified and may proceed.</summary>
+    /// <summary>Verify passed (incl. a bypass carton whose id was read); the carton is marked verified and may proceed.</summary>
     Verified = 0,
 
-    /// <summary>Verify failed; the carton is held for manual intervention (decision-003; no auto re-arm).</summary>
+    /// <summary>Verify failed with <c>Reprint Labels</c> off; the carton is held for manual intervention (decision-003).</summary>
     HeldForIntervention = 1,
 
     /// <summary>
@@ -15,6 +15,12 @@ public enum VerifyStationStatus
     /// destination (owner ruling 2026-10-21).
     /// </summary>
     NoActiveOrder = 2,
+
+    /// <summary>
+    /// Verify failed with <c>Reprint Labels</c> on; the carton was re-armed so its next induct prints it again
+    /// (owner ruling 2026-10-21, R7). It still routes to the fail destination and counts toward the fail streak.
+    /// </summary>
+    ReArmed = 3,
 }
 
 /// <summary>Result of a verify-station scan.</summary>

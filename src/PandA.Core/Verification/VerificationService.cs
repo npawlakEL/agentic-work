@@ -27,29 +27,19 @@ public sealed class VerificationService : IVerificationService
         ArgumentNullException.ThrowIfNull(scanned);
         ArgumentNullException.ThrowIfNull(options);
 
-        // Disabled verify: bypassed cartons are ignored (VerifyPass=3); otherwise a hard fail (reject).
+        // Owner ruling 2026-10-21 (R4): a Bypass carton (no labels printed) must NOT fail verify just for being
+        // bypassed. If the scanner read the carton id (the blind label / tote id, or one of its 'BlindLabel' xref
+        // aliases) the carton PASSES — whatever VerifyEnabled says. A bypass carton whose id was not read still
+        // fails normally (no-read / no-data / conflict / mismatch / missing).
+        if (options.Bypass)
+        {
+            return VerifyBypass(scanned, xref, blindLabel);
+        }
+
+        // Disabled verify on a non-bypass carton: hard fail (reject).
         if (!options.VerifyEnabled)
         {
-            if (!options.Bypass)
-            {
-                return new VerifyResult(VerifyOutcome.Fail, []);
-            }
-
-            // Bypass proceeds without comparing to the expected set — EXCEPT a scanner no-read / no-data
-            // is not a valid bypass (a glitched read), so it still fails and counts toward the fail streak
-            // (decision-004 / VF-3).
-            foreach (var scan in scanned)
-            {
-                var glitch = Classify(scan.ScannedValue);
-                if (glitch is VerifyLabelReason.NoRead or VerifyLabelReason.NoData)
-                {
-                    return Fail(
-                        [new VerifyLabelDetail(scan.LabelType, null, scan.ScannedValue, glitch)],
-                        ToOutcome(glitch));
-                }
-            }
-
-            return new VerifyResult(VerifyOutcome.Ignore, []);
+            return new VerifyResult(VerifyOutcome.Fail, []);
         }
 
         var acceptable = BuildXrefLookup(xref);
@@ -98,6 +88,58 @@ public sealed class VerificationService : IVerificationService
 
         return new VerifyResult(VerifyOutcome.Pass, details);
     }
+    private static VerifyResult VerifyBypass(
+        IReadOnlyList<ScannedLabel> scanned,
+        IReadOnlyList<LabelXref>? xref,
+        string? blindLabel)
+    {
+        var cartonIds = new HashSet<string>(StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(blindLabel))
+        {
+            cartonIds.Add(blindLabel);
+        }
+
+        if (BuildXrefLookup(xref).TryGetValue(BlindLabelType, out var aliases))
+        {
+            cartonIds.UnionWith(aliases);
+        }
+
+        var primary = blindLabel ?? cartonIds.FirstOrDefault();
+
+        // Any read of the carton id passes (the scanner may report it under any label name).
+        foreach (var scan in scanned)
+        {
+            if (cartonIds.Contains(scan.ScannedValue))
+            {
+                return new VerifyResult(
+                    VerifyOutcome.Pass,
+                    [new VerifyLabelDetail(BlindLabelType, primary, scan.ScannedValue, VerifyLabelReason.Matched)]);
+            }
+        }
+
+        // Carton id not read: fail with the carton-id read's own classification when there was one ...
+        var idRead = scanned.FirstOrDefault(
+            s => string.Equals(s.LabelType, BlindLabelType, StringComparison.OrdinalIgnoreCase));
+        if (idRead is not null)
+        {
+            var reason = Classify(idRead.ScannedValue);
+            return Fail([new VerifyLabelDetail(BlindLabelType, primary, idRead.ScannedValue, reason)], ToOutcome(reason));
+        }
+
+        // ... else with the first scanner glitch (no-read / no-data) ...
+        foreach (var scan in scanned)
+        {
+            var glitch = Classify(scan.ScannedValue);
+            if (glitch is VerifyLabelReason.NoRead or VerifyLabelReason.NoData)
+            {
+                return Fail([new VerifyLabelDetail(scan.LabelType, null, scan.ScannedValue, glitch)], ToOutcome(glitch));
+            }
+        }
+
+        // ... else the carton id is missing (reason 14).
+        return Fail([new VerifyLabelDetail(BlindLabelType, primary, null, VerifyLabelReason.Missing)], VerifyOutcome.Fail);
+    }
+
     private static VerifyResult Fail(List<VerifyLabelDetail> details, VerifyOutcome outcome) =>
         new(outcome, details);
 

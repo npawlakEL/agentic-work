@@ -46,7 +46,7 @@ public sealed class MultiHostTests
             Lines = new InMemoryLineProvider(db.PrinterStates);
             foreach (var line in TwoLanes)
             {
-                Lines.Add(line);
+                Lines.AddCommissioned(line);
             }
 
             var clock = new TestClock(T0);
@@ -177,6 +177,12 @@ public sealed class MultiHostTests
 
         public ValueTask InsertAsync(TransportOrder transportOrder, CancellationToken cancellationToken = default) =>
             inner.InsertAsync(transportOrder, cancellationToken);
+
+        public ValueTask<bool> DeleteAsync(string tuId, CancellationToken cancellationToken = default) =>
+            inner.DeleteAsync(tuId, cancellationToken);
+
+        public ValueTask<IReadOnlyList<string>> FindTuIdsByWaveAsync(string waveId, CancellationToken cancellationToken = default) =>
+            inner.FindTuIdsByWaveAsync(waveId, cancellationToken);
 
         public async ValueTask UpdateAsync(TransportOrder transportOrder, CancellationToken cancellationToken = default)
         {
@@ -411,7 +417,8 @@ public sealed class MultiHostTests
         for (var i = 1; i <= 6; i++)
         {
             var host = i % 2 == 1 ? a : b;
-            var lane = i % 2 == 1 ? "L1" : "L2";
+            // Same line (= same controller) on both hosts: per-controller counters (R2) are still host-shared.
+            const string lane = "L1";
             await host.Advice.AdviseAsync(lane, $"BL{i}", Labels(("Shipping", $"S{i}")));
             slots.Add((await host.Induct.InductAsync(lane, $"BL{i}")).Slot);
         }
@@ -423,13 +430,13 @@ public sealed class MultiHostTests
     public async Task F_SlotSequence_DrawnConcurrently_CoversOneTo300ExactlyOncePerCycle_ThenWraps()
     {
         var db = new SimSharedDatabase();
-        var draws = Enumerable.Range(0, 600).Select(_ => Task.Run(() => db.Slots.NextSlotAsync().AsTask()));
+        var draws = Enumerable.Range(0, 600).Select(_ => Task.Run(() => db.Slots.NextSlotAsync("PLC:1").AsTask()));
 
         var values = await Task.WhenAll(draws);
 
         Assert.All(values, v => Assert.InRange(v, 1, 300));
         Assert.All(values.GroupBy(v => v), g => Assert.Equal(2, g.Count()));
-        Assert.Equal(1, await db.Slots.NextSlotAsync());
+        Assert.Equal(1, await db.Slots.NextSlotAsync("PLC:1"));
     }
 
     // ---- (g) lease expiry lets a second host proceed after the holder crashes --------------------------
@@ -526,7 +533,7 @@ public sealed class MultiHostTests
         var db = new SimSharedDatabase();
         var rogue = new RogueWriterStore(db.Orders) { RogueMutation = o => o.SetAdviceMetadata(waveId: "ROGUE") };
         var gateway = new GatedGateway(released: true);
-        var lines = new InMemoryLineProvider(db.PrinterStates).Add(TwoLanes[0]);
+        var lines = new InMemoryLineProvider(db.PrinterStates).AddCommissioned(TwoLanes[0]);
         var induct = TestServices.Induct(rogue, lines, gateway, new TestClock(T0), TestSettings.ReprintOff(),
             runs: db.Runs, slots: db.Slots, locks: db.Locks.ForHost("A"));
         await TestServices.Advice(db.Orders, new TestClock(T0), locks: db.Locks.ForHost("A"))

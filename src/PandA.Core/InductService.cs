@@ -130,7 +130,7 @@ public sealed class InductService : IInductService
                 ex,
                 "Induct scan {TuId} on line {LineId} not processed: carton lease {Resource} is held by another host.",
                 scan.BlindLabel, scan.LineId, ex.Resource);
-            var slot = await _slots.NextSlotAsync(cancellationToken).ConfigureAwait(false);
+            var slot = await NextSlotAsync(scan.LineId, cancellationToken).ConfigureAwait(false);
             return InductResult.LockTimeout().WithSlot(slot);
         }
         finally
@@ -150,8 +150,9 @@ public sealed class InductService : IInductService
         var blindLabel = scan.BlindLabel;
 
         // Source sdisp_PA_PickPrinter L97-101: every induct (including no-print outcomes) draws the next
-        // PLC carton-assign slot from CartonAssignSeq (1..300 CYCLE) — owner ruling 2026-10-21.
-        var slot = await _slots.NextSlotAsync(cancellationToken).ConfigureAwait(false);
+        // PLC carton-assign slot from CartonAssignSeq (1..300 CYCLE) — owner ruling 2026-10-21. The counter is the
+        // line's controller's own (R2, owner ruling 2026-10-21).
+        var slot = await NextSlotAsync(scan.LineId, cancellationToken).ConfigureAwait(false);
 
         var order = await _store.FindActiveByTuIdAsync(blindLabel, cancellationToken).ConfigureAwait(false);
         if (order is null)
@@ -172,6 +173,47 @@ public sealed class InductService : IInductService
 
         var result = await InductOrderAsync(scan, order, slot, leases, cancellationToken).ConfigureAwait(false);
         return result.WithSlot(slot);
+    }
+
+    /// <summary>
+    /// DYNAP with the source's logging (owner ruling 2026-10-21, R12; <c>sdisp_TOOL_CUSTOM_DynamicApplyPoint</c> logs
+    /// both at LogLevel 30): each calculated dynamic apply point is logged at Debug and invalid apply code/inputs at
+    /// Warning, with the carton and printer. An invalid input leaves the pulse null (the static apply point is used).
+    /// </summary>
+    private int? ResolveDynamicApplyPoint(
+        ApplyPoint applyPoint,
+        CartonDimensions carton,
+        ApplyPointConfig config,
+        string tuId,
+        string printerId)
+    {
+        try
+        {
+            var pulse = _applyPoints.Resolve(applyPoint, ApplyOrientation.Side, carton, config);
+            _logger.LogDebug(
+                "Dynamic apply point for transport order {TuId} on printer {PrinterId}: turned {ApplyPoint} into {ApplyPulse} (carton length {CartonLength}).",
+                tuId, printerId, applyPoint, pulse, carton.CartonLengthPulses);
+            return pulse;
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Invalid dynamic apply point {ApplyPoint} for transport order {TuId} on printer {PrinterId}; static apply point used.",
+                applyPoint, tuId, printerId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Draw the next carton-assign slot from the counter of the PLC/controller the line belongs to (R2). An unknown
+    /// line still gets a slot, from its own line-keyed counter.
+    /// </summary>
+    private async ValueTask<int> NextSlotAsync(string lineId, CancellationToken cancellationToken)
+    {
+        var context = await _lines.GetLineAsync(lineId, cancellationToken).ConfigureAwait(false);
+        var key = context is { } line ? SlotControllerKey.For(line.Config) : SlotControllerKey.ForLine(lineId);
+        return await _slots.NextSlotAsync(key, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -402,47 +444,54 @@ public sealed class InductService : IInductService
                 runPrinterRecorded = true;
             }
 
-            // Resolve the print/apply firing points from the carton's resolved fire-point profile (if any).
-            FirePoint? firePoint = null;
-            int? applyPulse = null;
-            if (activeProfile is { } profile)
+            // Owner ruling 2026-10-21 (R9): no profile → no fire point is resolvable → the label is NOT printed.
+            // Skipped exactly like the missing-fire-point case below (ErrorCode 2; LastPrinted still stamped).
+            if (activeProfile is null)
             {
-                var resolution = _firePoints.Resolve(profile, printer.PrinterId, label.LabelType);
-                firePoint = resolution.FirePoint;
+                outcomes[i] = LabelAssignment.NoFirePoint(label, printer.PrinterId);
+                await StampLastPrintedAsync(printer.PrinterId, now, cancellationToken).ConfigureAwait(false);
+                _logger.LogWarning(
+                    "No fire-point profile for label {LabelType} of transport order {TuId} on printer {PrinterId} (line {LineId}); label skipped.",
+                    label.LabelType, order.TuId, printer.PrinterId, lineId);
+                continue;
+            }
 
-                // Owner ruling 2026-10-21 (source sdisp_PA2BP_SendPrinterFirePoints L152-155/L178-181): no
-                // fire-point row, a tracking device of 0, or a NeglectPrint "0…" print point is ErrorCode 2 —
-                // the label is skipped and NOT printed. LastPrinted is still stamped (PickPrinter L469-473).
-                if (firePoint is not { NeglectPrint: false })
-                {
-                    outcomes[i] = LabelAssignment.NoFirePoint(label, printer.PrinterId);
-                    await StampLastPrintedAsync(printer.PrinterId, now, cancellationToken).ConfigureAwait(false);
-                    _logger.LogWarning(
-                        "No usable fire point for label {LabelType} of transport order {TuId} on printer {PrinterId} (line {LineId}); label skipped.",
-                        label.LabelType, order.TuId, printer.PrinterId, lineId);
-                    continue;
-                }
+            // Resolve the print/apply firing points from the carton's resolved fire-point profile.
+            int? applyPulse = null;
+            var firePoint = _firePoints.Resolve(activeProfile, printer.PrinterId, label.LabelType).FirePoint;
 
-                // DYNAP (decision-016): convert the human APPLY point (inch/edge) into a carton-aware PLC
-                // pulse when the carton's physical dimensions are known. PRINT point stays static. Top-apply
-                // additionally needs tamp kinematics (not yet commissioned) so it is left null for now.
-                // The line's DynamicPrintPoint switch disables the dynamic pulse entirely.
-                if (context.Config.DynamicPrintPoint
-                    && firePoint is { } fp
-                    && order.InductMeasurements is { } m
-                    && m.Length > 0
-                    && printer.PrinterType == ApplyOrientation.Side)
-                {
-                    var applyConfig = new ApplyPointConfig(
-                        EncoderResolution: context.Config.EncoderResolution,
-                        LabelWidthInches: printer.LabelWidthInches,
-                        DefaultApplyDistance: printer.DefaultApplyDistance);
-                    // Side-apply math ignores height; Length is already in step pulses. When Top-apply is
-                    // commissioned, Height (PLC units) must be converted to inches before it feeds the
-                    // tamp-kinematic lead correction (which is inch-based). Gated to Side keeps that latent.
-                    var dims = new CartonDimensions(m.Length, m.Height);
-                    applyPulse = _applyPoints.Resolve(fp.ApplyFirePoint, ApplyOrientation.Side, dims, applyConfig);
-                }
+            // Owner ruling 2026-10-21 (source sdisp_PA2BP_SendPrinterFirePoints L152-155/L178-181): no
+            // fire-point row, a tracking device of 0, or a NeglectPrint "0…" print point is ErrorCode 2 —
+            // the label is skipped and NOT printed. LastPrinted is still stamped (PickPrinter L469-473).
+            if (firePoint is not { NeglectPrint: false })
+            {
+                outcomes[i] = LabelAssignment.NoFirePoint(label, printer.PrinterId);
+                await StampLastPrintedAsync(printer.PrinterId, now, cancellationToken).ConfigureAwait(false);
+                _logger.LogWarning(
+                    "No usable fire point for label {LabelType} of transport order {TuId} on printer {PrinterId} (line {LineId}); label skipped.",
+                    label.LabelType, order.TuId, printer.PrinterId, lineId);
+                continue;
+            }
+
+            // DYNAP (decision-016): convert the human APPLY point (inch/edge) into a carton-aware PLC
+            // pulse when the carton's physical dimensions are known. PRINT point stays static. Top-apply
+            // additionally needs tamp kinematics (not yet commissioned) so it is left null for now.
+            // The line's DynamicPrintPoint switch disables the dynamic pulse entirely.
+            if (context.Config.DynamicPrintPoint
+                && firePoint is { } fp
+                && order.InductMeasurements is { } m
+                && m.Length > 0
+                && printer.PrinterType == ApplyOrientation.Side)
+            {
+                var applyConfig = new ApplyPointConfig(
+                    EncoderResolution: context.Config.EncoderResolution,
+                    LabelWidthInches: printer.LabelWidthInches,
+                    DefaultApplyDistance: printer.DefaultApplyDistance);
+                // Side-apply math ignores height; Length is already in step pulses. When Top-apply is
+                // commissioned, Height (PLC units) must be converted to inches before it feeds the
+                // tamp-kinematic lead correction (which is inch-based). Gated to Side keeps that latent.
+                var dims = new CartonDimensions(m.Length, m.Height);
+                applyPulse = ResolveDynamicApplyPoint(fp.ApplyFirePoint, dims, applyConfig, order.TuId, printer.PrinterId);
             }
 
             var zpl = PrepareZpl(context.Config, label.Zpl);

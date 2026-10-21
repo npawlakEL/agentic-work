@@ -50,3 +50,12 @@ Consequences:
 ## Amendment — owner ruling 2026-10-21
 
 `KnownSettings.ReprintLabels` default is now **true** (D2; matches source proc `sdisp_PA_LookupCarton` fallback `'1'`). Re-advice (`CartonAdviceService`): label data/metadata is always updated; a carton that has printed is re-armed only when `Reprint Labels` is on, otherwise it stays locked (D4). `OverwriteLabelData` (source `Job.sql` L219-231) is read: 0 (seed) → while unprinted the **oldest** advice wins (source appends and `LookupCarton` picks the oldest row); 1 → the newest advice replaces it. Single-TO model approximation: there is no multi-row history.
+
+## Amendment — owner ruling 2026-10-21, R8 (new label data always overwrites)
+
+New advice for an existing carton **always replaces** its label data; the "oldest unprinted advice wins"
+branch is removed. `OverwriteLabelData` is **superseded/ignored** (no longer read; kept in `KnownSettings` so
+the source settings table still loads). Re-arm on re-advice is unchanged: re-armed when `Reprint Labels` is on
+or the carton has not printed yet; otherwise the new data is stored but the carton stays locked until
+`AuthorizeReprint`. Tests: `OwnerRulings20261021Tests.R8_*`,
+`SqlFidelityRulingTests.Item13a_OverwriteLabelDataOff_IsSuperseded_DuplicateUnprintedAdvice_NewWins`.

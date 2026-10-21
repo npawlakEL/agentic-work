@@ -130,23 +130,11 @@ public sealed class CartonAdviceService : ICartonAdviceService
         else
         {
             order = existing;
-            var overwriteLabelData = await _settings.GetAsync(KnownSettings.OverwriteLabelData, cancellationToken).ConfigureAwait(false);
+            // Owner ruling 2026-10-21 (R8): new advice/label data ALWAYS overwrites (replaces) the existing label
+            // data — the former OverwriteLabelData=0 "oldest unprinted advice wins" path is removed and the setting
+            // is superseded (ignored).
             var reprintLabels = await _settings.GetAsync(KnownSettings.ReprintLabels, cancellationToken).ConfigureAwait(false);
-
-            if (!overwriteLabelData && !existing.HasPrinted)
-            {
-                // Source Job.sql L219-231 with OverwriteLabelData=0 appends a second active PandaData row and
-                // keeps the old one; LookupCarton (CreationTime ASC when 0) then prints the OLDEST unprinted
-                // row first. Single-TO approximation: the existing, still-unprinted advice wins and the
-                // duplicate is not applied (owner ruling 2026-10-21).
-                _logger.LogInformation(
-                    "Duplicate advice for unprinted transport order {TuId} on line {LineId} not applied (OverwriteLabelData off: oldest advice wins).",
-                    advice.BlindLabel, advice.LineId);
-            }
-            else
-            {
-                Overwrite(existing, advice, now, reprintLabels);
-            }
+            Overwrite(existing, advice, now, reprintLabels);
         }
 
         // F23: wave create/update here.
@@ -156,8 +144,7 @@ public sealed class CartonAdviceService : ICartonAdviceService
 
     private void Overwrite(TransportOrder existing, AdviceMessage advice, DateTimeOffset now, bool reprintLabels)
     {
-        // OverwriteLabelData=1 replaces the advice (last wins). With 0 and an already-printed carton the
-        // appended row is the only unprinted one, so the new data is what the SQL would print next.
+        // New advice replaces the label data (last wins — owner ruling 2026-10-21, R8).
         // Re-arming is governed by "Reprint Labels" (decision-013 D4 / owner ruling 2026-10-21): off →
         // update the label data but keep a printed carton locked; on → re-arm a new generation.
         var rearm = reprintLabels || !existing.HasPrinted;

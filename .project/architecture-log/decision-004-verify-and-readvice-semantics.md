@@ -74,3 +74,19 @@ VF-1, VF-2 and VF-3 are superseded; C# now matches source proc `sdisp_TOOL_PA_Ve
 - Every non-pass maps to a source `VerifyReasonCode` (no-read family 20/22/27/14, incorrect 21/23/29, conflict 15/28, scan error 12, PandA logic/no data 0, bypass 3) and writes reject history (`sdisp_PA_Scan_Verify` L117-132).
 - The fail streak is counted **per printer that printed the carton** (`sdisp_PA_VerifyThreshold_Update` L129-186); on trip the printers are returned for pause and their counters reset (`_Refresh`), a pass resets them.
 AD-1 is refined by decision-013 amendment (re-arm governed by `Reprint Labels`).
+
+## Amendment — owner rulings 2026-10-21 (R4 bypass, R12 xref alternates)
+
+- **R4 — a bypass carton passes verify when its carton id is read** (supersedes VF-3 and the "bypass 3" code
+  in the amendment above). A bypass carton prints no labels at induct. At verify, if any scan matches the
+  carton id (the TuId, e.g. tote `C123`, or one of its `BlindLabel` xref aliases) the carton **passes**: Pass
+  destination, no reject record, the per-printer fail streak is not incremented. Other label reads are not
+  compared. If the carton id was not read (no read, no data, wrong value, missing) the bypass carton fails
+  normally with the matching reason code (e.g. 14) and writes reject history. This applies whether or not
+  verify is enabled for the carton. `VerifyOutcome.Ignore` / reason code 3 are no longer produced (enum kept).
+  Code: `VerificationService.VerifyBypass`. Tests: `OwnerRulings20261021Tests.R4_*`,
+  `VerificationServiceTests.Disabled_WithBypass_*`, `VerificationMatrixTests.*WithBypass*`,
+  `LifecyclePermutationTests.Station_Bypass_*`.
+- **Owner ruling (kept behavior) — non-blind xref alternates substitute for label slots of their type.** An
+  xref alternate value recorded for a non-blind label type may satisfy the expected slot of that type at
+  verify. The owner reviewed this and chose to **keep** it; no code change.

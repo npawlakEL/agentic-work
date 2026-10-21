@@ -50,10 +50,11 @@ public sealed class LifecyclePermutationTests
     {
         // because, scannedValue, expectedStation
         yield return ["correct scan verifies", "SHIP1", VerifyStationStatus.Verified];
-        yield return ["wrong scan holds", "WRONG", VerifyStationStatus.HeldForIntervention];
-        yield return ["no-read holds", "SH?P", VerifyStationStatus.HeldForIntervention];
-        yield return ["no-data holds", "0", VerifyStationStatus.HeldForIntervention];
-        yield return ["conflict holds", "SH#P", VerifyStationStatus.HeldForIntervention];
+        // 'Reprint Labels' defaults on → every verify fail re-arms the carton (owner ruling 2026-10-21, R7).
+        yield return ["wrong scan re-arms", "WRONG", VerifyStationStatus.ReArmed];
+        yield return ["no-read re-arms", "SH?P", VerifyStationStatus.ReArmed];
+        yield return ["no-data re-arms", "0", VerifyStationStatus.ReArmed];
+        yield return ["conflict re-arms", "SH#P", VerifyStationStatus.ReArmed];
     }
 
     [Theory]
@@ -61,7 +62,7 @@ public sealed class LifecyclePermutationTests
     public async Task Advise_Induct_Verify_EndsInExpectedStatus(
         string because, string scanned, VerifyStationStatus expected)
     {
-        _lines.Add(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         var induct = await _induct.InductAsync("L1", "BLIND1");
         Assert.Equal(InductStatus.Printed, induct.Status);
@@ -74,7 +75,7 @@ public sealed class LifecyclePermutationTests
         var stored = await _store.FindActiveByTuIdAsync("BLIND1");
         var expectedOrder = expected == VerifyStationStatus.Verified
             ? TransportOrderStatus.Verified
-            : TransportOrderStatus.HeldForIntervention;
+            : TransportOrderStatus.Advised;
         Assert.Equal(expectedOrder, stored!.Status);
         Assert.Equal(1, stored.PrintCount); // one full run regardless of verify outcome
     }
@@ -82,12 +83,13 @@ public sealed class LifecyclePermutationTests
     [Fact]
     public async Task FullRecoveryLoop_Fail_Authorize_Reprint_Pass()
     {
-        _lines.Add(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         await _induct.InductAsync("L1", "BLIND1");
 
-        // Fail → held.
-        var failed = await _verify.VerifyAsync(
+        // Fail → held ('Reprint Labels' off at the verify station: no re-arm, R7).
+        var verifyReprintOff = TestServices.Verify(_store, _threshold, _clock, settings: TestSettings.ReprintOff());
+        var failed = await verifyReprintOff.VerifyAsync(
             "BLIND1", WithBlind("BLIND1", ("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 5);
         Assert.Equal(VerifyStationStatus.HeldForIntervention, failed.Status);
 
@@ -112,7 +114,7 @@ public sealed class LifecyclePermutationTests
     [Fact]
     public async Task DuplicateAdvice_BeforePrint_StartsNewGeneration()
     {
-        _lines.Add(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "OLD")));
         await _induct.InductAsync("L1", "BLIND1");
 
@@ -135,7 +137,7 @@ public sealed class LifecyclePermutationTests
     [Fact]
     public async Task Station_ConsecutiveFailsAcrossCartons_PauseAtThreshold_ThenPassRecovers()
     {
-        _lines.Add(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
 
         async Task<VerifyStationResult> RunCarton(string blind, string scan)
         {
@@ -160,7 +162,7 @@ public sealed class LifecyclePermutationTests
     [Fact]
     public async Task Station_NoActiveOrder_DoesNotResetExistingStreak()
     {
-        _lines.Add(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "B1", Labels(("Shipping", "SHIP")));
         await _induct.InductAsync("L1", "B1");
         var failed = await _verify.VerifyAsync(
@@ -179,7 +181,7 @@ public sealed class LifecyclePermutationTests
     [Fact]
     public async Task Station_Bypass_Verifies_WithoutFailingThreshold()
     {
-        _lines.Add(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "B1", Labels(("Shipping", "SHIP")));
         await _induct.InductAsync("L1", "B1");
 
@@ -187,15 +189,19 @@ public sealed class LifecyclePermutationTests
             "B1", WithBlind("B1", ("Shipping", "ANYTHING")),
             new VerifyOptions(VerifyEnabled: false, Bypass: true), failThreshold: 2);
 
+        // Owner ruling 2026-10-21 (R4): the carton id was read → a bypass carton PASSES (was Ignore/code 3).
         Assert.Equal(VerifyStationStatus.Verified, verify.Status);
-        Assert.Equal(VerifyOutcome.Ignore, verify.Verify!.Outcome);
+        Assert.Equal(VerifyOutcome.Pass, verify.Verify!.Outcome);
+        Assert.Equal("Pass", verify.Routing!.Value);
         Assert.Equal(0, verify.ConsecutiveFailures);
     }
 
     [Fact]
-    public async Task Station_Bypass_NoRead_HoldsAndCountsTowardThreshold()
+    public async Task Station_Bypass_CartonIdRead_OtherLabelNoRead_StillPasses()
     {
-        _lines.Add(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
+        // Owner ruling 2026-10-21 (R4) — overrules the former VF-3 "bypass no-read holds": the carton id was read,
+        // so the glitched read of a label that was never printed does not fail the bypass carton.
+        _lines.AddCommissioned(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "B1", Labels(("Shipping", "SHIP")));
         await _induct.InductAsync("L1", "B1");
 
@@ -203,9 +209,25 @@ public sealed class LifecyclePermutationTests
             "B1", WithBlind("B1", ("Shipping", "?")),
             new VerifyOptions(VerifyEnabled: false, Bypass: true), failThreshold: 2);
 
-        Assert.Equal(VerifyStationStatus.HeldForIntervention, verify.Status);
+        Assert.Equal(VerifyStationStatus.Verified, verify.Status);
+        Assert.Equal(VerifyOutcome.Pass, verify.Verify!.Outcome);
+        Assert.Equal(0, verify.ConsecutiveFailures);
+    }
+
+    [Fact]
+    public async Task Station_Bypass_CartonIdNoRead_FailsAndCountsTowardThreshold()
+    {
+        _lines.AddCommissioned(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
+        await _advice.AdviseAsync("L1", "B1", Labels(("Shipping", "SHIP")));
+        await _induct.InductAsync("L1", "B1");
+
+        var verify = await _verify.VerifyAsync(
+            "B1", [new ScannedLabel("BlindLabel", "?")],
+            new VerifyOptions(VerifyEnabled: false, Bypass: true), failThreshold: 2);
+
+        Assert.Equal(VerifyStationStatus.ReArmed, verify.Status);
         Assert.Equal(VerifyOutcome.NoRead, verify.Verify!.Outcome);
+        Assert.Equal(VerifyReasonCode.BlindLabelNotDetected, verify.Routing!.ReasonCode);
         Assert.Equal(1, verify.ConsecutiveFailures);
     }
 }
-

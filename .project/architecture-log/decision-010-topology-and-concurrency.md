@@ -83,9 +83,11 @@ Constraints:
    - Run ids (`CartonListID`) come from `ICartonRunRepository` (`CreateRunAsync` / `ReserveRunIdAsync`).
    - Exception carton ids **derive from a reserved run id** (source `<CartonID> = CartonListID`). The
      per-process clock-seeded counter in `ExceptionLabelPolicy` is removed.
-   - Slots come from `ISlotIndexProvider`, **one shared atomic 1..300 cycling counter**. It is global
-     today because no PLC identifier is available at induct. When one is available, the adapter keeps one
-     counter row per PLC.
+   - Slots come from `ISlotIndexProvider`, a shared atomic 1..300 cycling counter **per controller (PLC)**
+     (owner ruling 2026-10-21, R2). `NextSlotAsync(controllerKey)` takes the key from
+     `SlotControllerKey.For(line)`: `PLC:{LineConfig.PlcNumber}`, or `LINE:{LineId}` when the line has no PLC
+     number. The model has no controller entity, so the PLC number *is* the controller identity: lines that
+     share a PLC number share a counter, and different PLCs count independently.
 7. **Configuration is read-through.**
    - `ISettingsProvider` and `ILineProvider` reflect the shared database on every call.
    - An adapter may cache only with a short bounded TTL or a version check, never unbounded.
@@ -120,7 +122,7 @@ lease was lost (expired, maybe taken by another host), nothing is printed.
   crash too.
 - Non-printed induct outcomes do not persist the induct-scan stamps. This preserves the existing write
   counts.
-- The slot counter is global (see 6).
+- The slot counter is keyed by the line's PLC number (see 6); there is no first-class controller entity yet.
 - The DemoHost's reprint-authorization page still runs over demo data, not over
   `ReprintAuthorizationService`. The dashboard's "last printed" column still reads DemoDataStore
   runtime.
@@ -211,12 +213,13 @@ loop:
 
 `ResetAsync` is an unconditional `Set(Value = 0, Version = Version + 1)`.
 
-### 5. `ISlotIndexProvider` → `PandaCounter` row `Key = "CartonAssignSeq"` (or `"CartonAssignSeq:{plcId}"`)
+### 5. `ISlotIndexProvider` → `PandaCounter` row `Key = "CartonAssignSeq:{controllerKey}"`
 
 - Use the same CAS loop as §4, with `following = current >= 300 ? 1 : current + 1`. Store `following`
   and return `current`, the value claimed.
 - This reproduces the source SEQUENCE 1..300 CYCLE across all hosts.
-- Scope it by PLC id once one is available at induct (open-questions E1).
+- One row per controller key (`PLC:{n}` / `LINE:{id}`, owner ruling 2026-10-21 R2; open-questions E1). Rows
+  are created lazily on first draw; each key is an independent CAS counter.
 
 ### 6. `ICartonRunRepository` → `CartonRun` table
 

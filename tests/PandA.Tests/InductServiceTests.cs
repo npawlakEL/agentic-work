@@ -32,7 +32,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_MatchingOrder_PrintsEachLabelToMatchedPrinter_AndMarksPrinted()
     {
-        _lines.Add(new LineConfig("L1",
+        _lines.AddCommissioned(new LineConfig("L1",
         [
             Printer("Ship1", ["Shipping"], 0),
             Printer("Cont1", ["Content"], 1),
@@ -54,7 +54,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_UnknownBlindLabel_ReturnsNoActiveOrder_AndPrintsNothing()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
 
         var result = await _induct.InductAsync("L1", "NOPE");
 
@@ -65,7 +65,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_NoPrinterForOneType_PartiallyPrints()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping", "Content")); // no Content printer
 
         var result = await _induct.InductAsync("L1", "BLIND1");
@@ -78,7 +78,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_TwoCartons_RoundRobinsAcrossPrintersViaLastPrinted()
     {
-        _lines.Add(new LineConfig("L1",
+        _lines.AddCommissioned(new LineConfig("L1",
         [
             Printer("P1", ["Shipping"], 0),
             Printer("P2", ["Shipping"], 1),
@@ -102,7 +102,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_FullPrint_SetsPrintCountToOne_AndRecordsPerLabelState()
     {
-        _lines.Add(new LineConfig("L1",
+        _lines.AddCommissioned(new LineConfig("L1",
         [
             Printer("Ship1", ["Shipping"], 0),
             Printer("Cont1", ["Content"], 1),
@@ -122,7 +122,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_PartialPrint_DoesNotCount_NorMarkPrinted()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping", "Content")); // no Content printer
 
         var result = await _induct.InductAsync("L1", "BLIND1");
@@ -142,7 +142,7 @@ public sealed class InductServiceTests
         var settings = new InMemorySettingsProvider();
         await settings.SetAsync(KnownSettings.ReprintLabels, false);
         var induct = TestServices.Induct(_store, _lines, _gateway, _clock, settings);
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
         await induct.InductAsync("L1", "BLIND1"); // PrintCount → 1
 
@@ -157,7 +157,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_AfterOperatorAuthorization_ReprintsAndIncrementsToTwo()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
         await _induct.InductAsync("L1", "BLIND1");
 
@@ -180,7 +180,7 @@ public sealed class InductServiceTests
         [
             (("Ship1", "Shipping"), new FirePoint(2, 800, 3, ApplyPoint.Parse("1T"))),
         ]);
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: profile));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: profile));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await _induct.InductAsync("L1", "BLIND1");
@@ -194,20 +194,22 @@ public sealed class InductServiceTests
     }
 
     [Fact]
-    public async Task Induct_NoActiveProfile_LeavesFirePointNull()
+    public async Task Induct_NoActiveProfile_PrintsNothing()
     {
+        // Owner ruling 2026-10-21 (R9; was: prints with a null fire point): no profile → no print.
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
-        await _induct.InductAsync("L1", "BLIND1");
+        var result = await _induct.InductAsync("L1", "BLIND1");
 
-        Assert.Null(_gateway.Jobs.Single(j => j.LabelType == "Shipping").FirePoint);
+        Assert.Empty(_gateway.Jobs);
+        Assert.Equal(LabelSelectionStatus.NoFirePoint, Assert.Single(result.Assignments).Status);
     }
 
     [Fact]
     public async Task Induct_WithPrinterStatusSuffix_AppendsHsToZpl()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printerStatusSuffix: true));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printerStatusSuffix: true));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await _induct.InductAsync("L1", "BLIND1");
@@ -218,7 +220,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_WithoutPrinterStatusSuffix_LeavesZplUnchanged()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], filterLabels: false)); // default: no suffix
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], filterLabels: false)); // default: no suffix
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await _induct.InductAsync("L1", "BLIND1");
@@ -229,7 +231,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_FromInductScan_StampsPhysicalMeasurementsOnCarton()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         var scan = new InductScan("L1", "BLIND1",
@@ -255,7 +257,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_BareBlindLabel_LeavesMeasurementsAtDefaults()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await _induct.InductAsync("L1", "BLIND1"); // identity-only convenience path
@@ -269,7 +271,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_FromInductScan_UnknownBlindLabel_ReturnsNoActiveOrder()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
 
         var result = await _induct.InductAsync(new InductScan("L1", "NOPE", Length: 400));
 
@@ -287,7 +289,7 @@ public sealed class InductServiceTests
     {
         var induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider(),
             new FixedMinGap(100));
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         var result = await induct.InductAsync(new InductScan("L1", "BLIND1", FrontGap: 50, Length: 400));
@@ -303,7 +305,7 @@ public sealed class InductServiceTests
     {
         var induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider(),
             new FixedMinGap(100));
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await induct.InductAsync(new InductScan("L1", "BLIND1", FrontGap: 250, Length: 400));
@@ -318,7 +320,7 @@ public sealed class InductServiceTests
         var runs = new InMemoryCartonRunRepository();
         var induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider(),
             runs: runs);
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await induct.InductAsync(new InductScan("L1", "BLIND1",
@@ -342,7 +344,7 @@ public sealed class InductServiceTests
         var runs = new InMemoryCartonRunRepository();
         var induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider(),
             runs: runs);
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
         await induct.InductAsync("L1", "BLIND1");
 
@@ -363,7 +365,7 @@ public sealed class InductServiceTests
     public async Task Induct_SideApply_WithCartonDimensions_ResolvesDynamicApplyPulse()
     {
         // Leading apply "1L" with default EncoderResolution 0.2 => 1 / 0.2 = 5 pulses (length-independent).
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: SideProfile("1L")));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: SideProfile("1L")));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await _induct.InductAsync(new InductScan("L1", "BLIND1", Length: 100, Height: 12));
@@ -375,7 +377,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_SideApply_WithoutCartonDimensions_LeavesApplyPulseNull()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: SideProfile("1L")));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], activeProfile: SideProfile("1L")));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
 
         await _induct.InductAsync("L1", "BLIND1"); // bare identity induct: Length 0
@@ -394,7 +396,7 @@ public sealed class InductServiceTests
     {
         // Global unset (unseeded provider) so the per-line flag applies.
         var induct = ExceptionInduct(new InMemorySettingsProvider(seedKnownSettings: false));
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
 
         var result = await induct.InductAsync(new InductScan("L1", "???", SeqNum: 481));
 
@@ -413,7 +415,7 @@ public sealed class InductServiceTests
     {
         // Global unset and per-line unset => off.
         var induct = ExceptionInduct(new InMemorySettingsProvider(seedKnownSettings: false));
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
 
         var result = await induct.InductAsync(new InductScan("L1", "???", SeqNum: 5));
 
@@ -426,7 +428,7 @@ public sealed class InductServiceTests
     {
         // Seeded provider defines PrintExceptionLabels = false globally; it must override the per-line true.
         var induct = ExceptionInduct(new InMemorySettingsProvider());
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
 
         var result = await induct.InductAsync(new InductScan("L1", "???", SeqNum: 9));
 
@@ -439,7 +441,7 @@ public sealed class InductServiceTests
     {
         var runs = new InMemoryCartonRunRepository();
         var induct = ExceptionInduct(new InMemorySettingsProvider(seedKnownSettings: false), runs);
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
 
         await induct.InductAsync(new InductScan("L1", "!!!", SeqNum: 7));
 

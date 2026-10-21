@@ -40,6 +40,15 @@ public interface ITransportOrderStore
     /// </summary>
     /// <exception cref="ConcurrencyConflictException">The stored version differs or the row no longer exists.</exception>
     ValueTask UpdateAsync(TransportOrder transportOrder, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Delete the order for <paramref name="tuId"/> (carton/wave purge — owner ruling 2026-10-21, R11). Returns
+    /// false when no such row exists. Callers hold the <see cref="LockNames.Carton"/> lease.
+    /// </summary>
+    ValueTask<bool> DeleteAsync(string tuId, CancellationToken cancellationToken = default);
+
+    /// <summary>The TuIds of every stored order advised under <paramref name="waveId"/> (wave purge).</summary>
+    ValueTask<IReadOnlyList<string>> FindTuIdsByWaveAsync(string waveId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Convenience helpers over <see cref="ITransportOrderStore"/>.</summary>

@@ -21,7 +21,7 @@ Solution: `PandA.slnx`. Target net9.0, Nullable + ImplicitUsings, `TreatWarnings
 - **`TransportOrder`** — the carton, keyed by blind label (`TuId`), carrying a typed `PandaLabelSet`.
   Reprint lifecycle (decision-003): monotonic `PrintCount`, `Status` (Advised/Printed/Verified/
   HeldForIntervention/ReprintAuthorized), per-label `LabelPrintState`, `CanPrint` gate, operator-only
-  `AuthorizeReprint`. No auto re-arm on verify fail.
+  `AuthorizeReprint`. Verify fail re-arms the carton when `Reprint Labels` is on (owner ruling 2026-10-21 R7, decision-003 amendment).
 - **`PandaLabelSet` / `Label`** — the advised label set; label type drives printer routing and verify.
 - **`LineConfig`** — per-line printers, `BufferOrder`, `ActiveProfile` (fire points), `PrinterPolicies`,
   load-balance toggle.
@@ -58,7 +58,7 @@ Solution: `PandA.slnx`. Target net9.0, Nullable + ImplicitUsings, `TreatWarnings
 - **`PandA.Harness`** — interactive console (seed/list/view, `r`/`v` by index, `p`/`z`/`s` for lane control).
 
 ## Deliberate divergences from source (intentional, adjudicated)
-- **decision-003** — reprint: monotonic counter + no auto re-arm (source erased `Printed` on verify fail).
+- **decision-003** — reprint: monotonic counter; verify-fail re-arm gated by `Reprint Labels` (amendment R7).
 - **decision-004** — verify: VF-1 unexpected/duplicate scan fails (source ignores), VF-2 ordered slots,
   VF-3 bypass-glitch fails, VF-4 configurable post-trip reset.
 - **arch-log 012 §4** — lane-eval: degraded generalization, demote non-spare, offline-clear on either signal.

@@ -81,7 +81,7 @@ public sealed class RoutingCriterionTests
     [Fact]
     public async Task VerifyStation_Pass_PopulatesPassRoutingCriterion()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         await _induct.InductAsync("L1", "BLIND1");
 
@@ -96,13 +96,14 @@ public sealed class RoutingCriterionTests
     [Fact]
     public async Task VerifyStation_Fail_PopulatesFailRoutingCriterion()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         await _induct.InductAsync("L1", "BLIND1");
 
         var result = await _verify.VerifyAsync("BLIND1", WithBlind("BLIND1", ("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 3);
 
-        Assert.Equal(VerifyStationStatus.HeldForIntervention, result.Status);
+        // 'Reprint Labels' defaults on → the failed carton is re-armed (owner ruling 2026-10-21, R7); still routes Fail.
+        Assert.Equal(VerifyStationStatus.ReArmed, result.Status);
         Assert.NotNull(result.Routing);
         Assert.Equal("Fail", result.Routing!.Value);
     }

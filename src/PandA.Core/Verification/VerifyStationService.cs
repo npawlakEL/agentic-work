@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using PandA.Core.Concurrency;
+using PandA.Core.Settings;
 
 namespace PandA.Core.Verification;
 
@@ -8,7 +9,8 @@ namespace PandA.Core.Verification;
 /// MP286 — verify scan orchestration (the verify-station analogue of <see cref="IInductService"/>).
 /// Looks up the active transport order for a scanned blind label, verifies the read labels against its
 /// advised set, updates the line's consecutive-fail counter, and advances the carton lifecycle:
-/// pass/bypass → verified; fail → re-armed for reprint. Port glue over <c>sdisp_TOOL_PA_VerifyLabel</c>
+/// pass (incl. a bypass carton whose id was read) → verified; fail → re-armed for reprint when the global
+/// <c>Reprint Labels</c> setting is on (owner ruling 2026-10-21, R7), otherwise held. Port glue over <c>sdisp_TOOL_PA_VerifyLabel</c>
 /// + <c>sdisp_PA_VerifyThreshold_Update</c> (architecture-log 006).
 /// <para>
 /// Multi-host (decision-010): the whole verify (read → decide → persist) runs under the shared
@@ -38,6 +40,7 @@ public sealed class VerifyStationService : IVerifyStationService
     private readonly IVerifyThresholdTracker _threshold;
     private readonly IClock _clock;
     private readonly ILockProvider _locks;
+    private readonly ISettingsProvider _settings;
     private readonly ILogger<VerifyStationService> _logger;
     private readonly IRejectHistoryRepository? _rejects;
     private readonly PandA.Core.Ports.IXRefStore? _xref;
@@ -48,6 +51,7 @@ public sealed class VerifyStationService : IVerifyStationService
         IVerifyThresholdTracker threshold,
         IClock clock,
         ILockProvider locks,
+        ISettingsProvider settings,
         ILogger<VerifyStationService>? logger = null,
         IRejectHistoryRepository? rejects = null,
         PandA.Core.Ports.IXRefStore? xref = null)
@@ -57,6 +61,7 @@ public sealed class VerifyStationService : IVerifyStationService
         _threshold = threshold ?? throw new ArgumentNullException(nameof(threshold));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _locks = locks ?? throw new ArgumentNullException(nameof(locks));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logger = logger ?? NullLogger<VerifyStationService>.Instance;
         _rejects = rejects;
         _xref = xref;
@@ -110,8 +115,8 @@ public sealed class VerifyStationService : IVerifyStationService
         var code = VerifyReasonCodes.For(verify);
         // F23: wave auto-complete here.
 
-        // Pass and Ignore (clean bypass) let the carton proceed and clear the fail streak. A bypass that
-        // read no-read/no-data comes back as a Fail outcome, so it holds the carton and counts (VF-3).
+        // Pass (incl. a bypass carton whose id was read — R4) lets the carton proceed and clears the fail streak.
+        // A bypass carton whose id was not read comes back as a failing outcome and counts (VF-3).
         // The streak is kept per printer that printed the carton (source sdisp_PA_VerifyThreshold_Update;
         // owner ruling 2026-10-21).
         var proceed = verify.Outcome is VerifyOutcome.Pass or VerifyOutcome.Ignore;
@@ -119,6 +124,11 @@ public sealed class VerifyStationService : IVerifyStationService
             .RegisterPrintersAsync(PrintersOf(order), pass: proceed, failThreshold, cancellationToken)
             .ConfigureAwait(false);
         var now = _clock.UtcNow;
+
+        // Owner ruling 2026-10-21 (R7): a verify fail re-arms the carton for reprint (its next induct prints it
+        // again, no attempt cap) while 'Reprint Labels' is on; off → held for manual intervention (decision-003).
+        var rearm = !proceed
+            && await _settings.GetAsync(KnownSettings.ReprintLabels, cancellationToken).ConfigureAwait(false);
 
         if (proceed)
         {
@@ -128,10 +138,10 @@ public sealed class VerifyStationService : IVerifyStationService
         }
         else
         {
-            // Decision-003: no auto re-arm. Hold the carton for manual intervention.
             _logger.LogWarning(
-                "Verify failed for transport order {TuId} on line {LineId}; outcome {Outcome}, code {Code}, consecutive failures {ConsecutiveFailures}.",
-                order.TuId, order.LineId, verify.Outcome, (int)code, threshold.ConsecutiveFailures);
+                "Verify failed for transport order {TuId} on line {LineId}; outcome {Outcome}, code {Code}, consecutive failures {ConsecutiveFailures}; {Disposition}.",
+                order.TuId, order.LineId, verify.Outcome, (int)code, threshold.ConsecutiveFailures,
+                rearm ? "re-armed for reprint" : "held for intervention");
         }
 
         LogPauses(threshold, order.LineId);
@@ -145,7 +155,7 @@ public sealed class VerifyStationService : IVerifyStationService
                     }
                     else
                     {
-                        o.MarkVerifyFailed(now);
+                        o.MarkVerifyFailed(now, rearm);
                     }
                 },
                 cancellationToken)
@@ -163,7 +173,9 @@ public sealed class VerifyStationService : IVerifyStationService
         var routing = RoutingCriterion.ForVerify(verify, order.VerifyPassDest, order.VerifyFailDest);
 
         return new VerifyStationResult(
-            proceed ? VerifyStationStatus.Verified : VerifyStationStatus.HeldForIntervention,
+            proceed ? VerifyStationStatus.Verified
+                : rearm ? VerifyStationStatus.ReArmed
+                : VerifyStationStatus.HeldForIntervention,
             verify,
             threshold.PausePrinter,
             threshold.ConsecutiveFailures,

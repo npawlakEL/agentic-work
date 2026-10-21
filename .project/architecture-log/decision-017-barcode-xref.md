@@ -55,3 +55,15 @@ against **alternate identifiers**, not just the blind label.
 - Source: `5.0_CreateTables/PandaDataXRef.sql`, `7.0_CreateViews/sdivw_PandaDataXRef.sql`
   (PIVOT of BL/UPC/GTIN/EAN/ItemID/oLPN), `8.0_CreateSP/sdisp_TOOL_CUSTOM_LPNxRef.sql` (facet B).
 - decision-012 (waves/xref tabling that this supersedes for facet A), decision-004 (verify semantics).
+
+## Amendment — owner ruling 2026-10-21, R11 (xref cleanup)
+
+- **Disassociate** (`XRefService.DisassociateAsync`) deletes the barcode's xref rows and logs the deletion at
+  Information with the row count (source `sdisp_TOOL_CUSTOM_LPNxRef_Disassociate.sql` L37-51).
+- **Carton/wave purge** deletes the carton's xref rows with its transport order (source
+  `sdisp_TOOL_CUSTOM_Wave_Delete.sql` L69). Core had no purge/delete path, so `CartonPurgeService`
+  (`PurgeCartonAsync(tuId)`, `PurgeWaveAsync(waveId)`) was added over the new store operations
+  `ITransportOrderStore.DeleteAsync` / `FindTuIdsByWaveAsync` and `IXRefStore.RemoveByTuIdAsync`. Each carton
+  is purged under its carton lease; deletions are logged at Information. Not yet wired to a scheduler or UI
+  (retention purge is out of scope — decision-012). The Sim line's conveyance housekeeping
+  (`LineSimulation.ForgetOrder`) is not a purge and is unchanged. Tests: `OwnerRulings20261021Tests.R11_*`.

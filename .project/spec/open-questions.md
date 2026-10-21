@@ -68,8 +68,9 @@ IDs map back to the cluster spec docs.
 - **E1 (F21):** ✅ RESOLVED (decision-010, 2026-10-21):
   - The assign-slot counter is **one shared atomic 1..300 CYCLE counter** in the shared DB (a
     PersistantTable counter row advanced by a CAS loop), never per-process.
-  - It is **global** today because no PLC id is available at induct (the source has one sequence per
-    database). Scope it per PLC once a PLC identifier is available.
+  - **Per controller** (owner ruling 2026-10-21, R2): one counter per PLC, keyed by `LineDto.PlcNumber`
+    (`PLC:{n}`; `LINE:{id}` when a line has no PLC number). Lines sharing a PLC share a counter.
+    *Open:* confirm the PLC number is the right controller identity (there is no controller entity).
 - **E2 (LOCK):** ✅ RESOLVED (decision-010, 2026-10-21):
   - **Cross-host leases** (`ILockProvider` → `ILease`: owner id, TTL expiry, renew, fencing).
   - Implemented on eController as a `PandaLease` row with conditional updates; no `sp_getapplock`.

@@ -27,8 +27,10 @@ public sealed class LifecycleEndToEndTests
     {
         _advice = TestServices.Advice(_store, _clock, new InMemorySettingsProvider());
         // These lifecycles exercise the operator-authorization reprint gate, so 'Reprint Labels' is off.
-        _induct = TestServices.Induct(_store, _lines, _gateway, _clock, TestSettings.ReprintOff());
-        _verify = TestServices.Verify(_store, _threshold, _clock);
+        // The verify station reads the same setting: a verify fail holds the carton instead of re-arming it (R7).
+        var settings = TestSettings.ReprintOff();
+        _induct = TestServices.Induct(_store, _lines, _gateway, _clock, settings);
+        _verify = TestServices.Verify(_store, _threshold, _clock, settings: settings);
     }
 
     private static PrinterConfig Printer(string id, string[] map, int order) =>
@@ -47,7 +49,7 @@ public sealed class LifecycleEndToEndTests
     [Fact]
     public async Task HappyPath_Advise_Induct_Verify_Passes_AndCompletesCarton()
     {
-        _lines.Add(new LineConfig("L1",
+        _lines.AddCommissioned(new LineConfig("L1",
         [
             Printer("Ship1", ["Shipping"], 0),
             Printer("Cont1", ["Content"], 1),
@@ -76,7 +78,7 @@ public sealed class LifecycleEndToEndTests
     [Fact]
     public async Task Mismatch_HoldsCartonForIntervention_AndBlocksReprintUntilAuthorized()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         await _induct.InductAsync("L1", "BLIND1");
 
@@ -98,7 +100,7 @@ public sealed class LifecycleEndToEndTests
     [Fact]
     public async Task OperatorAuthorizedReprint_AllowsExactlyOneMoreRun_ThenReverifyPasses()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         await _induct.InductAsync("L1", "BLIND1");
         await _verify.VerifyAsync("BLIND1", WithBlind("BLIND1", ("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 3);
@@ -128,7 +130,7 @@ public sealed class LifecycleEndToEndTests
     [Fact]
     public async Task ConsecutiveFailures_AcrossCartons_PauseThePrinterAtThreshold()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
 
         var paused = false;
         for (var i = 1; i <= 2; i++)
@@ -148,7 +150,7 @@ public sealed class LifecycleEndToEndTests
     [Fact]
     public async Task Bypass_WhenVerifyDisabled_CompletesWithoutFailingThreshold()
     {
-        _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
+        _lines.AddCommissioned(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         await _induct.InductAsync("L1", "BLIND1");
 
@@ -158,8 +160,9 @@ public sealed class LifecycleEndToEndTests
             new VerifyOptions(VerifyEnabled: false, Bypass: true),
             failThreshold: 2);
 
+        // Owner ruling 2026-10-21 (R4): the carton id was read → the bypass carton passes (was Ignore).
         Assert.Equal(VerifyStationStatus.Verified, verify.Status);
-        Assert.Equal(VerifyOutcome.Ignore, verify.Verify!.Outcome);
+        Assert.Equal(VerifyOutcome.Pass, verify.Verify!.Outcome);
         Assert.Equal(0, verify.ConsecutiveFailures);
     }
 
@@ -176,7 +179,7 @@ public sealed class LifecycleEndToEndTests
     [Fact]
     public async Task MultiTypeCarton_LoadBalances_PrintsAllThenVerifiesAll()
     {
-        _lines.Add(new LineConfig("L1",
+        _lines.AddCommissioned(new LineConfig("L1",
         [
             Printer("Ship1", ["Shipping"], 0),
             Printer("Cont1", ["Content"], 1),

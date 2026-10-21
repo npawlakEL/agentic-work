@@ -130,7 +130,8 @@ public sealed class MessageConsoleService
             bufferOrder: new LabelBufferOrder(line.BufferOrder.Select((labelType, index) => new LabelBufferPosition(index + 1, labelType))),
             activeProfile: activeProfile,
             encoderResolution: (decimal)line.EncoderResolutionInchesPerPulse,
-            profileRegistry: profileRegistry);
+            profileRegistry: profileRegistry,
+            plcNumber: line.PlcNumber);
 
         // Each console run traces one message in isolation, so it gets its own simulated shared database.
         var db = new SimSharedDatabase();
@@ -175,6 +176,7 @@ public sealed class MessageConsoleService
             db.CreateThresholdTracker(),
             clock,
             db.Locks,
+            settings,
             loggerFactory.CreateLogger<VerifyStationService>());
 
         // 0) Advise — create the transport order from the barcode's advised label slots, carrying the

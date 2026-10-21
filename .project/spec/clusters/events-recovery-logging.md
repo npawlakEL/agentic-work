@@ -464,7 +464,7 @@ PandA.Sim/
 ### Acceptance Criteria
 1. Verify fail (shipping mismatch) → `RejectRecord` inserted with `Code=21, Reason="Incorrect shipping label applied"`
 2. `VerifyPass=1` (pass) → NO `RejectRecord` inserted
-3. `VerifyOutcome.Ignore` (bypass) → NO `RejectRecord` inserted (code 3 is not stored in source either)
+3. Bypass carton whose carton id was read → Pass, NO `RejectRecord` (owner ruling 2026-10-21 R4; `VerifyOutcome.Ignore`/code 3 is no longer produced)
 4. `VerifyReasonCode.ToDescription()` returns exact source strings (e.g., `12 → "Verify scan error"`)
 5. `CartonListId` on the reject record is the **verify-scan** CartonListId (most recent for SeqNum), not the induct one
 6. `RejectRecord.PandaDataId` matches the `TransportOrder`'s `PandaDataId`

@@ -30,6 +30,12 @@ public sealed class CountingTransportOrderStore : ITransportOrderStore
         UpsertCount++;
     }
 
+    public ValueTask<bool> DeleteAsync(string tuId, CancellationToken cancellationToken = default) =>
+        _inner.DeleteAsync(tuId, cancellationToken);
+
+    public ValueTask<IReadOnlyList<string>> FindTuIdsByWaveAsync(string waveId, CancellationToken cancellationToken = default) =>
+        _inner.FindTuIdsByWaveAsync(waveId, cancellationToken);
+
     /// <summary>Seed an order without counting it as a write (arrange step); stamps the instance's version.</summary>
     public void Seed(TransportOrder order) => _inner.InsertAsync(order).AsTask().GetAwaiter().GetResult();
 }

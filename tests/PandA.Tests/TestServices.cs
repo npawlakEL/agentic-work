@@ -64,8 +64,9 @@ internal static class TestServices
         ILockProvider? locks = null,
         ILogger<VerifyStationService>? logger = null,
         IRejectHistoryRepository? rejects = null,
-        IXRefStore? xref = null) =>
-        new(store, new VerificationService(), threshold ?? Threshold(), clock, locks ?? Locks(), logger, rejects, xref);
+        IXRefStore? xref = null,
+        ISettingsProvider? settings = null) =>
+        new(store, new VerificationService(), threshold ?? Threshold(), clock, locks ?? Locks(), settings ?? new InMemorySettingsProvider(), logger, rejects, xref);
 
     public static CartonAdviceService Advice(
         ITransportOrderStore store,

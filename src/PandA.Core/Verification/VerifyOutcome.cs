@@ -22,6 +22,9 @@ public enum VerifyOutcome
     /// <summary>Label conflict — more than one candidate read (source '#' sentinel).</summary>
     Conflict,
 
-    /// <summary>Verify skipped/bypassed while disabled (source VerifyPass=3).</summary>
+    /// <summary>
+    /// Verify skipped (source VerifyPass=3). No longer produced by <see cref="VerificationService"/>: since owner
+    /// ruling 2026-10-21 (R4) a bypass carton whose id is read is a <see cref="Pass"/>. Kept for the code mapping.
+    /// </summary>
     Ignore,
 }
