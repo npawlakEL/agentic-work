@@ -1,6 +1,6 @@
 # Decision 023 — eController plug-in integration plan (Exol-informed)
 
-**Status:** Proposed (awaiting owner rulings on §6)
+**Status:** Accepted 2026-10-21 (all §6 rulings made)
 **Date:** 2026-10-21
 **Basis:** Hyper-analysis of `eController-Projects/Exol@develop` (`5ecb36d`) — five research reports in
 `.project/research/exol-econtroller/` (01 MFC framework + CBS, 02 PLC/ADS/eHub, 03 screens + packaging,
@@ -107,16 +107,20 @@ own schema (`CV.MfcTransportOrder`, `CV2.…`) — PandA tables must be addresse
 
 ## 6. Open owner questions (block phase A start)
 
-1. **Existing `econtroller-behaviors-panda` repo / `eController.Behaviors.PandA` package** — supersede it
-   (publish our implementation under that package id, new major version) or ship a new id?
-2. **Where does the package source live** — this repo (`src/PandA.EController`) or the
-   `econtroller-behaviors-panda` repo?
-3. **UI host MudBlazor version** — does the target eController WebUI host run MudBlazor 6.x (as Exol) or 8.x?
-   Determines whether Axon/8.13 screens can ship as-is or must be down-ported.
-4. **Printer I/O** — ZPL over TCP directly from the MFC package (simplest; one socket per printer, async,
-   off the flow thread) vs a new eHub `ZebraConnector` plugin (decision-018 G-ZEB1)?
-5. **PLC transport** — Exol's own `ExolAdsConnector` pattern (Ready/Ack/Sending tags) vs BluePaw
-   (decision-018)? Do we have the TwinCAT tag paths / frame codes for 281–286 (G-TAG1/G-STRUCT1)?
+1. ~~Package id~~ **Ruled 2026-10-21:** supersede — publish our implementation as `eController.Behaviors.PandA`.
+2. ~~Source location~~ **Ruled 2026-10-21:** source lives in this repo (`src/PandA.EController`); the
+   `econtroller-behaviors-panda` repo is reference only.
+3. ~~UI host MudBlazor~~ **Ruled 2026-10-21:** match Exol — screens ship as a separate `PandA.Screens` ePlugin
+   targeting the host's MudBlazor 6.x (6.19.0, `FrameworkComponent`, interactive server). The standalone
+   Axon/8.13 UI stays as the dev/demo surface only.
+4. ~~Printer I/O~~ **Ruled 2026-10-21:** new eHub plugin `PandA.eHub.Zebra` (G-ZEB1). The MFC action emits a
+   print telegram (ZPL + printer id + carton id) to an outbox; the connector owns TCP 9100, `~HS` polling,
+   and retries, and pushes printer status back to MFC via a hook (same pattern as Exol's ADS connector).
+5. ~~PLC transport~~ **Ruled 2026-10-21:** new eHub plugin `PandA.eHub.Ads`, copied from Exol's
+   `ExolAdsConnector` pattern (Ready/Ack/Sending handshake, concatenated telegrams, batch ACK → idempotent
+   handling, `OriginPlcName` stamping). Message layouts, codes (281–286), parameters, and the expected
+   `vPA.Assign[i]`/`vCtn.Assign[i]` tag writes come from the SQL source (architecture-log 009) — these are
+   the authority. Only the physical TwinCAT symbol root/ADS address is site config.
 6. ~~Feed access~~ **Resolved 2026-10-21:** `artifactory_elementlogic` is reachable from this machine
    (`eController.Mfc.Library` up to 4.6.3; `eController.Behaviors.CriteriaBasedSorting`, `.Weight` present).
    **No `eController.Behaviors.PandA` package is published** — the `econtroller-behaviors-panda` repo
