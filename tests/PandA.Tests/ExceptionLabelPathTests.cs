@@ -29,7 +29,7 @@ public sealed class ExceptionLabelPathTests
         IEnumerable<LabelTemplate>? templates = null,
         IMinGapProvider? minGap = null,
         ICartonRunRepository? runs = null) =>
-        new(_store, _lines, new PrinterSelectionService(), _gateway, _clock,
+        TestServices.Induct(_store, _lines, _gateway, _clock,
             new InMemorySettingsProvider(seedKnownSettings: false),
             minGap: minGap,
             runs: runs,

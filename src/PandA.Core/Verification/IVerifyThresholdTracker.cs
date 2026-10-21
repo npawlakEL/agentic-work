@@ -22,18 +22,24 @@ public sealed record VerifyThresholdResult(
 /// row to warrant pausing the printer. Port of <c>sdisp_PA_VerifyThreshold_Update</c> (architecture-log 006
 /// §D). The source keys the streak by <b>printer</b> (<c>PrinterState.VerifyFailCount</c>) for every printer
 /// that printed the carton (owner ruling 2026-10-21); a pass resets the streak.
+/// <para>
+/// Multi-host (decision-010): the counters live in the shared <see cref="IVerifyFailCounterStore"/>; every
+/// operation is async and atomic in the store, so verify stations on different hosts never lose an increment.
+/// </para>
 /// </summary>
 public interface IVerifyThresholdTracker
 {
-    /// <summary>
-    /// Register a verify result for one key (a printer id).
-    /// </summary>
-    /// <param name="lineId">The counter key (a printer id; historically the line id).</param>
+    /// <summary>Register a verify result for one key (a printer id).</summary>
+    /// <param name="key">The counter key (a printer id; historically the line id).</param>
     /// <param name="pass">True if the carton passed verification.</param>
     /// <param name="failThreshold">
     /// Consecutive-fail count at which the printer should pause. Values &lt;= 0 disable pausing.
     /// </param>
-    VerifyThresholdResult Register(string lineId, bool pass, int failThreshold);
+    ValueTask<VerifyThresholdResult> RegisterAsync(
+        string key,
+        bool pass,
+        int failThreshold,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Register a verify result for every printer that printed the carton (source cursor over the
@@ -41,14 +47,18 @@ public interface IVerifyThresholdTracker
     /// and each printer whose streak reaches the threshold is returned in
     /// <see cref="VerifyThresholdResult.PrintersToPause"/>.
     /// </summary>
-    VerifyThresholdResult RegisterPrinters(IReadOnlyCollection<string> printerIds, bool pass, int failThreshold)
+    async ValueTask<VerifyThresholdResult> RegisterPrintersAsync(
+        IReadOnlyCollection<string> printerIds,
+        bool pass,
+        int failThreshold,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(printerIds);
         var max = 0;
         var pause = new List<string>();
         foreach (var printerId in printerIds)
         {
-            var result = Register(printerId, pass, failThreshold);
+            var result = await RegisterAsync(printerId, pass, failThreshold, cancellationToken).ConfigureAwait(false);
             max = Math.Max(max, result.ConsecutiveFailures);
             if (result.PausePrinter)
             {
@@ -60,8 +70,8 @@ public interface IVerifyThresholdTracker
     }
 
     /// <summary>The current consecutive-fail count for a key (0 if unknown).</summary>
-    int CurrentCount(string lineId);
+    ValueTask<int> CurrentCountAsync(string key, CancellationToken cancellationToken = default);
 
     /// <summary>Clear a key's consecutive-fail count.</summary>
-    void Reset(string lineId);
+    ValueTask ResetAsync(string key, CancellationToken cancellationToken = default);
 }

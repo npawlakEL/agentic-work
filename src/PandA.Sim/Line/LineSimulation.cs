@@ -138,7 +138,8 @@ public sealed class LineSimulation
         try
         {
             var sequence = ++_cartonSequence;
-            var blind = $"SIM{sequence:0000}";
+            // Line-scoped so cartons spawned on different lines never collide in the shared order table.
+            var blind = $"SIM-{LineId}-{sequence:0000}";
             var order = new TransportOrder(
                 blind,
                 LineId,
@@ -149,7 +150,7 @@ public sealed class LineSimulation
                 ]),
                 _clock.UtcNow);
             order.SetAdviceMetadata(waveId: $"SIM-WAVE-{sequence % 3 + 1}", verifyEnabled: true, verifyPassDest: "Ship Lane", verifyFailDest: "Reject Lane");
-            await _orders.UpsertAsync(order).ConfigureAwait(false);
+            await _orders.InsertAsync(order).ConfigureAwait(false);
 
             // Stagger each new carton behind the current rearmost one so cartons never stack at the same
             // position. Overlapping spawns would cross the tracking eyes in the same simulation step (same

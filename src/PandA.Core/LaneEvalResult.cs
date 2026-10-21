@@ -28,10 +28,22 @@ public sealed record PrinterChange(string PrinterId, SpareChange Change);
 
 /// <summary>
 /// Result of a lane evaluation: the line-control decision plus the spare-pool changes applied.
-/// The service mutates <see cref="PrinterState.IsSpare"/> directly; this record reports what happened.
+/// <see cref="LaneEvalService.EvaluateAsync"/> writes the spare changes through the shared
+/// <see cref="IPrinterStateStore"/> under the line's <c>PrinterState_{line}</c> lease; this record reports
+/// what happened.
 /// The real BluePaw slow/shut egress is a separate (stubbed) concern.
 /// </summary>
 public sealed record LaneEvalResult(
     LineControl Control,
     IReadOnlyList<PrinterChange> Changes,
-    string Reason);
+    string Reason)
+{
+    /// <summary>
+    /// True when the evaluation was skipped because the line's lease could not be acquired (another host is
+    /// evaluating the same line). Nothing was changed; the next printer/zone status event re-evaluates.
+    /// </summary>
+    public bool Skipped { get; init; }
+
+    /// <summary>A skipped (lease-timeout) evaluation result.</summary>
+    public static LaneEvalResult SkippedResult() => new(LineControl.Balanced, [], "skipped") { Skipped = true };
+}

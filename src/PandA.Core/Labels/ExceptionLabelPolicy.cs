@@ -51,19 +51,17 @@ public static class ExceptionLabelPolicy
     public static bool UsesLpn(ExceptionType type) =>
         type is ExceptionType.Duplicate or ExceptionType.NoInformation or ExceptionType.NotReceived;
 
-    // Process-wide monotonic suffix, seeded from wall-clock ms so ids also stay distinct across restarts.
-    private static long _mintCounter = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
     /// <summary>
-    /// Mint the synthetic human-readable exception carton id: <c>{Reason}-{seq:000000}-{unique}</c>. The
-    /// scanner sequence number alone is not unique (it defaults to 0 and wraps), so a process-wide monotonic
-    /// hex suffix guarantees two exception cartons never share an id.
+    /// Mint the synthetic human-readable exception carton id: <c>{Reason}-{seq:000000}-{runId}</c>. The
+    /// scanner sequence number alone is not unique (it defaults to 0 and wraps); the suffix is the
+    /// store-generated run id (source <c>&lt;CartonID&gt; = CartonListID</c>), which is unique across every
+    /// host sharing the database (decision-010) — no per-process counter.
     /// </summary>
-    public static string MintCartonId(ExceptionType type, int seq)
+    public static string MintCartonId(ExceptionType type, int seq, long runId)
     {
-        var unique = Interlocked.Increment(ref _mintCounter);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(runId);
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{ReasonName(type)}-{seq:000000}-{unique:X}");
+            $"{ReasonName(type)}-{seq:000000}-{runId}");
     }
 }

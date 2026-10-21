@@ -16,7 +16,7 @@ public sealed class LifecycleEndToEndTests
     private readonly InMemoryTransportOrderStore _store = new();
     private readonly InMemoryLineProvider _lines = new();
     private readonly CapturingPrinterGateway _gateway = new();
-    private readonly VerifyThresholdTracker _threshold = new();
+    private readonly VerifyThresholdTracker _threshold = TestServices.Threshold();
     private readonly TestClock _clock = new(T0);
 
     private readonly CartonAdviceService _advice;
@@ -25,10 +25,10 @@ public sealed class LifecycleEndToEndTests
 
     public LifecycleEndToEndTests()
     {
-        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
+        _advice = TestServices.Advice(_store, _clock, new InMemorySettingsProvider());
         // These lifecycles exercise the operator-authorization reprint gate, so 'Reprint Labels' is off.
-        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, TestSettings.ReprintOff());
-        _verify = new VerifyStationService(_store, new VerificationService(), _threshold, _clock);
+        _induct = TestServices.Induct(_store, _lines, _gateway, _clock, TestSettings.ReprintOff());
+        _verify = TestServices.Verify(_store, _threshold, _clock);
     }
 
     private static PrinterConfig Printer(string id, string[] map, int order) =>
@@ -106,7 +106,7 @@ public sealed class LifecycleEndToEndTests
         // Operator intervenes on the web screen: authorize a reprint for this carton.
         var held = await _store.FindActiveByTuIdAsync("BLIND1");
         held!.AuthorizeReprint("operator relabel");
-        await _store.UpsertAsync(held);
+        await _store.SaveAsync(held);
 
         // Now a re-induct is permitted → second full run (counter 1 → 2).
         var reprint = await _induct.InductAsync("L1", "BLIND1");

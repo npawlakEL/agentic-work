@@ -28,23 +28,31 @@ public sealed class SimHost
 
     private static readonly DateTimeOffset SeedTime = new(2026, 1, 1, 8, 0, 0, TimeSpan.Zero);
 
-    private readonly InMemoryTransportOrderStore _store = new();
-    private readonly InMemoryLineProvider _lines = new();
+    private readonly SimSharedDatabase _db;
+    private readonly InMemoryTransportOrderStore _store;
+    private readonly InMemoryLineProvider _lines;
     private readonly CapturingPrinterGateway _gateway = new();
-    private readonly VerifyThresholdTracker _threshold = new();
     private readonly TestClock _clock = new(SeedTime);
-    private readonly LaneEvalService _laneEval = new();
+    private readonly LaneEvalService _laneEval;
     private readonly ZoneState _zone = new(zoneOnline: true);
     private readonly CartonAdviceService _advice;
     private readonly InductService _induct;
     private readonly VerifyStationService _verify;
     private readonly List<string> _blindLabels = [];
 
-    public SimHost()
+    /// <param name="database">The shared simulated database; omit for a private one (single host).</param>
+    public SimHost(SimSharedDatabase? database = null)
     {
-        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
-        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider());
-        _verify = new VerifyStationService(_store, new VerificationService(), _threshold, _clock);
+        _db = database ?? new SimSharedDatabase();
+        _store = _db.Orders;
+        _lines = new InMemoryLineProvider(_db.PrinterStates);
+        _laneEval = new LaneEvalService(_db.Locks, _db.PrinterStates);
+        var settings = new InMemorySettingsProvider();
+        _advice = new CartonAdviceService(_store, _clock, settings, _db.Locks);
+        _induct = new InductService(
+            _store, _lines, new PrinterSelectionService(), _gateway, _clock, settings,
+            _db.PrinterStates, _db.Locks, _db.Slots, _db.Runs);
+        _verify = new VerifyStationService(_store, new VerificationService(), _db.CreateThresholdTracker(), _clock, _db.Locks);
         Seed();
     }
 
@@ -169,52 +177,58 @@ public sealed class SimHost
 
     /// <summary>
     /// Apply an inbound printer-status signal (bookmarked: real message parse). Sets the printer online or
-    /// offline (both PLC + engine for this slice), runs lane evaluation, and returns a transcript of the
-    /// resulting spare changes + line-control decision.
+    /// offline (both PLC + engine for this slice) and runs lane evaluation — one step under the line's shared
+    /// printer-state lease — and returns a transcript of the resulting spare changes + line-control decision.
     /// </summary>
-    public IReadOnlyList<string> SetPrinterStatus(string printerId, bool online)
+    public async Task<IReadOnlyList<string>> SetPrinterStatusAsync(string printerId, bool online)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(printerId);
-        var ctx = _lines.GetLineAsync(SourceLine).GetAwaiter().GetResult()!;
-        if (!ctx.States.TryGetValue(printerId, out var state))
+        var ctx = (await _lines.GetLineAsync(SourceLine).ConfigureAwait(false))!;
+        if (!ctx.Config.Printers.Any(p => string.Equals(p.PrinterId, printerId, StringComparison.OrdinalIgnoreCase)))
         {
             return [$"  ?? unknown printer '{printerId}'."];
         }
-
-        state.PlcOnline = online;
-        state.EngineOnline = online;
-        state.LastStatusUpdate = _clock.UtcNow;
 
         var log = new List<string>
         {
             $"  >> IN  printer-status  {printerId} → {(online ? "ONLINE" : "OFFLINE")}",
         };
-        log.AddRange(RunLaneEval(ctx));
+        var result = await _laneEval
+            .ApplyPrinterStatusAsync(ctx.Config, printerId, online, online, _zone, _clock.UtcNow)
+            .ConfigureAwait(false);
+        log.AddRange(Describe(result));
         return log;
     }
 
     /// <summary>Apply an inbound zone-status signal (bookmarked: real message parse) and run lane evaluation.</summary>
-    public IReadOnlyList<string> SetZoneStatus(bool online)
+    public async Task<IReadOnlyList<string>> SetZoneStatusAsync(bool online)
     {
-        var ctx = _lines.GetLineAsync(SourceLine).GetAwaiter().GetResult()!;
+        var ctx = (await _lines.GetLineAsync(SourceLine).ConfigureAwait(false))!;
         _zone.ZoneOnline = online;
         var log = new List<string>
         {
             $"  >> IN  zone-status  → {(online ? "ONLINE" : "OFFLINE")}",
         };
-        log.AddRange(RunLaneEval(ctx));
+        var result = await _laneEval.EvaluateAsync(ctx.Config, _zone, _clock.UtcNow).ConfigureAwait(false);
+        log.AddRange(Describe(result));
         return log;
     }
 
-    /// <summary>Current printer health/rotation snapshot for the seeded line.</summary>
-    public string PrinterStatusReport()
+    /// <summary>Current printer health/rotation snapshot for the seeded line (fresh read of the shared state).</summary>
+    public async Task<string> PrinterStatusReportAsync()
     {
-        var ctx = _lines.GetLineAsync(SourceLine).GetAwaiter().GetResult()!;
+        var ctx = (await _lines.GetLineAsync(SourceLine).ConfigureAwait(false))!;
+        var states = await _db.PrinterStates.GetLineSnapshotAsync(ctx.Config).ConfigureAwait(false);
         var sb = new StringBuilder();
         sb.AppendLine($"Line {SourceLine}  zone={(_zone.ZoneOnline ? "online" : "OFFLINE")}");
         foreach (var p in ctx.Config.Printers)
         {
-            var s = ctx.States[p.PrinterId];
+            if (!states.TryGetValue(p.PrinterId, out var s))
+            {
+                sb.AppendLine($"  {p.PrinterId,-6} {p.PrinterType,-4} (no state)");
+                continue;
+            }
+
             var role = !s.IsOnline ? "offline" : s.IsSpare ? "spare" : "active";
             sb.AppendLine($"  {p.PrinterId,-6} {p.PrinterType,-4} plc={(s.PlcOnline ? 1 : 0)} eng={(s.EngineOnline ? 1 : 0)}  {role}");
         }
@@ -222,10 +236,15 @@ public sealed class SimHost
         return sb.ToString().TrimEnd();
     }
 
-    private IEnumerable<string> RunLaneEval(LineContext ctx)
+    private static List<string> Describe(LaneEvalResult result)
     {
-        var result = _laneEval.Evaluate(ctx.Config, ctx.States, _zone, _clock.UtcNow);
         var log = new List<string>();
+        if (result.Skipped)
+        {
+            log.Add("     lane-eval skipped (line lease held by another host)");
+            return log;
+        }
+
         foreach (var change in result.Changes)
         {
             var verb = change.Change == SpareChange.PromotedFromSpare ? "promoted (spare→active)" : "demoted (active→spare)";
@@ -240,7 +259,6 @@ public sealed class SimHost
 
         return log;
     }
-
     private void Seed()
     {
         var printers = new[]

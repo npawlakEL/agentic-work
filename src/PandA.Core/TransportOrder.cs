@@ -78,6 +78,34 @@ public sealed class TransportOrder
     /// <summary>True for a synthetic F10 exception carton (always fails verify with reason 0).</summary>
     public bool IsExceptionCarton { get; private init; }
 
+    /// <summary>
+    /// Optimistic-concurrency version of the persisted row (decision-010): 0 = never persisted. Stamped by the
+    /// <see cref="ITransportOrderStore"/> on insert/update; an update only succeeds when the stored version
+    /// still equals this value.
+    /// </summary>
+    public long Version { get; private set; }
+
+    /// <summary>Store adapters stamp the persisted row version after a read, insert, or successful update.</summary>
+    public void StampVersion(long version)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(version);
+        Version = version;
+    }
+
+    /// <summary>
+    /// Deep, detached copy (including per-label print state and <see cref="Version"/>). Store adapters hand out
+    /// and keep copies so callers never share a mutable instance with the store or another host.
+    /// </summary>
+    public TransportOrder Clone()
+    {
+        var copy = (TransportOrder)MemberwiseClone();
+        copy._printStates = _printStates.ToDictionary(
+            kv => kv.Key,
+            kv => kv.Value.Clone(),
+            StringComparer.OrdinalIgnoreCase);
+        return copy;
+    }
+
     /// <summary>The blind label / transport-unit id used to match advice with the induct scan.</summary>
     public string TuId { get; }
 

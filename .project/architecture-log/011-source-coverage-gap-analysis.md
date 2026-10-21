@@ -60,7 +60,7 @@ classified OUT-OF-SCOPE below without further analysis.
 | **F23** | **Wave Auto-complete (hot-path coupling)** | **`sdisp_TOOL_CUSTOM_CheckWaveCmp` (called inside `sdisp_PA_VerifyCarton`)** | **GAP** | Auto-completes wave on every verify-pass; must be wired into `VerificationService` |
 | **F24** | **oLPN XRef Association** | **`sdisp_TOOL_CUSTOM_LPNxRef`, `sdisp_TOOL_CUSTOM_LPNxRef_Disassociate`** | **GAP** | ULW-specific: associates outer LPN post-advice; depends on XRef model (F18) |
 | **F25** | **SiteBuilder Commissioning CRUD** | **`sdisp_TOOL_SiteBuilder_*` (26 procs: Create_*, Get_*, Remove_*, Update_*)** | **GAP (Low)** | GUI-driven config CRUD; C# uses JSON config; admin path not built |
-| F26 | Carton Locking | `sdisp_PA_Lock`, `sdisp_PA_LockRemove` | **OUT-OF-SCOPE** | `sp_getapplock` = SQL-specific; C# uses `SemaphoreSlim`; architectural replacement |
+| F26 | Carton Locking | `sdisp_PA_Lock`, `sdisp_PA_LockRemove` | **BUILT (multi-host)** | `sp_getapplock` is SQL-specific and not used. Multi-host (owner 2026-10-21, decision-010): `ILockProvider` leases (owner + TTL expiry + renew/fencing) on a shared eController `PandaLease` row via conditional update; `Carton_{TUID}` taken by every TransportOrder writer, `PrinterState_{LINEID}` by lane eval. Sim: `InMemoryLeaseLockProvider` |
 | F27 | HI / DCMS Inbound Label Job | `sdisp_HI_DCMSCore_Inbound_PandALabels_Job`, `HI_Xfer_Inb_PandALabels`, `sdivw_HI_PandA_GetReadyPandALabels` | **OUT-OF-SCOPE** | Cross-DB DCMS polling adapter; C# equiv = `ITransportOrderStore` + `CartonAdviceService` |
 | F28 | Wave Lifecycle | `Wave`, `WaveHistory`, `WaveRange`, `sdisp_TOOL_CUSTOM_Wave_*`, `sdisp_GUI_PandaWaveAction_*`, `sdisp_PA2DCMS_WaveStatus` | **PLANNED** | Backlog: "Wave / WaveRange data + wave lifecycle" |
 | F29 | Operator GUI | ~30 `sdisp_GUI_*` procs | **PLANNED** | Backlog: "Operator GUI (Blazor reimplementation)" |
@@ -732,7 +732,10 @@ Every printer status message (msg 283) → `LaneEval` → may flip `PrinterState
 **Risk:** Without a shared lock, a spare promotion that happens mid-selection will be invisible to the
 selection in progress — it may select a printer still marked spare, or skip one that was just promoted.
 **Required:** The spare-management algorithm (GAP-2) must acquire the same synchronization primitive as
-`PrinterSelectionService.Select`. Design: a per-line `SemaphoreSlim` or channel (actor-per-line).
+`PrinterSelectionService.Select`. ~~Design: a per-line `SemaphoreSlim` or channel (actor-per-line).~~
+**Resolved for multi-host (owner 2026-10-21, decision-010).** Hosts share one eController DB and any host may serve any line, so an in-process primitive is insufficient.
+- Lane evaluation runs under the cross-host lease `PrinterState_{LINEID}` and writes spare/online state to the shared `IPrinterStateStore`.
+- Selection reads a fresh snapshot of that store under the carton lease. A promotion that commits after the snapshot is seen by the next induct; selection never acts on a stale per-process copy.
 
 ---
 

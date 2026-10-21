@@ -20,7 +20,7 @@ public sealed class AdviceMessageTests
     public async Task AdviceMessage_PopulatesInboundFieldsOnTransportOrder()
     {
         var store = new InMemoryTransportOrderStore();
-        var service = new CartonAdviceService(store, new TestClock(T0), new InMemorySettingsProvider());
+        var service = TestServices.Advice(store, new TestClock(T0), new InMemorySettingsProvider());
         var labels = new PandaLabelSet([new Label("Shipping", "SHIP1", "^XA^XZ")]);
 
         var order = await service.AdviseAsync(new AdviceMessage(

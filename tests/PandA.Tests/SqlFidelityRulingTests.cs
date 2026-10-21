@@ -35,13 +35,13 @@ public sealed class SqlFidelityRulingTests
         IPrinterGateway? gateway = null,
         ISlotIndexProvider? slots = null,
         bool exceptions = false) =>
-        new(_store, _lines, new PrinterSelectionService(), gateway ?? _gateway, _clock,
+        TestServices.Induct(_store, _lines, gateway ?? _gateway, _clock,
             settings ?? new InMemorySettingsProvider(),
             exceptionLabels: exceptions ? new LocalTemplateSource(new InMemoryLabelTemplateRepository()) : null,
             slots: slots);
 
     private CartonAdviceService Advice(ISettingsProvider? settings = null) =>
-        new(_store, _clock, settings ?? new InMemorySettingsProvider());
+        TestServices.Advice(_store, _clock, settings ?? new InMemorySettingsProvider());
 
     private static async Task<InMemorySettingsProvider> Settings<T>(SettingsDescriptor<T> descriptor, T value, bool seed = true)
     {
@@ -96,7 +96,7 @@ public sealed class SqlFidelityRulingTests
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)], printExceptionLabels: true));
         var order = await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
         order.SetAdviceMetadata(bypass: true);
-        await _store.UpsertAsync(order);
+        await _store.SaveAsync(order);
         var settings = await Settings(KnownSettings.PrintExceptionLabels, true, seed: false);
 
         var result = await Induct(settings, exceptions: true).InductAsync("L1", "BL1");
@@ -122,9 +122,9 @@ public sealed class SqlFidelityRulingTests
         Assert.True(exceptionOrder.VerifyEnabled);
         Assert.Equal(TransportOrderStatus.Printed, exceptionOrder.Status);
 
-        var threshold = new VerifyThresholdTracker();
+        var threshold = TestServices.Threshold();
         var rejects = new InMemoryRejectHistoryRepository();
-        var verify = new VerifyStationService(_store, new VerificationService(), threshold, _clock, rejects: rejects);
+        var verify = TestServices.Verify(_store, threshold, _clock, rejects: rejects);
 
         var result = await verify.VerifyAsync(cartonId, [new ScannedLabel("Exception", cartonId)], new VerifyOptions(), failThreshold: 3);
 
@@ -133,14 +133,14 @@ public sealed class SqlFidelityRulingTests
         Assert.Equal(VerifyReasonCode.PandaLogicError, result.Routing.ReasonCode);
         var reject = Assert.Single(rejects.Records);
         Assert.Equal(VerifyReasonCode.PandaLogicError, reject.Code);
-        Assert.Equal(1, threshold.CurrentCount("Ship1"));
+        Assert.Equal(1, (await threshold.CurrentCountAsync("Ship1")));
     }
 
     [Fact]
     public async Task Item4_UnknownCartonAtVerify_FailsWithCode0_AndWritesRejectHistory()
     {
         var rejects = new InMemoryRejectHistoryRepository();
-        var verify = new VerifyStationService(_store, new VerificationService(), new VerifyThresholdTracker(), _clock, rejects: rejects);
+        var verify = TestServices.Verify(_store, TestServices.Threshold(), _clock, rejects: rejects);
 
         var result = await verify.VerifyAsync("NOPE", [new ScannedLabel("Shipping", "X")], new VerifyOptions(), failThreshold: 3);
 
@@ -163,36 +163,36 @@ public sealed class SqlFidelityRulingTests
 
         await Advice().AdviseAsync("L1", tuId, Labels(("Shipping", "S-" + tuId), ("Content", "C-" + tuId)));
         Assert.Equal(InductStatus.Printed, (await Induct().InductAsync("L1", tuId)).Status);
-        return new VerifyStationService(_store, new VerificationService(), threshold, _clock, rejects: rejects);
+        return TestServices.Verify(_store, threshold, _clock, rejects: rejects);
     }
 
     [Fact]
     public async Task Item5_FailStreak_IsCountedPerPrinterThatPrinted_AndPausesThosePrinters()
     {
-        var threshold = new VerifyThresholdTracker();
+        var threshold = TestServices.Threshold();
 
         var v1 = await TwoPrinterCartonAsync("B1", threshold);
         var first = await v1.VerifyAsync("B1", [new ScannedLabel("BlindLabel", "B1")], new VerifyOptions(), failThreshold: 2);
         Assert.False(first.PrinterPaused);
-        Assert.Equal(1, threshold.CurrentCount("Ship1"));
-        Assert.Equal(1, threshold.CurrentCount("Cont1"));
-        Assert.Equal(0, threshold.CurrentCount("L1")); // no longer keyed by line
+        Assert.Equal(1, (await threshold.CurrentCountAsync("Ship1")));
+        Assert.Equal(1, (await threshold.CurrentCountAsync("Cont1")));
+        Assert.Equal(0, (await threshold.CurrentCountAsync("L1"))); // no longer keyed by line
 
         var v2 = await TwoPrinterCartonAsync("B2", threshold);
         var second = await v2.VerifyAsync("B2", [new ScannedLabel("BlindLabel", "B2")], new VerifyOptions(), failThreshold: 2);
 
         Assert.True(second.PrinterPaused);
         Assert.Equal(["Cont1", "Ship1"], second.PrintersToPause!.Order(StringComparer.Ordinal));
-        Assert.Equal(0, threshold.CurrentCount("Ship1")); // source _Refresh after ~PP
+        Assert.Equal(0, (await threshold.CurrentCountAsync("Ship1"))); // source _Refresh after ~PP
     }
 
     [Fact]
     public async Task Item5_Pass_ResetsEachPrintersStreak()
     {
-        var threshold = new VerifyThresholdTracker();
+        var threshold = TestServices.Threshold();
         var v1 = await TwoPrinterCartonAsync("B1", threshold);
         await v1.VerifyAsync("B1", [new ScannedLabel("BlindLabel", "B1")], new VerifyOptions(), failThreshold: 3);
-        Assert.Equal(1, threshold.CurrentCount("Ship1"));
+        Assert.Equal(1, (await threshold.CurrentCountAsync("Ship1")));
 
         var v2 = await TwoPrinterCartonAsync("B2", threshold);
         var pass = await v2.VerifyAsync(
@@ -202,8 +202,8 @@ public sealed class SqlFidelityRulingTests
             failThreshold: 3);
 
         Assert.Equal(VerifyStationStatus.Verified, pass.Status);
-        Assert.Equal(0, threshold.CurrentCount("Ship1"));
-        Assert.Equal(0, threshold.CurrentCount("Cont1"));
+        Assert.Equal(0, (await threshold.CurrentCountAsync("Ship1")));
+        Assert.Equal(0, (await threshold.CurrentCountAsync("Cont1")));
     }
 
     // ---- 6+7. Reprint Labels setting governs re-arm ------------------------------------------------
@@ -300,7 +300,7 @@ public sealed class SqlFidelityRulingTests
 
         Assert.Empty(_gateway.Jobs);
         Assert.Equal(LabelSelectionStatus.NoFirePoint, Assert.Single(result.Assignments).Status);
-        Assert.Equal(T0, state.LastPrinted);
+        Assert.Equal(T0, _lines.PrinterStates.Get("Ship1")!.LastPrinted);
     }
 
     // ---- 9. LastPrinted stamped on every attempt ---------------------------------------------------
@@ -321,7 +321,7 @@ public sealed class SqlFidelityRulingTests
         var result = await Induct(gateway: new FailingGateway()).InductAsync("L1", "BL1");
 
         Assert.Equal(LabelSelectionStatus.DispatchFailed, Assert.Single(result.Assignments).Status);
-        Assert.Equal(T0, state.LastPrinted);
+        Assert.Equal(T0, _lines.PrinterStates.Get("Ship1")!.LastPrinted);
     }
 
     // ---- 10. Slot assignment on every induct -------------------------------------------------------
@@ -358,10 +358,10 @@ public sealed class SqlFidelityRulingTests
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         var order = await Advice().AdviseAsync("L1", "BL1", Labels(("Shipping", "S1")));
         order.SetAdviceMetadata(verifyPassDest: "Ship Lane", verifyFailDest: "Reject Lane");
-        await _store.UpsertAsync(order);
+        await _store.SaveAsync(order);
         await Induct().InductAsync("L1", "BL1");
         var rejects = new InMemoryRejectHistoryRepository();
-        return (new VerifyStationService(_store, new VerificationService(), new VerifyThresholdTracker(), _clock, rejects: rejects, xref: xref), rejects);
+        return (TestServices.Verify(_store, TestServices.Threshold(), _clock, rejects: rejects, xref: xref), rejects);
     }
 
     [Fact]
@@ -485,36 +485,47 @@ public sealed class SqlFidelityRulingTests
         ["B"] = new PrinterState("B", plcOnline: false),
     };
 
+    /// <summary>Lane-evaluate over a shared printer-state store seeded with <paramref name="states"/>.</summary>
+    private static async Task<(LaneEvalResult Result, InMemoryPrinterStateStore Store)> EvalShared(
+        LineConfig line,
+        Dictionary<string, PrinterState> states,
+        ISettingsProvider? settings = null)
+    {
+        var store = new InMemoryPrinterStateStore();
+        foreach (var state in states.Values)
+        {
+            store.Put(state);
+        }
+
+        var result = await TestServices.LaneEval(store, settings).EvaluateAsync(line, new ZoneState(), T0);
+        return (result, store);
+    }
+
     [Fact]
     public async Task Item13c_TwoPrinterRuleOn_RunsSlow_BeforePromotingSpare()
     {
-        var states = SpareOnlineOtherOffline();
-
-        var result = await new LaneEvalService().EvaluateAsync(TwoPrinterLine(true), states, new ZoneState(), T0);
+        var (result, store) = await EvalShared(TwoPrinterLine(true), SpareOnlineOtherOffline());
 
         Assert.Equal(LineControl.SlowLine, result.Control);
         Assert.Empty(result.Changes);
-        Assert.True(states["A"].IsSpare);
+        Assert.True(store.Get("A")!.IsSpare);
     }
 
     [Fact]
     public async Task Item13c_TwoPrinterRuleOff_PromotesSpare()
     {
-        var states = SpareOnlineOtherOffline();
-
-        var result = await new LaneEvalService().EvaluateAsync(TwoPrinterLine(false), states, new ZoneState(), T0);
+        var (result, store) = await EvalShared(TwoPrinterLine(false), SpareOnlineOtherOffline());
 
         Assert.Contains(result.Changes, c => c.PrinterId == "A" && c.Change == SpareChange.PromotedFromSpare);
+        Assert.False(store.Get("A")!.IsSpare); // promotion persisted to the shared state
     }
 
     [Fact]
     public async Task Item13c_GlobalSetting_AppliesWhenLineUnset_PerLineOverrides()
     {
         var global = await Settings(KnownSettings.TwoPrinterRule, true);
-        var svc = new LaneEvalService(settings: global);
-
-        var fromGlobal = await svc.EvaluateAsync(TwoPrinterLine(null), SpareOnlineOtherOffline(), new ZoneState(), T0);
-        var lineOff = await svc.EvaluateAsync(TwoPrinterLine(false), SpareOnlineOtherOffline(), new ZoneState(), T0);
+        var (fromGlobal, _) = await EvalShared(TwoPrinterLine(null), SpareOnlineOtherOffline(), global);
+        var (lineOff, _) = await EvalShared(TwoPrinterLine(false), SpareOnlineOtherOffline(), global);
 
         Assert.Equal(LineControl.SlowLine, fromGlobal.Control);
         Assert.NotEmpty(lineOff.Changes);
@@ -540,7 +551,7 @@ public sealed class SqlFidelityRulingTests
             printerPolicies: new Dictionary<ApplyOrientation, PrinterGroupPolicy> { [ApplyOrientation.Side] = new(2, 2, 1, true) });
         var states = new Dictionary<string, PrinterState>(StringComparer.OrdinalIgnoreCase) { ["A"] = new PrinterState("A") };
 
-        var result = new LaneEvalService().Evaluate(line, states, new ZoneState(), T0);
+        var result = TestServices.LaneEval(new InMemoryPrinterStateStore()).Evaluate(line, states, new ZoneState(), T0);
 
         Assert.NotEqual(LineControl.Balanced, result.Control);
     }

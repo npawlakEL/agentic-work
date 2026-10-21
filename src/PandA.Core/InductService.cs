@@ -37,6 +37,16 @@ public interface IInductService
         InductAsync(InductScan.ForBlindLabel(lineId, blindLabel), cancellationToken);
 }
 
+/// <remarks>
+/// Multi-host (decision-010): a carton can be inducted on any lane served by any host, so the whole
+/// check-CanPrint → print → persist sequence runs under the shared <see cref="LockNames.Carton"/> lease
+/// (<see cref="ILockProvider"/> is a required, cross-host dependency — there is no process-local fallback).
+/// The lease is renewed (fencing check) immediately before dispatching; if it was lost nothing is printed.
+/// On lease timeout the induct fails safe (<see cref="InductStatus.LockTimeout"/>, nothing printed). Printer
+/// state is a fresh <see cref="IPrinterStateStore"/> snapshot per induct; the order is persisted with a
+/// version-checked update and, on a conflict, the recorded mutations are re-applied to the reloaded row once
+/// (the labels are never printed twice).
+/// </remarks>
 public sealed class InductService : IInductService
 {
     private readonly ITransportOrderStore _store;
@@ -45,12 +55,13 @@ public sealed class InductService : IInductService
     private readonly IPrinterGateway _gateway;
     private readonly IClock _clock;
     private readonly ISettingsProvider _settings;
-    private readonly IMinGapProvider? _minGap;
-    private readonly ICartonRunRepository? _runs;
-    private readonly IXRefStore? _xref;
-    private readonly IExceptionLabelSource? _exceptionLabels;
+    private readonly IPrinterStateStore _printerStates;
     private readonly ILockProvider _locks;
     private readonly ISlotIndexProvider _slots;
+    private readonly ICartonRunRepository _runs;
+    private readonly IMinGapProvider? _minGap;
+    private readonly IXRefStore? _xref;
+    private readonly IExceptionLabelSource? _exceptionLabels;
     private readonly ILogger<InductService> _logger;
     private readonly FirePointResolver _firePoints = new();
     private readonly ApplyPointResolver _applyPoints = new();
@@ -62,13 +73,14 @@ public sealed class InductService : IInductService
         IPrinterGateway gateway,
         IClock clock,
         ISettingsProvider settings,
+        IPrinterStateStore printerStates,
+        ILockProvider locks,
+        ISlotIndexProvider slots,
+        ICartonRunRepository runs,
         IMinGapProvider? minGap = null,
-        ICartonRunRepository? runs = null,
         IXRefStore? xref = null,
         IExceptionLabelSource? exceptionLabels = null,
-        ILogger<InductService>? logger = null,
-        ILockProvider? locks = null,
-        ISlotIndexProvider? slots = null)
+        ILogger<InductService>? logger = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _lines = lines ?? throw new ArgumentNullException(nameof(lines));
@@ -76,12 +88,13 @@ public sealed class InductService : IInductService
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _printerStates = printerStates ?? throw new ArgumentNullException(nameof(printerStates));
+        _locks = locks ?? throw new ArgumentNullException(nameof(locks));
+        _slots = slots ?? throw new ArgumentNullException(nameof(slots));
+        _runs = runs ?? throw new ArgumentNullException(nameof(runs));
         _minGap = minGap;
-        _runs = runs;
         _xref = xref;
         _exceptionLabels = exceptionLabels;
-        _locks = locks ?? InProcessLockProvider.Shared;
-        _slots = slots ?? new CyclicSlotIndexProvider();
         _logger = logger ?? NullLogger<InductService>.Instance;
     }
 
@@ -96,23 +109,43 @@ public sealed class InductService : IInductService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scan);
-        var lineId = scan.LineId;
-        var blindLabel = scan.BlindLabel;
-        ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(blindLabel);
+        ArgumentException.ThrowIfNullOrWhiteSpace(scan.LineId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(scan.BlindLabel);
 
-        // Serialize inducts of the same carton (platform-settings F13 / source PA_Lock) so a duplicate
-        // re-induct cannot pass the CanPrint check while the first run is still dispatching.
-        await using var scanLock = await _locks
-            .AcquireAsync(InductLockName(blindLabel), cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        var leases = new List<ILease>(2);
+        try
+        {
+            // Serialize every writer of this carton across all hosts (platform-settings F13 / source PA_Lock):
+            // a duplicate induct on another lane cannot pass the CanPrint check while this run is dispatching.
+            leases.Add(await _locks
+                .AcquireAsync(LockNames.Carton(scan.BlindLabel), cancellationToken: cancellationToken)
+                .ConfigureAwait(false));
 
-        return await InductLockedAsync(scan, cancellationToken).ConfigureAwait(false);
+            return await InductLockedAsync(scan, leases, cancellationToken).ConfigureAwait(false);
+        }
+        catch (LockTimeoutException ex)
+        {
+            // Fail safe: another host holds the carton. Nothing printed; the PLC still gets a slot assignment.
+            _logger.LogWarning(
+                ex,
+                "Induct scan {TuId} on line {LineId} not processed: carton lease {Resource} is held by another host.",
+                scan.BlindLabel, scan.LineId, ex.Resource);
+            var slot = await _slots.NextSlotAsync(cancellationToken).ConfigureAwait(false);
+            return InductResult.LockTimeout().WithSlot(slot);
+        }
+        finally
+        {
+            for (var i = leases.Count - 1; i >= 0; i--)
+            {
+                await leases[i].DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
-    private static string InductLockName(string tuId) => "Induct_" + tuId.ToUpperInvariant();
-
-    private async ValueTask<InductResult> InductLockedAsync(InductScan scan, CancellationToken cancellationToken)
+    private async ValueTask<InductResult> InductLockedAsync(
+        InductScan scan,
+        List<ILease> leases,
+        CancellationToken cancellationToken)
     {
         var blindLabel = scan.BlindLabel;
 
@@ -121,7 +154,6 @@ public sealed class InductService : IInductService
         var slot = await _slots.NextSlotAsync(cancellationToken).ConfigureAwait(false);
 
         var order = await _store.FindActiveByTuIdAsync(blindLabel, cancellationToken).ConfigureAwait(false);
-        IAsyncDisposable? resolvedLock = null;
         if (order is null)
         {
             // F18: a non-BL scan (oLPN/UPC/…) doesn't match a blind label directly; resolve it through the
@@ -129,33 +161,43 @@ public sealed class InductService : IInductService
             order = await ResolveByBarcodeAsync(scan, cancellationToken).ConfigureAwait(false);
             if (order is not null && !string.Equals(order.TuId, blindLabel, StringComparison.OrdinalIgnoreCase))
             {
-                // Also hold the resolved carton's own lock, then re-read it so CanPrint reflects any run that
-                // completed while we waited.
-                resolvedLock = await _locks
-                    .AcquireAsync(InductLockName(order.TuId), cancellationToken: cancellationToken)
-                    .ConfigureAwait(false);
-                order = await _store.FindActiveByTuIdAsync(order.TuId, cancellationToken).ConfigureAwait(false) ?? order;
+                // Also hold the resolved carton's own lease, then re-read it so CanPrint reflects any run that
+                // completed (on any host) while we waited.
+                leases.Add(await _locks
+                    .AcquireAsync(LockNames.Carton(order.TuId), cancellationToken: cancellationToken)
+                    .ConfigureAwait(false));
+                order = await _store.FindActiveByTuIdAsync(order.TuId, cancellationToken).ConfigureAwait(false);
             }
         }
 
-        try
-        {
-            var result = await InductOrderAsync(scan, order, slot, cancellationToken).ConfigureAwait(false);
-            return result.WithSlot(slot);
-        }
-        finally
-        {
-            if (resolvedLock is not null)
-            {
-                await resolvedLock.DisposeAsync().ConfigureAwait(false);
-            }
-        }
+        var result = await InductOrderAsync(scan, order, slot, leases, cancellationToken).ConfigureAwait(false);
+        return result.WithSlot(slot);
     }
 
+    /// <summary>
+    /// Fencing check before an irreversible dispatch: renew every held lease. False means a lease expired and
+    /// another host may own the carton now — the caller must not print.
+    /// </summary>
+    private async ValueTask<bool> StillOwnsAsync(IReadOnlyList<ILease> leases, CancellationToken cancellationToken)
+    {
+        foreach (var lease in leases)
+        {
+            if (!await lease.RenewAsync(cancellationToken).ConfigureAwait(false))
+            {
+                _logger.LogError(
+                    "Lease {Resource} was lost before dispatch (expired; another host may own it); nothing printed.",
+                    lease.Resource);
+                return false;
+            }
+        }
+
+        return true;
+    }
     private async ValueTask<InductResult> InductOrderAsync(
         InductScan scan,
         TransportOrder? order,
         int slot,
+        IReadOnlyList<ILease> leases,
         CancellationToken cancellationToken)
     {
         var lineId = scan.LineId;
@@ -184,7 +226,7 @@ public sealed class InductService : IInductService
             _logger.LogInformation(
                 "Induct scan {TuId} on line {LineId} classified {Status} (front gap {FrontGap}); real labels not printed.",
                 blindLabel, lineId, inductStatus, scan.FrontGap);
-            var exception = await TryEmitExceptionLabelAsync(scan, inductStatus, slot, cancellationToken).ConfigureAwait(false);
+            var exception = await TryEmitExceptionLabelAsync(scan, inductStatus, slot, leases, cancellationToken).ConfigureAwait(false);
             if (exception is not null)
             {
                 return exception; // the exception path records its own run
@@ -198,7 +240,7 @@ public sealed class InductService : IInductService
         {
             // F10 (decision-021): an unmatched carton with exceptions enabled gets a locally-generated
             // exception label against a synthesized identity, then routes to reject at verify.
-            var exception = await TryEmitExceptionLabelAsync(scan, inductStatus, slot, cancellationToken).ConfigureAwait(false);
+            var exception = await TryEmitExceptionLabelAsync(scan, inductStatus, slot, leases, cancellationToken).ConfigureAwait(false);
             if (exception is not null)
             {
                 return exception;
@@ -230,25 +272,21 @@ public sealed class InductService : IInductService
             return InductResult.NoReprint();
         }
 
-        if (!order.CanPrint)
+        var resetForReprint = !order.CanPrint;
+        if (resetForReprint)
         {
             order.ResetPrintStatesForReprint();
         }
 
-        return await PrintOrderAsync(scan, order, slot, runId, cancellationToken).ConfigureAwait(false);
+        return await PrintOrderAsync(scan, order, slot, runId, resetForReprint, leases, cancellationToken).ConfigureAwait(false);
     }
 
-    private async ValueTask<long?> CreateRunAsync(
+    private async ValueTask<long> CreateRunAsync(
         InductScan scan,
         string tuId,
         CartonStatus inductStatus,
         CancellationToken cancellationToken)
     {
-        if (_runs is not { } runs)
-        {
-            return null;
-        }
-
         var record = CartonRunRecord.Create(
             tuId: tuId,
             pandaDataId: StableOrderId(tuId),
@@ -268,14 +306,16 @@ public sealed class InductService : IInductService
             assignedPrinter: null,
             destinationLane: null,
             createdAt: _clock.UtcNow);
-        return await runs.CreateRunAsync(record, cancellationToken).ConfigureAwait(false);
+        return await _runs.CreateRunAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask<InductResult> PrintOrderAsync(
         InductScan scan,
         TransportOrder order,
         int slot,
-        long? runId,
+        long runId,
+        bool resetForReprint,
+        IReadOnlyList<ILease> leases,
         CancellationToken cancellationToken)
     {
         var lineId = scan.LineId;
@@ -305,12 +345,44 @@ public sealed class InductService : IInductService
 
         // Selection is orientation-agnostic: each label routes to whatever printer maps to its type,
         // so a carton's side (Shipping) and top (Content) labels each reach their own printer.
-        var selection = _selection.Select(context.Config, context.States, order.Labels);
+        // Fresh shared printer-state snapshot for this induct only (never cached across inducts/hosts).
+        var states = await _printerStates.GetLineSnapshotAsync(context.Config, cancellationToken).ConfigureAwait(false);
+        var selection = _selection.Select(context.Config, states, order.Labels);
+
+        if (selection.Assignments.Any(a => a.Status == LabelSelectionStatus.Assigned)
+            && !await StillOwnsAsync(leases, cancellationToken).ConfigureAwait(false))
+        {
+            return InductResult.LockTimeout();
+        }
 
         var now = _clock.UtcNow;
         var printersById = context.Config.Printers.ToDictionary(p => p.PrinterId, StringComparer.OrdinalIgnoreCase);
         var runPrinterRecorded = false;
         var outcomes = selection.Assignments.ToList();
+
+        // Every mutation applied to the order in this run, so it can be re-applied to a reloaded row if the
+        // version-checked save conflicts (the labels are already out; they are never printed again).
+        var measurements = order.InductMeasurements;
+        var statusAtInduct = order.StatusAtInduct;
+        var replay = new List<Action<TransportOrder>>
+        {
+            o =>
+            {
+                if (measurements is not null)
+                {
+                    o.StampInductScan(measurements);
+                }
+
+                if (statusAtInduct is { } s)
+                {
+                    o.StampInductStatus(s);
+                }
+            },
+        };
+        if (resetForReprint)
+        {
+            replay.Add(o => o.ResetPrintStatesForReprint());
+        }
 
         for (var i = 0; i < outcomes.Count; i++)
         {
@@ -324,9 +396,9 @@ public sealed class InductService : IInductService
             var label = assignment.Label;
 
             // F-LOG1: attach the first matched printer to the run-history record for this carton.
-            if (runId is { } id && !runPrinterRecorded && _runs is { } runsRepo)
+            if (!runPrinterRecorded)
             {
-                await runsRepo.UpdatePrinterAsync(id, printer.PrinterId, cancellationToken).ConfigureAwait(false);
+                await _runs.UpdatePrinterAsync(runId, printer.PrinterId, cancellationToken).ConfigureAwait(false);
                 runPrinterRecorded = true;
             }
 
@@ -344,7 +416,7 @@ public sealed class InductService : IInductService
                 if (firePoint is not { NeglectPrint: false })
                 {
                     outcomes[i] = LabelAssignment.NoFirePoint(label, printer.PrinterId);
-                    StampLastPrinted(context, printer.PrinterId, now);
+                    await StampLastPrintedAsync(printer.PrinterId, now, cancellationToken).ConfigureAwait(false);
                     _logger.LogWarning(
                         "No usable fire point for label {LabelType} of transport order {TuId} on printer {PrinterId} (line {LineId}); label skipped.",
                         label.LabelType, order.TuId, printer.PrinterId, lineId);
@@ -388,7 +460,7 @@ public sealed class InductService : IInductService
                 // is stamped on every attempt (source PickPrinter L469-473) so load balancing rotates away
                 // from a broken printer (owner ruling 2026-10-21).
                 outcomes[i] = LabelAssignment.DispatchFailed(label, printer.PrinterId);
-                StampLastPrinted(context, printer.PrinterId, now);
+                await StampLastPrintedAsync(printer.PrinterId, now, cancellationToken).ConfigureAwait(false);
                 _logger.LogError(
                     ex,
                     "Failed to dispatch label {LabelType} for transport order {TuId} to printer {PrinterId} on line {LineId}.",
@@ -401,10 +473,13 @@ public sealed class InductService : IInductService
                 label.LabelType, order.TuId, printer.PrinterId, lineId);
 
             // Stamp LastPrinted so the next carton rotates (round-robin state).
-            StampLastPrinted(context, printer.PrinterId, now);
+            await StampLastPrintedAsync(printer.PrinterId, now, cancellationToken).ConfigureAwait(false);
 
             // Record which label type printed, to which printer (per-label outcome; decision-003).
-            order.MarkLabelPrinted(label.LabelType, printer.PrinterId, now);
+            var printedType = label.LabelType;
+            var printedOn = printer.PrinterId;
+            order.MarkLabelPrinted(printedType, printedOn, now);
+            replay.Add(o => o.MarkLabelPrinted(printedType, printedOn, now));
         }
 
         var result = InductResult.FromAssignments(outcomes);
@@ -414,7 +489,8 @@ public sealed class InductService : IInductService
         if (result.Status == InductStatus.Printed)
         {
             order.CompletePrintRun(now);
-            await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
+            replay.Add(o => o.CompletePrintRun(now));
+            await PersistPrintRunAsync(order, replay, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation(
                 "Completed print run for transport order {TuId} on line {LineId}; print count is {PrintCount}.",
                 order.TuId, lineId, order.PrintCount);
@@ -424,7 +500,7 @@ public sealed class InductService : IInductService
         {
             // A dispatch was attempted: persist per-label print state, but do not count the run or advance
             // status. (A pure no-eligible-printer outcome dispatched nothing and is not persisted.)
-            await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
+            await PersistPrintRunAsync(order, replay, cancellationToken).ConfigureAwait(false);
             _logger.LogWarning(
                 "Transport order {TuId} on line {LineId} not fully printed ({Status}).",
                 order.TuId, lineId, result.Status);
@@ -433,11 +509,50 @@ public sealed class InductService : IInductService
         return result;
     }
 
-    private static void StampLastPrinted(LineContext context, string printerId, DateTimeOffset now)
+    /// <summary>LastPrinted is a single-column, last-writer-wins rotation hint in the shared printer store.</summary>
+    private ValueTask StampLastPrintedAsync(string printerId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        _printerStates.StampLastPrintedAsync(printerId, now, cancellationToken);
+
+    /// <summary>
+    /// Persist the print-run mutations with a version-checked update. On a conflict (a writer bypassed the
+    /// carton lease, or the lease expired under a stalled host) reload the row and re-apply <paramref name="replay"/>
+    /// once; if that conflicts too, log an Error and give up — the labels were dispatched and are never
+    /// printed again by this run.
+    /// </summary>
+    private async ValueTask PersistPrintRunAsync(
+        TransportOrder order,
+        IReadOnlyList<Action<TransportOrder>> replay,
+        CancellationToken cancellationToken)
     {
-        if (context.States.TryGetValue(printerId, out var state))
+        try
         {
-            state.LastPrinted = now;
+            await _store.SaveAsync(order, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            _logger.LogWarning(ex, "Concurrency conflict persisting print run for {TuId}; re-applying to the latest row.", order.TuId);
+        }
+
+        try
+        {
+            var fresh = await _store.FindActiveByTuIdAsync(order.TuId, cancellationToken).ConfigureAwait(false);
+            if (fresh is null)
+            {
+                _logger.LogError("Transport order {TuId} vanished while persisting its print run; print state not recorded.", order.TuId);
+                return;
+            }
+
+            foreach (var apply in replay)
+            {
+                apply(fresh);
+            }
+
+            await _store.UpdateAsync(fresh, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            _logger.LogError(ex, "Repeated concurrency conflict persisting print run for {TuId}; print state not recorded (labels were dispatched once).", order.TuId);
         }
     }
 
@@ -508,7 +623,7 @@ public sealed class InductService : IInductService
     /// F10 (decision-021) — emit a locally-generated exception label for an unmatched carton. Gated by the
     /// effective <c>PrintExceptionLabels</c> flag (a defined global overrides per-line) and a non-Bypass read
     /// that maps to an exception reason. Synthesizes a
-    /// human-readable unique id (<c>{Reason}-{seq}-{unique}</c>), builds the ZPL from the injected
+    /// human-readable unique id (<c>{Reason}-{seq}-{runId}</c>, the run id store-generated across hosts), builds the ZPL from the injected
     /// <see cref="IExceptionLabelSource"/> (LocalTemplate by default; DCMS/eHub via the adapter), prints it to
     /// an available printer of the line's apply orientation (Side if any side printer, else Top; <c>NoPrinter</c>
     /// when none is available), records the synthetic
@@ -519,6 +634,7 @@ public sealed class InductService : IInductService
         InductScan scan,
         CartonStatus status,
         int slot,
+        IReadOnlyList<ILease> leases,
         CancellationToken ct)
     {
         if (_exceptionLabels is not { } source)
@@ -561,7 +677,8 @@ public sealed class InductService : IInductService
 
         // Pick among available (online, non-spare) printers of that orientation with the same ranking as
         // normal labels (least-recently-printed / configured order).
-        var printer = SelectExceptionPrinter(context, orientation);
+        var states = await _printerStates.GetLineSnapshotAsync(context.Config, ct).ConfigureAwait(false);
+        var printer = SelectExceptionPrinter(context, states, orientation);
         if (printer is null)
         {
             _logger.LogWarning(
@@ -570,7 +687,10 @@ public sealed class InductService : IInductService
             return InductResult.NoPrinter();
         }
 
-        var cartonId = ExceptionLabelPolicy.MintCartonId(exceptionType, scan.SeqNum);
+        // The exception carton id derives from a store-generated run id (source <CartonID> = CartonListID), so
+        // it is unique across every host sharing the database.
+        var runId = await _runs.ReserveRunIdAsync(ct).ConfigureAwait(false);
+        var cartonId = ExceptionLabelPolicy.MintCartonId(exceptionType, scan.SeqNum, runId);
         var lpn = ExceptionLabelPolicy.UsesLpn(exceptionType) ? scan.BlindLabel : null;
 
         var build = await source.BuildAsync(exceptionType, cartonId, lpn, ct).ConfigureAwait(false);
@@ -584,6 +704,11 @@ public sealed class InductService : IInductService
 
         // F11/F12: exception labels go through the same VetLabel + ~HS pipeline as normal labels.
         var zpl = PrepareZpl(context.Config, build.Zpl);
+        if (!await StillOwnsAsync(leases, ct).ConfigureAwait(false))
+        {
+            return InductResult.LockTimeout();
+        }
+
         try
         {
             await _gateway.SendAsync(
@@ -592,7 +717,7 @@ public sealed class InductService : IInductService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            StampLastPrinted(context, printer.PrinterId, _clock.UtcNow);
+            await StampLastPrintedAsync(printer.PrinterId, _clock.UtcNow, ct).ConfigureAwait(false);
             _logger.LogError(
                 ex,
                 "Failed to dispatch {Reason} exception label {CartonId} to printer {PrinterId} on line {LineId}.",
@@ -600,7 +725,7 @@ public sealed class InductService : IInductService
             return InductResult.NoPrinter();
         }
 
-        StampLastPrinted(context, printer.PrinterId, _clock.UtcNow);
+        await StampLastPrintedAsync(printer.PrinterId, _clock.UtcNow, ct).ConfigureAwait(false);
 
         // Owner ruling 2026-10-21 — persist the synthetic exception carton like the SQL's exception PandaData
         // row (LookupCarton L509-536: LabelType1='Exception', LabelBarcode1='ExceptionLabel', VerifyEnabled=1),
@@ -614,10 +739,17 @@ public sealed class InductService : IInductService
             _clock.UtcNow);
         exceptionOrder.StampInductScan(scan.ToMeasurements());
         exceptionOrder.StampInductStatus(status);
-        await _store.UpsertAsync(exceptionOrder, ct).ConfigureAwait(false);
 
-        // F-LOG1: record the synthetic exception carton as an audited run, marked with its induct status.
-        if (_runs is { } runs)
+        // Like every TransportOrder writer, the exception-carton insert holds its own carton lease. The id is
+        // freshly minted from a unique run id, so the lease is uncontended; the insert enforces unique TuId.
+        var exceptionLease = await _locks.AcquireAsync(LockNames.Carton(cartonId), cancellationToken: ct).ConfigureAwait(false);
+        await using (exceptionLease.ConfigureAwait(false))
+        {
+            await _store.InsertAsync(exceptionOrder, ct).ConfigureAwait(false);
+        }
+
+        // F-LOG1: record the synthetic exception carton as an audited run (with the reserved run id the carton
+        // id was minted from), marked with its induct status.
         {
             var record = CartonRunRecord.Create(
                 tuId: cartonId,
@@ -637,8 +769,8 @@ public sealed class InductService : IInductService
                 statusAtInduct: status,
                 assignedPrinter: printer.PrinterId,
                 destinationLane: null,
-                createdAt: _clock.UtcNow);
-            await runs.CreateRunAsync(record, ct).ConfigureAwait(false);
+                createdAt: _clock.UtcNow) with { RunId = runId };
+            await _runs.CreateRunAsync(record, ct).ConfigureAwait(false);
         }
 
         // Verify-then-reject (decision-021): the exception carton is treated as a verify Fail and routed to
@@ -657,7 +789,10 @@ public sealed class InductService : IInductService
     /// Exception labels are not in any printer's LabelMap, so each candidate is projected as able to print
     /// the exception type. Returns null when none is available.
     /// </summary>
-    private PrinterConfig? SelectExceptionPrinter(LineContext context, ApplyOrientation orientation)
+    private PrinterConfig? SelectExceptionPrinter(
+        LineContext context,
+        IReadOnlyDictionary<string, PrinterState> states,
+        ApplyOrientation orientation)
     {
         var candidates = context.Config.Printers
             .Where(p => p.PrinterType == orientation)
@@ -678,7 +813,7 @@ public sealed class InductService : IInductService
 
         var probe = new PandaLabelSet(
             [new Label(ExceptionBuildResult.ExceptionLabelType, ExceptionBuildResult.ExceptionLpn, string.Empty)]);
-        var assignment = _selection.Select(view, context.States, probe).Assignments.FirstOrDefault();
+        var assignment = _selection.Select(view, states, probe).Assignments.FirstOrDefault();
 
         return assignment is { Status: LabelSelectionStatus.Assigned, PrinterId: { } id }
             && candidates.TryGetValue(id, out var chosen)

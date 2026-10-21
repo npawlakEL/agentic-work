@@ -19,8 +19,8 @@ public sealed class InductServiceTests
 
     public InductServiceTests()
     {
-        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
-        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider());
+        _advice = TestServices.Advice(_store, _clock, new InMemorySettingsProvider());
+        _induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider());
     }
 
     private static PrinterConfig Printer(string id, string[] map, int order) =>
@@ -141,7 +141,7 @@ public sealed class InductServiceTests
         // 'Reprint Labels' = 0 → an already-printed carton needs operator authorization (owner ruling 2026-10-21).
         var settings = new InMemorySettingsProvider();
         await settings.SetAsync(KnownSettings.ReprintLabels, false);
-        var induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, settings);
+        var induct = TestServices.Induct(_store, _lines, _gateway, _clock, settings);
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
         await induct.InductAsync("L1", "BLIND1"); // PrintCount → 1
@@ -163,7 +163,7 @@ public sealed class InductServiceTests
 
         var order = await _store.FindActiveByTuIdAsync("BLIND1");
         order!.AuthorizeReprint("relabel");
-        await _store.UpsertAsync(order);
+        await _store.SaveAsync(order);
 
         var reprint = await _induct.InductAsync("L1", "BLIND1");
 
@@ -285,8 +285,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_FrontGapBelowMinimum_ClassifiesGapError_AndDoesNotPrint()
     {
-        var induct = new InductService(
-            _store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider(),
+        var induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider(),
             new FixedMinGap(100));
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
@@ -302,8 +301,7 @@ public sealed class InductServiceTests
     [Fact]
     public async Task Induct_AdequateFrontGap_ClassifiesPrintReady()
     {
-        var induct = new InductService(
-            _store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider(),
+        var induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider(),
             new FixedMinGap(100));
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
@@ -318,8 +316,7 @@ public sealed class InductServiceTests
     public async Task Induct_WithRunRepository_LogsRunWithMeasurementsAndAssignedPrinter()
     {
         var runs = new InMemoryCartonRunRepository();
-        var induct = new InductService(
-            _store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider(),
+        var induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider(),
             runs: runs);
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
@@ -343,8 +340,7 @@ public sealed class InductServiceTests
     public async Task Induct_TwiceForSameCarton_RunsShareStablePandaDataId()
     {
         var runs = new InMemoryCartonRunRepository();
-        var induct = new InductService(
-            _store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider(),
+        var induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider(),
             runs: runs);
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
@@ -352,7 +348,7 @@ public sealed class InductServiceTests
 
         var order = await _store.FindActiveByTuIdAsync("BLIND1");
         order!.AuthorizeReprint("relabel");
-        await _store.UpsertAsync(order);
+        await _store.SaveAsync(order);
         await induct.InductAsync("L1", "BLIND1");
 
         var pandaDataId = runs.Records[0].PandaDataId;
@@ -390,7 +386,7 @@ public sealed class InductServiceTests
     // ---- F10 exception labels (decision-021) ----
 
     private InductService ExceptionInduct(ISettingsProvider settings, ICartonRunRepository? runs = null) =>
-        new(_store, _lines, new PrinterSelectionService(), _gateway, _clock, settings,
+        TestServices.Induct(_store, _lines, _gateway, _clock, settings,
             exceptionLabels: new LocalTemplateSource(new InMemoryLabelTemplateRepository()), runs: runs);
 
     [Fact]

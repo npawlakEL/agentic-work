@@ -62,7 +62,7 @@ while (true)
 
     if (cmd is "s" or "status")
     {
-        Console.WriteLine(host.PrinterStatusReport());
+        Console.WriteLine(await host.PrinterStatusReportAsync());
         Console.WriteLine();
         continue;
     }
@@ -75,7 +75,7 @@ while (true)
             continue;
         }
 
-        foreach (var line in host.SetPrinterStatus(parts[1], online: parts[2].ToLowerInvariant() == "up"))
+        foreach (var line in await host.SetPrinterStatusAsync(parts[1], online: parts[2].ToLowerInvariant() == "up"))
         {
             Console.WriteLine(line);
         }
@@ -92,7 +92,7 @@ while (true)
             continue;
         }
 
-        foreach (var line in host.SetZoneStatus(online: parts[1].ToLowerInvariant() == "up"))
+        foreach (var line in await host.SetZoneStatusAsync(online: parts[1].ToLowerInvariant() == "up"))
         {
             Console.WriteLine(line);
         }

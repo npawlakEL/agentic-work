@@ -1,8 +1,13 @@
 namespace PandA.Core;
 
 /// <summary>
-/// Mutable runtime health/rotation state for a printer (source PrinterState table). Drives eligibility
+/// Runtime health/rotation state for a printer (source PrinterState table). Drives eligibility
 /// (online + not spare) and load balancing (LastPrinted). See architecture-log 005.
+/// <para>
+/// Multi-host (decision-010): the authoritative state lives in the shared <see cref="IPrinterStateStore"/>.
+/// Instances handed out by the store are detached <b>snapshots</b>; mutating one changes nothing shared —
+/// writes go through the store's atomic operations.
+/// </para>
 /// </summary>
 public sealed class PrinterState
 {
@@ -51,4 +56,7 @@ public sealed class PrinterState
 
     /// <summary>Eligible for selection when online on both PLC and print engine and not held as spare.</summary>
     public bool IsAvailable => PlcOnline && EngineOnline && !IsSpare;
+
+    /// <summary>Detached copy (snapshot semantics).</summary>
+    public PrinterState Clone() => (PrinterState)MemberwiseClone();
 }

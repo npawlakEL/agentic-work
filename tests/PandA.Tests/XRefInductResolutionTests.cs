@@ -26,9 +26,8 @@ public sealed class XRefInductResolutionTests
 
     public XRefInductResolutionTests()
     {
-        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider(), new XRefService(_xref));
-        _induct = new InductService(
-            _store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider(),
+        _advice = TestServices.Advice(_store, _clock, new InMemorySettingsProvider(), new XRefService(_xref));
+        _induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider(),
             xref: _xref);
     }
 

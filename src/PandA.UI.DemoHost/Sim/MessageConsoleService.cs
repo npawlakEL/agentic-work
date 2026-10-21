@@ -132,7 +132,9 @@ public sealed class MessageConsoleService
             encoderResolution: (decimal)line.EncoderResolutionInchesPerPulse,
             profileRegistry: profileRegistry);
 
-        var lineProvider = new InMemoryLineProvider().Add(config, printers.Select(p =>
+        // Each console run traces one message in isolation, so it gets its own simulated shared database.
+        var db = new SimSharedDatabase();
+        var lineProvider = new InMemoryLineProvider(db.PrinterStates).Add(config, printers.Select(p =>
         {
             _store.PrinterRuntime.TryGetValue(p.PrinterId!, out var runtime);
             // The console traces one message through a normally-staffed line: every configured printer is
@@ -148,13 +150,13 @@ public sealed class MessageConsoleService
                 verifyFailCount: runtime?.VerifyFailCount ?? 0);
         }));
 
-        var orders = new InMemoryTransportOrderStore();
+        var orders = db.Orders;
         var gateway = new CapturingPrinterGateway();
         var clock = new SimClock(DateTimeOffset.UtcNow);
         ISettingsProvider settings = new InMemorySettingsProvider();
         await settings.SetAsync(KnownSettings.ReprintLabels, _store.Settings.ReprintLabelsEnabled);
 
-        var advice = new CartonAdviceService(orders, clock, settings, logger: loggerFactory.CreateLogger<CartonAdviceService>());
+        var advice = new CartonAdviceService(orders, clock, settings, db.Locks, logger: loggerFactory.CreateLogger<CartonAdviceService>());
         var induct = new InductService(
             orders,
             lineProvider,
@@ -162,12 +164,17 @@ public sealed class MessageConsoleService
             gateway,
             clock,
             settings,
+            db.PrinterStates,
+            db.Locks,
+            db.Slots,
+            db.Runs,
             logger: loggerFactory.CreateLogger<InductService>());
         var verify = new VerifyStationService(
             orders,
             new VerificationService(),
-            new VerifyThresholdTracker(),
+            db.CreateThresholdTracker(),
             clock,
+            db.Locks,
             loggerFactory.CreateLogger<VerifyStationService>());
 
         // 0) Advise — create the transport order from the barcode's advised label slots, carrying the

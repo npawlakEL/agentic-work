@@ -19,8 +19,8 @@ public sealed class ProfileSwitchTests
 
     public ProfileSwitchTests()
     {
-        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
-        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider());
+        _advice = TestServices.Advice(_store, _clock, new InMemorySettingsProvider());
+        _induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider());
     }
 
     private static PrinterConfig Printer(string id, string[] map, int order) =>

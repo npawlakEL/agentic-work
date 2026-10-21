@@ -20,7 +20,7 @@ public sealed class ReviewFindingsTests
 
     public ReviewFindingsTests()
     {
-        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
+        _advice = TestServices.Advice(_store, _clock, new InMemorySettingsProvider());
     }
 
     private static PrinterConfig Printer(
@@ -35,11 +35,11 @@ public sealed class ReviewFindingsTests
         new(types.Select(t => new Label(t, $"LPN-{t}", $"^XA^FD{t}^FS^XZ")));
 
     private InductService Induct(IPrinterGateway? gateway = null, ILockProvider? locks = null) =>
-        new(_store, _lines, new PrinterSelectionService(), gateway ?? _gateway, _clock, TestSettings.ReprintOff(),
+        TestServices.Induct(_store, _lines, gateway ?? _gateway, _clock, TestSettings.ReprintOff(),
             locks: locks);
 
     private InductService ExceptionInduct() =>
-        new(_store, _lines, new PrinterSelectionService(), _gateway, _clock,
+        TestServices.Induct(_store, _lines, _gateway, _clock,
             new InMemorySettingsProvider(seedKnownSettings: false),
             exceptionLabels: new LocalTemplateSource(new InMemoryLabelTemplateRepository()));
 
@@ -83,13 +83,13 @@ public sealed class ReviewFindingsTests
     // ---- #2 per-carton Bypass / VerifyEnabled ----
 
     private VerifyStationService VerifyStation() =>
-        new(_store, new VerificationService(), new VerifyThresholdTracker(), _clock);
+        TestServices.Verify(_store, TestServices.Threshold(), _clock);
 
     private async Task SeedOrderAsync(string tuId, bool bypass, bool verifyEnabled)
     {
         var order = new TransportOrder(tuId, "L1", new PandaLabelSet([new Label("Shipping", "SHIP1", "^XA^XZ")]), T0);
         order.SetAdviceMetadata(bypass: bypass, verifyEnabled: verifyEnabled);
-        await _store.UpsertAsync(order);
+        await _store.SaveAsync(order);
     }
 
     [Fact]
@@ -216,7 +216,7 @@ public sealed class ReviewFindingsTests
 
         await ExceptionInduct().InductAsync(new InductScan("L1", "???", SeqNum: 1));
 
-        Assert.Equal(T0, states[0].LastPrinted);
+        Assert.Equal(T0, _lines.PrinterStates.Get("Ship1")!.LastPrinted); // shared printer-state store
     }
 
     // ---- #5 ApplyPoint.Parse ----
@@ -388,7 +388,7 @@ public sealed class ReviewFindingsTests
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", tuId, Labels("Shipping"));
         var gateway = new GatedGateway();
-        var induct = Induct(gateway, new InProcessLockProvider());
+        var induct = Induct(gateway, TestServices.Locks());
 
         var first = induct.InductAsync("L1", tuId).AsTask();
         await gateway.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -405,9 +405,9 @@ public sealed class ReviewFindingsTests
     }
 
     [Fact]
-    public async Task Finding10_InProcessLockProvider_SerializesSameKey_NotDifferentKeys()
+    public async Task Finding10_LeaseLockProvider_SerializesSameKey_NotDifferentKeys()
     {
-        var locks = new InProcessLockProvider();
+        var locks = TestServices.Locks();
         var held = await locks.AcquireAsync("K1");
 
         var sameKey = locks.AcquireAsync("K1").AsTask();
@@ -418,29 +418,29 @@ public sealed class ReviewFindingsTests
 
         await held.DisposeAsync();
         await using var second = await sameKey.WaitAsync(TimeSpan.FromSeconds(5));
-        await Assert.ThrowsAsync<TimeoutException>(async () => await locks.AcquireAsync("K1", TimeSpan.FromMilliseconds(20)));
+        await Assert.ThrowsAsync<LockTimeoutException>(async () => await locks.AcquireAsync("K1", TimeSpan.FromMilliseconds(20)));
     }
 
     [Fact]
     public async Task Finding10_LaneEvalAsync_WaitsForPerLineLock()
     {
-        var locks = new InProcessLockProvider();
-        var sut = new LaneEvalService(locks: locks);
+        var locks = TestServices.Locks();
+        var printerStates = new InMemoryPrinterStateStore().Put(new PrinterState("A"));
+        var sut = TestServices.LaneEval(printerStates, locks: locks);
         var line = new LineConfig("LE-" + Guid.NewGuid().ToString("N"), [Printer("A", ["Shipping"], 0)]);
-        var states = new Dictionary<string, PrinterState>(StringComparer.OrdinalIgnoreCase) { ["A"] = new("A") };
 
-        var held = await locks.AcquireAsync("LaneEval_" + line.LineId);
-        var pending = sut.EvaluateAsync(line, states, new ZoneState(true), T0).AsTask();
+        var held = await locks.AcquireAsync(LockNames.PrinterState(line.LineId));
+        var pending = sut.EvaluateAsync(line, new ZoneState(true), T0).AsTask();
         await Task.Delay(50);
         Assert.False(pending.IsCompleted);
 
         // Another line is not blocked.
         var other = new LineConfig("LE-" + Guid.NewGuid().ToString("N"), [Printer("A", ["Shipping"], 0)]);
-        await sut.EvaluateAsync(other, states, new ZoneState(true), T0).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        await sut.EvaluateAsync(other, new ZoneState(true), T0).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
 
         await held.DisposeAsync();
         var result = await pending.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(LineControl.ShutZone, (await sut.EvaluateAsync(line, states, new ZoneState(false), T0)).Control);
+        Assert.Equal(LineControl.ShutZone, (await sut.EvaluateAsync(line, new ZoneState(false), T0)).Control);
         Assert.NotNull(result);
     }
 }

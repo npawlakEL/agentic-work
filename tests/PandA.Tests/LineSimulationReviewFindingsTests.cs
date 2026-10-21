@@ -29,8 +29,8 @@ public sealed class LineSimulationReviewFindingsTests
         var lines = new InMemoryLineProvider().Add(config,
             [.. printers.Select(p => new PrinterState(p.PrinterId, plcOnline: true, engineOnline: true))]);
 
-        var induct = new InductService(orders, lines, new PrinterSelectionService(), gateway, clock, new InMemorySettingsProvider());
-        var verify = new VerifyStationService(orders, new VerificationService(), new VerifyThresholdTracker(), clock);
+        var induct = TestServices.Induct(orders, lines, gateway, clock, new InMemorySettingsProvider());
+        var verify = TestServices.Verify(orders, TestServices.Threshold(), clock);
 
         var sim = new LineSimulation(
             "L1", "Line 1", induct, verify, orders, gateway, clock, verifyFailThreshold: 2, settings,
@@ -64,7 +64,7 @@ public sealed class LineSimulationReviewFindingsTests
         Assert.Equal(3, labelsByCarton.Count);
         foreach (var (blind, labels) in labelsByCarton)
         {
-            var seq = blind[3..];
+            var seq = blind[^4..]; // blind = SIM-{lineId}-{seq:0000}
             Assert.Equal(2, labels.Count);
             Assert.Equal(
                 new[] { $"CONT-SIM-{seq}", $"SHIP-SIM-{seq}" },

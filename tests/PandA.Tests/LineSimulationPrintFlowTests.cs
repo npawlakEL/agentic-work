@@ -27,8 +27,8 @@ public sealed class LineSimulationPrintFlowTests
         var config = new LineConfig("L1", [new PrinterConfig("Ship1", "10.0.0.1", 9100, ["Shipping"], ApplyOrientation.Side, 0)], activeProfile: profile);
         var lines = new InMemoryLineProvider().Add(config, [new PrinterState("Ship1", plcOnline: true, engineOnline: true)]);
 
-        var induct = new InductService(orders, lines, new PrinterSelectionService(), gateway, clock, new InMemorySettingsProvider());
-        var verify = new VerifyStationService(orders, new VerificationService(), new VerifyThresholdTracker(), clock);
+        var induct = TestServices.Induct(orders, lines, gateway, clock, new InMemorySettingsProvider());
+        var verify = TestServices.Verify(orders, TestServices.Threshold(), clock);
 
         var sim = new LineSimulation(
             "L1", "Line 1", induct, verify, orders, gateway, clock, verifyFailThreshold: 2,
@@ -74,8 +74,8 @@ public sealed class LineSimulationPrintFlowTests
         var config = new LineConfig("L1", [new PrinterConfig("Ship1", "10.0.0.1", 9100, ["Shipping"], ApplyOrientation.Side, 0)], activeProfile: profile);
         var lines = new InMemoryLineProvider().Add(config, [new PrinterState("Ship1", plcOnline: true, engineOnline: true)]);
 
-        var induct = new InductService(orders, lines, new PrinterSelectionService(), gateway, clock, new InMemorySettingsProvider());
-        var verify = new VerifyStationService(orders, new VerificationService(), new VerifyThresholdTracker(), clock);
+        var induct = TestServices.Induct(orders, lines, gateway, clock, new InMemorySettingsProvider());
+        var verify = TestServices.Verify(orders, TestServices.Threshold(), clock);
 
         var sim = new LineSimulation(
             "L1", "Line 1", induct, verify, orders, gateway, clock, verifyFailThreshold: 2,
@@ -148,8 +148,8 @@ public sealed class LineSimulationPrintFlowTests
         var config = new LineConfig("L1", [new PrinterConfig("Ship1", "10.0.0.1", 9100, ["Shipping"], ApplyOrientation.Side, 0)], activeProfile: profile);
         var lines = new InMemoryLineProvider().Add(config, [new PrinterState("Ship1", plcOnline: true, engineOnline: true)]);
 
-        var induct = new InductService(orders, lines, new PrinterSelectionService(), gateway, clock, new InMemorySettingsProvider());
-        var verify = new VerifyStationService(orders, new VerificationService(), new VerifyThresholdTracker(), clock);
+        var induct = TestServices.Induct(orders, lines, gateway, clock, new InMemorySettingsProvider());
+        var verify = TestServices.Verify(orders, TestServices.Threshold(), clock);
 
         var sim = new LineSimulation(
             "L1", "Line 1", induct, verify, orders, gateway, clock, verifyFailThreshold: 2,
@@ -211,8 +211,8 @@ public sealed class LineSimulationPrintFlowTests
             new PrinterState("Ship2", plcOnline: true, engineOnline: true, lastPrinted: clock.UtcNow.AddMinutes(-1)),
         ]);
 
-        var induct = new InductService(orders, lines, new PrinterSelectionService(), gateway, clock, new InMemorySettingsProvider());
-        var verify = new VerifyStationService(orders, new VerificationService(), new VerifyThresholdTracker(), clock);
+        var induct = TestServices.Induct(orders, lines, gateway, clock, new InMemorySettingsProvider());
+        var verify = TestServices.Verify(orders, TestServices.Threshold(), clock);
 
         var sim = new LineSimulation(
             "L1", "Line 1", induct, verify, orders, gateway, clock, verifyFailThreshold: 2,
@@ -249,7 +249,7 @@ public sealed class LineSimulationPrintFlowTests
         foreach (var (blind, labels) in labelsByCarton)
         {
             var label = Assert.Single(labels);
-            Assert.Equal($"SHIP-SIM-{blind[3..]}", label.Lpn);
+            Assert.Equal($"SHIP-SIM-{blind[^4..]}", label.Lpn);
         }
 
         // Round-robin must spread the three cartons across both printers, not collapse onto one.

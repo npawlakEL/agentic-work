@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using PandA.Sim;
 using PandA.Sim.Line;
 
 namespace PandA.UI.DemoHost.Sim;
@@ -17,11 +18,16 @@ public sealed record SimLineLookup(LineSimulation? Simulation, string? Error)
 public sealed class SimLineCatalog
 {
     private readonly DemoDataStore _store;
+    private readonly SimSharedDatabase _database;
     private readonly ConcurrentDictionary<string, (LineSimulation Sim, long Version)> _sims = new(StringComparer.OrdinalIgnoreCase);
 
-    public SimLineCatalog(DemoDataStore store)
+    /// <param name="store">The demo configuration store.</param>
+    /// <param name="database">The simulated shared database every line's simulation is composed over
+    /// (decision-010); omitted → a private one for this catalog.</param>
+    public SimLineCatalog(DemoDataStore store, SimSharedDatabase? database = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        _database = database ?? new SimSharedDatabase();
     }
 
     /// <summary>Currently configured lines (live), ordered by name.</summary>
@@ -53,7 +59,7 @@ public sealed class SimLineCatalog
 
         try
         {
-            var sim = LineSimulationFactory.Create(_store, id);
+            var sim = LineSimulationFactory.Create(_store, id, _database);
             _sims[id] = (sim, version);
             return new(sim, null);
         }

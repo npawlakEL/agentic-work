@@ -18,7 +18,7 @@ public sealed class LifecyclePermutationTests
     private readonly InMemoryTransportOrderStore _store = new();
     private readonly InMemoryLineProvider _lines = new();
     private readonly CapturingPrinterGateway _gateway = new();
-    private readonly VerifyThresholdTracker _threshold = new();
+    private readonly VerifyThresholdTracker _threshold = TestServices.Threshold();
     private readonly TestClock _clock = new(T0);
     private readonly CartonAdviceService _advice;
     private readonly InductService _induct;
@@ -26,9 +26,9 @@ public sealed class LifecyclePermutationTests
 
     public LifecyclePermutationTests()
     {
-        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
-        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider());
-        _verify = new VerifyStationService(_store, new VerificationService(), _threshold, _clock);
+        _advice = TestServices.Advice(_store, _clock, new InMemorySettingsProvider());
+        _induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider());
+        _verify = TestServices.Verify(_store, _threshold, _clock);
     }
 
     private static PrinterConfig P(string id, string[] map, int order) =>
@@ -94,7 +94,7 @@ public sealed class LifecyclePermutationTests
         // Operator authorizes → reprint (count 1→2).
         var held = await _store.FindActiveByTuIdAsync("BLIND1");
         held!.AuthorizeReprint("operator relabel");
-        await _store.UpsertAsync(held);
+        await _store.SaveAsync(held);
         var reprint = await _induct.InductAsync("L1", "BLIND1");
         Assert.Equal(InductStatus.Printed, reprint.Status);
 
@@ -173,7 +173,7 @@ public sealed class LifecyclePermutationTests
         Assert.Equal(VerifyStationStatus.NoActiveOrder, unknown.Status);
         Assert.Equal(0, unknown.ConsecutiveFailures); // result reports 0, but...
 
-        Assert.Equal(1, _threshold.CurrentCount("Ship1")); // ...the real (per-printer) streak is untouched
+        Assert.Equal(1, (await _threshold.CurrentCountAsync("Ship1"))); // ...the real (per-printer) streak is untouched
     }
 
     [Fact]

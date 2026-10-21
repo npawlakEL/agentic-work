@@ -15,7 +15,7 @@ public sealed class RoutingCriterionTests
     private readonly InMemoryTransportOrderStore _store = new();
     private readonly InMemoryLineProvider _lines = new();
     private readonly CapturingPrinterGateway _gateway = new();
-    private readonly VerifyThresholdTracker _threshold = new();
+    private readonly VerifyThresholdTracker _threshold = TestServices.Threshold();
     private readonly TestClock _clock = new(T0);
     private readonly CartonAdviceService _advice;
     private readonly InductService _induct;
@@ -23,9 +23,9 @@ public sealed class RoutingCriterionTests
 
     public RoutingCriterionTests()
     {
-        _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
-        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider());
-        _verify = new VerifyStationService(_store, new VerificationService(), _threshold, _clock);
+        _advice = TestServices.Advice(_store, _clock, new InMemorySettingsProvider());
+        _induct = TestServices.Induct(_store, _lines, _gateway, _clock, new InMemorySettingsProvider());
+        _verify = TestServices.Verify(_store, _threshold, _clock);
     }
 
     private static PrinterConfig Printer(string id, string[] map, int order) =>

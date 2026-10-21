@@ -29,6 +29,9 @@ public sealed class LabelPrintState
         PrintedAt = at;
     }
 
+    /// <summary>Detached copy (used by <see cref="TransportOrder.Clone"/>).</summary>
+    public LabelPrintState Clone() => (LabelPrintState)MemberwiseClone();
+
     /// <summary>Clear print outcome for a fresh run (advised set changed).</summary>
     public void Reset()
     {

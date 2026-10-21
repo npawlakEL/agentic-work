@@ -5,6 +5,7 @@ using PandA.UI.Contracts.Manda;
 using PandA.UI.Contracts.Rejects;
 using PandA.UI.Contracts.Reprint;
 using PandA.UI.Contracts.Status;
+using PandA.Sim;
 using PandA.Sim.Line;
 using PandA.UI.Shell;
 
@@ -16,9 +17,18 @@ public static class DemoServiceCollectionExtensions
     public static IServiceCollection AddPandaDemoBackend(this IServiceCollection services)
     {
         services.AddSingleton<DemoDataStore>();
-        services.AddSingleton<SimLineCatalog>();
+
+        // One simulated shared eController database (decision-010) for every line simulation in this host, so
+        // all lines share the order table, leases, run ids, slot sequence and printer state.
+        services.AddSingleton<SimSharedDatabase>(_ => new SimSharedDatabase());
+        services.AddSingleton<SimLineCatalog>(sp => new SimLineCatalog(
+            sp.GetRequiredService<DemoDataStore>(),
+            sp.GetRequiredService<SimSharedDatabase>()));
         services.AddSingleton<MessageConsoleService>();
-        services.AddSingleton<LineSimulation>(sp => LineSimulationFactory.Create(sp.GetRequiredService<DemoDataStore>()));
+        services.AddSingleton<LineSimulation>(sp => LineSimulationFactory.Create(
+            sp.GetRequiredService<DemoDataStore>(),
+            lineId: null,
+            sp.GetRequiredService<SimSharedDatabase>()));
 
         // Operator identity — scoped per Blazor circuit so each connected operator is distinct.
         services.AddScoped<IOperatorContext, DemoOperatorContext>();

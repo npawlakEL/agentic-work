@@ -320,7 +320,7 @@ SET @SlotNumber = NEXT VALUE FOR dbo.CartonAssignSeq
 **Semantics in the PLC bundle:** The slot number is written as `vPA.Assign[SlotNumber].RecID`, `.Seq`, `.Dest`, `.PrintPoint`, `.ApplyPoint`, `.MsgRdy` by `sdisp_PA2BP_SendPrinterFirePoints`. Two cartons must not have the same slot number simultaneously, but since the conveyor carries at most 300 cartons in flight, a 300-element cycling counter is safe.
 
 ### Already Built?
-**Not built.** `InductResult` and `PrintJob` have no slot index. Backlog GAP F21 confirms: "pairs with F08 (lane routing) as part of the fire-point/PLC outbound bundle."
+**Built.** `ISlotIndexProvider.NextSlotAsync` (`PandA.Core/Slots`) is drawn on every induct, including no-print outcomes and lease timeouts. The result is carried on `InductResult.Slot`. The Sim implementation is `InMemorySlotIndexProvider`, one shared CAS counter in `SimSharedDatabase`.
 
 ### Target Module/Class
 ```
@@ -330,7 +330,11 @@ PandA.Sim/Sim/InMemorySlotIndexProvider.cs — Interlocked cycling counter (thre
 PandA.Core/Domain/InductResult.cs         — add SlotIndex property
 ```
 
-**C# implementation note:** The SQL SEQUENCE is a DB-level auto-restart-safe counter. In C#, a per-instance `Interlocked.Increment` with a `% 300 + 1` (Interlocked mod pattern) is safe for single-process deployments. For multi-process (multiple PandA instances sharing one DB), a shared counter is needed — either the DB sequence (read via one call), a Redis incr, or a distributed lock around a persisted counter. Confirm deployment topology with domain owner.
+**Multi-host contract (decision-010, owner 2026-10-21):** PandA runs as multiple hosts over the shared eController database, so the slot counter is a **shared atomic counter**. A per-process counter is not valid.
+- Every host draws from one 1..300 CYCLE sequence, just as every caller of the source drew from `dbo.CartonAssignSeq`.
+- The eController adapter implements it as a `PandaCounter` row advanced by a conditional-update CAS loop (`Update().Set(Value = next, Version = v + 1).Where(Key == k && Version == v)`, affected rows == 1). See the decision-010 adapter guide §5.
+- There is no SQL `SEQUENCE`; it is not portable across eController backends.
+- **Scope:** one global counter today, because no PLC identifier is available at induct. When a PLC id is available, the adapter keys one counter row per PLC (`CartonAssignSeq:{plcId}`). Each PLC has its own `vPA.Assign[]` array, so per-PLC counters are equivalent and remove cross-PLC contention.
 
 ### Dependencies
 - Depends on `InductService` (slot assigned at induct time, stored on `InductResult`)
@@ -347,7 +351,7 @@ PandA.Core/Domain/InductResult.cs         — add SlotIndex property
 
 ### Open Questions
 - Is the PLC array strictly 300 slots, or is this site-specific? If configurable, expose `MaxSlots` as a `LineConfig` property sourced from JSON.
-- Should the slot index be per-line (independent cycling counters per PandA line) or shared across lines? Source has one DB sequence per database (not per-line).
+- ~~Should the slot index be per-line or shared?~~ **Resolved (decision-010):** shared across hosts and lines (the source has one sequence per database). Scope it per PLC when a PLC id is available.
 
 ---
 
@@ -460,39 +464,52 @@ EXEC sp_releaseapplock @Resource=@ResourceName, @LockOwner='Session'
 - `'PA_Status'` — guards printer/zone/lane-eval status updates (referenced in arch-log doc 012 §9)
 
 ### Already Built?
-**No C# equivalent.** Architecture-log 011 gap F13 note: "when engine-status ingestion lands, it must serialize lane evaluation per line — `LaneEvalService` mutates shared `PrinterState` objects without locking (fine under single-threaded SimHost today). Concurrent printer/engine/zone signals on the same line will race the spare-flag mutations." The current `SimHost` is single-threaded; this is safe today but will break when real concurrent messages arrive.
-
-The source's SQL app-lock approach (DB-level cross-session mutex) is overkill for single-process C# but would be needed for multi-process deployments.
+**Built for multi-host (decision-010, owner ruling 2026-10-21).** PandA runs as **multiple hosts/processes over the shared eController database**, and any host may process any line. A DB-level cross-process mutex is therefore required, not optional. eController has none built in, and `sp_getapplock` is SQL-Server-only and not used. So the lock is a **lease row** maintained with portable conditional updates.
 
 ### Target Module/Class
 ```
-PandA.Core/Ports/ILockProvider.cs             — AcquireAsync(name, timeout) → IAsyncDisposable
-PandA.Sim/Concurrency/InMemoryLockProvider.cs — SemaphoreSlim per resource name (dictionary)
-(deferred) PandA.EController/Concurrency/AppLockProvider.cs — sp_getapplock wrapper for cross-process
+PandA.Core/Concurrency/ILockProvider.cs        — ILockProvider.AcquireAsync(resource, timeout?, ct) → ILease
+                                                 ILease: Resource, OwnerId, ExpiresUtc, RenewAsync(), DisposeAsync()
+                                                 LockDefaults (60 s acquire timeout, 60 s lease), LockNames
+PandA.Core/Concurrency/ConcurrencyExceptions.cs — LockTimeoutException : TimeoutException (Resource)
+PandA.Sim/InMemoryLeaseLockProvider.cs         — shared lease table; ForHost(id) views; TimeProvider-driven expiry
+(adapter, not in this repo) eController PandaLease table — decision-010 adapter guide §1
 ```
 
-**In-process design:** `InMemoryLockProvider` holds a `ConcurrentDictionary<string, SemaphoreSlim>` and returns an `IAsyncDisposable` handle that releases the semaphore on `DisposeAsync()`. The `AcquireAsync` method passes a `TimeSpan` (default 60 seconds to match the source).
+**Lease semantics:**
+- An owner id is minted per acquisition (`{host}:{guid}`), so leases are **non-reentrant**.
+- A lease **expires** after its TTL, so a crashed holder never blocks forever. `RenewAsync` extends it, and returns false if the lease was lost.
+- Release is conditional on still being the owner, so a stale holder cannot free a successor's lease.
+- Holders **fence** before irreversible work: induct renews every held lease just before dispatch and prints nothing if a renew fails.
+- `ILockProvider` is a **required** dependency. There are no silent in-process fallbacks: `InProcessLockProvider` and the static `LineMonitors` are removed.
 
-**Usage in `LaneEvalService`:** Wrap `LaneEvalService.EvaluateAsync()` calls with `ILockProvider.AcquireAsync("LaneEval_{lineId}")` so that concurrent printer/zone status messages for the same line serialize the `PrinterState` mutations.
+**Resource names (`LockNames`):**
+- `Carton_{TUID}` is taken by every `TransportOrder` writer: induct, verify, PLC tracking recovery, advice, reprint authorization and exception-carton creation. It replaces the source's per-carton `PA_Lock` usage.
+- `PrinterState_{LINEID}` is taken by every lane evaluation and printer-status ingestion (`LaneEvalService.EvaluateAsync` / `ApplyPrinterStatusAsync`). It replaces `'PA_Status'` with a per-line scope, so lines stay independent.
+
+**Timeout (source: log at level 50 and continue unlocked — unsafe across hosts):** decided per call site. See the decision-010 table.
+- Induct → `InductStatus.LockTimeout`; nothing printed; slot still assigned.
+- Lane eval → Warning + `LaneEvalResult.SkippedResult()`; the next status event re-evaluates.
+- PLC recovery → Warning + skip.
+- Reprint authorization → `false`.
+- Verify/advice → `LockTimeoutException` propagates to the transport.
 
 ### Dependencies
-- Depends on F13 (PrintEngine status ingestion) to make the concurrency problem real
-- `LaneEvalService` injection needs `ILockProvider`
-- No settings dependency
+- F13 (printer/engine/zone status ingestion), `InductService`, `VerifyStationService`, `CartonAdviceService`, `PlcEventHandlerService`, `ReprintAuthorizationService`: all take `ILockProvider`.
+- No settings dependency.
 
 ### Acceptance Criteria
-1. `InMemoryLockProvider.AcquireAsync("PA_Status")` returns a handle; a second concurrent call waits until the first is disposed.
-2. Disposing the handle releases the lock; the waiting caller proceeds.
-3. `AcquireAsync` with a 60-second timeout cancels and throws `TimeoutException` (or `OperationCanceledException`) if the lock is not acquired within the timeout.
-4. An invalid/empty resource name returns a failed result (mirrors `Lock.sql:23–42` guard).
-5. `LaneEvalService` acquires `ILockProvider.AcquireAsync("LaneEval_{lineId}")` before mutating `PrinterState`; two concurrent `EvaluateAsync` calls on the same line serialize correctly.
-6. `LaneEvalService` calls for different lineIds do NOT block each other.
-7. Disposing a handle for a resource not held does not throw.
+1. A second `AcquireAsync` on the same resource — from the same or another host — waits until the first lease is disposed or expires.
+2. Disposing a lease releases it, and a waiting caller proceeds. Disposing twice, or disposing a lease another owner has since taken over, does not throw and does not free the other owner's lease.
+3. If a lease cannot be acquired within the timeout, `AcquireAsync` throws `LockTimeoutException` (a `TimeoutException`) carrying the resource name.
+4. An empty or whitespace resource name is rejected (`ArgumentException`), mirroring the `Lock.sql:23–42` guard.
+5. A holder that never releases (a crash) loses the lease at expiry. Another host then acquires it, and the stale holder's `RenewAsync` returns false.
+6. Two concurrent lane evaluations of one line — on different hosts — never overlap. Different lines do not block each other.
+7. The same carton inducted concurrently on two lanes by two hosts prints exactly once (`MultiHostTests`).
 
 ### Open Questions
-- Is PandA ever deployed multi-process (multiple C# hosts, same DB)? If yes, `AppLockProvider` (using `sp_getapplock`) must be the production implementation and `InMemoryLockProvider` only for tests/Sim.
-- `@RC < 0` in the source is a soft failure. Should C# also be soft (log + proceed) or should it throw/propagate? Confirm with domain owner whether a 60-second lock timeout is a critical error or a recoverable warning.
-
+- ~~Is PandA ever deployed multi-process?~~ **Resolved — yes** (owner 2026-10-21; decision-010). The production implementation is a PersistantTable lease row, not `sp_getapplock`.
+- ~~Soft or hard failure on timeout?~~ **Resolved per call site** (decision-010): fail safe, never proceed unlocked.
 ---
 
 ## F23 — Wave Auto-Complete Hot-Path (`sdisp_TOOL_CUSTOM_CheckWaveCmp` / `sdisp_TOOL_CUSTOM_PandAWaveComplete` / `sdisp_PA2DCMS_WaveStatus`)

@@ -61,11 +61,28 @@ IDs map back to the cluster spec docs.
 
 ## E. Deployment topology (affects concurrency & counters)
 
-- **E1 (F21):** ✅ RESOLVED (decision-010): assign counter is **per-line**, in-memory, thread-safe;
-  array size defaults to 300 but configurable per line (`LineConfig`).
-- **E2 (LOCK):** ✅ RESOLVED (decision-010): single process, multiple lines/PLCs → in-memory
-  thread-safe locks keyed per-line/per-printer (no `sp_getapplock`); behind `IPandaLock`.
-- **E3 (LOCK):** ✅ RESOLVED (decision-007): lock-acquire timeout is a hard error (fail fast).
+> **Superseded topology (owner ruling 2026-10-21; decision-010 rewritten).** PandA runs as **multiple
+> hosts/processes, multiple lanes, all sharing ONE eController database**. Any host may process any line.
+> The 2026-08-12 single-process answers below are replaced.
+
+- **E1 (F21):** ✅ RESOLVED (decision-010, 2026-10-21):
+  - The assign-slot counter is **one shared atomic 1..300 CYCLE counter** in the shared DB (a
+    PersistantTable counter row advanced by a CAS loop), never per-process.
+  - It is **global** today because no PLC id is available at induct (the source has one sequence per
+    database). Scope it per PLC once a PLC identifier is available.
+- **E2 (LOCK):** ✅ RESOLVED (decision-010, 2026-10-21):
+  - **Cross-host leases** (`ILockProvider` → `ILease`: owner id, TTL expiry, renew, fencing).
+  - Implemented on eController as a `PandaLease` row with conditional updates; no `sp_getapplock`.
+  - Names are `Carton_{TUID}` (every TransportOrder writer) and `PrinterState_{LINEID}` (lane eval /
+    printer status).
+  - There is no in-process fallback.
+- **E3 (LOCK):** ✅ RESOLVED (decision-010 refines decision-007): timeout behavior is **per call site
+  and fail-safe**, never "proceed unlocked":
+  - induct → no print (`LockTimeout`);
+  - lane eval → Warning + skip;
+  - PLC recovery → skip;
+  - reprint auth → false;
+  - verify/advice → exception to the transport.
 - **E4 (F17):** ✅ RESOLVED (decision-012): general purge dropped (TO=econtroller's, logs=MfcLog/DBA,
   status=in-memory). Only orphaned/never-used label-advice cleanup is a candidate — bookmarked (Quartz).
 

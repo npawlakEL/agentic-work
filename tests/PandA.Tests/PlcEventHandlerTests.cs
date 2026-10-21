@@ -19,7 +19,7 @@ public sealed class PlcEventHandlerTests
     private readonly InMemorySettingsProvider _settings = new();
 
     private PlcEventHandlerService Handler() =>
-        new(_store, _runs, _verify, _settings);
+        new(_store, _runs, _verify, _settings, TestServices.Locks());
 
     private static PandaLabelSet Labels(params string[] types) =>
         new(types.Select(t => new Label(t, $"LPN-{t}", $"^XA{t}^XZ")));
@@ -43,7 +43,7 @@ public sealed class PlcEventHandlerTests
 
     private async Task Arrange(TransportOrder order, int verifyDeviceId = 2, bool reprint = true)
     {
-        await _store.UpsertAsync(order);
+        await _store.SaveAsync(order);
         await SeedRunFor(order.TuId);
         _verify.Set(Line, verifyDeviceId);
         await _settings.SetAsync(KnownSettings.ReprintLabels, reprint);

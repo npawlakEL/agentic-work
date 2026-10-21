@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using PandA.Core.Concurrency;
@@ -12,64 +11,131 @@ namespace PandA.Core;
 /// into rotation when an active is lost, and — when it can neither meet the minimum nor promote a
 /// spare — deciding whether to run the line slow (degraded) or shut it down.
 /// <para>
-/// The service mutates <see cref="PrinterState.IsSpare"/> / <see cref="PrinterState.LastStatusUpdate"/>
-/// directly and returns a <see cref="LaneEvalResult"/> describing the line-control decision and the
-/// spare changes it applied. The real BluePaw slow/shut egress is a separate, stubbed concern.
+/// Multi-host (decision-010): <see cref="EvaluateAsync"/> takes the shared <see cref="LockNames.PrinterState"/>
+/// lease for the line, reads a fresh <see cref="IPrinterStateStore"/> snapshot, runs the pure
+/// <see cref="Evaluate"/> decision on it, and writes every changed spare flag back through the store before
+/// releasing the lease — so two hosts evaluating the same line serialize and never act on stale state.
+/// On lease timeout the evaluation is skipped (logged at Warning); the next printer/zone status event
+/// re-evaluates. The real BluePaw slow/shut egress is a separate, stubbed concern.
 /// </para>
 /// </summary>
 public sealed class LaneEvalService
 {
-    // In-process per-line serialization for the synchronous Evaluate path (lines are few, so this is bounded).
-    private static readonly ConcurrentDictionary<string, object> LineMonitors = new(StringComparer.OrdinalIgnoreCase);
-
-    private readonly ILogger<LaneEvalService> _logger;
-    private readonly ILockProvider? _locks;
+    private readonly ILockProvider _locks;
+    private readonly IPrinterStateStore _printerStates;
     private readonly Settings.ISettingsProvider? _settings;
+    private readonly ILogger<LaneEvalService> _logger;
 
     public LaneEvalService(
-        ILogger<LaneEvalService>? logger = null,
-        ILockProvider? locks = null,
-        Settings.ISettingsProvider? settings = null)
+        ILockProvider locks,
+        IPrinterStateStore printerStates,
+        Settings.ISettingsProvider? settings = null,
+        ILogger<LaneEvalService>? logger = null)
     {
-        _logger = logger ?? NullLogger<LaneEvalService>.Instance;
-        _locks = locks;
+        _locks = locks ?? throw new ArgumentNullException(nameof(locks));
+        _printerStates = printerStates ?? throw new ArgumentNullException(nameof(printerStates));
         _settings = settings;
+        _logger = logger ?? NullLogger<LaneEvalService>.Instance;
     }
 
     /// <summary>
-    /// <see cref="Evaluate"/> under the per-line <c>LaneEval_{lineId}</c> lock from the injected
-    /// <see cref="ILockProvider"/> (platform-settings F13), so concurrent printer/zone signals for the same
-    /// line serialize their <see cref="PrinterState"/> mutations. Different lines do not block each other.
+    /// Evaluate <paramref name="line"/> against the shared printer state under the line's
+    /// <c>PrinterState_{lineId}</c> lease (platform-settings F13) and persist the spare changes.
+    /// Returns <see cref="LaneEvalResult.SkippedResult"/> when the lease cannot be acquired.
     /// </summary>
-    public async ValueTask<LaneEvalResult> EvaluateAsync(
+    public ValueTask<LaneEvalResult> EvaluateAsync(
         LineConfig line,
-        IReadOnlyDictionary<string, PrinterState> states,
+        ZoneState zone,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default) =>
+        ApplyUnderLeaseAsync(line, zone, now, statusChange: null, cancellationToken);
+
+    /// <summary>
+    /// Record a printer status signal (source <c>sdisp_PA_Status_Printer</c>) and re-evaluate the line, both
+    /// under the line's <c>PrinterState_{lineId}</c> lease so the status write and the spare decision are one
+    /// serialized step across hosts.
+    /// </summary>
+    public ValueTask<LaneEvalResult> ApplyPrinterStatusAsync(
+        LineConfig line,
+        string printerId,
+        bool plcOnline,
+        bool engineOnline,
         ZoneState zone,
         DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(printerId);
+        return ApplyUnderLeaseAsync(line, zone, now, (printerId, plcOnline, engineOnline), cancellationToken);
+    }
+
+    private async ValueTask<LaneEvalResult> ApplyUnderLeaseAsync(
+        LineConfig line,
+        ZoneState zone,
+        DateTimeOffset now,
+        (string PrinterId, bool Plc, bool Engine)? statusChange,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(line);
-        var locks = _locks ?? InProcessLockProvider.Shared;
-        var handle = await locks
-            .AcquireAsync("LaneEval_" + line.LineId, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(zone);
+
+        ILease lease;
         try
         {
+            lease = await _locks
+                .AcquireAsync(LockNames.PrinterState(line.LineId), cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (LockTimeoutException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Lane evaluation for line {LineId} skipped: lease {Resource} is held by another host; the next status event re-evaluates.",
+                line.LineId,
+                ex.Resource);
+            return LaneEvalResult.SkippedResult();
+        }
+
+        await using (lease.ConfigureAwait(false))
+        {
+            if (statusChange is { } change)
+            {
+                await _printerStates
+                    .SetStatusAsync(change.PrinterId, change.Plc, change.Engine, now, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             // "2 Printer Rule": the line's own value wins; otherwise the global setting (source default 0).
             var twoPrinterRule = line.TwoPrinterRule
                 ?? (_settings is { } settings
                     && await settings.GetAsync(Settings.KnownSettings.TwoPrinterRule, cancellationToken).ConfigureAwait(false));
-            return Evaluate(line, states, zone, now, twoPrinterRule);
-        }
-        finally
-        {
-            await handle.DisposeAsync().ConfigureAwait(false);
+
+            var before = await _printerStates.GetLineSnapshotAsync(line, cancellationToken).ConfigureAwait(false);
+            var working = before.ToDictionary(kv => kv.Key, kv => kv.Value.Clone(), StringComparer.OrdinalIgnoreCase);
+            var result = Evaluate(line, working, zone, now, twoPrinterRule);
+
+            foreach (var (printerId, after) in working)
+            {
+                var original = before[printerId];
+                if (original.IsSpare == after.IsSpare)
+                {
+                    continue;
+                }
+
+                var stamp = after.LastStatusUpdate != original.LastStatusUpdate ? after.LastStatusUpdate : null;
+                await _printerStates
+                    .SetSpareAsync(printerId, after.IsSpare, stamp, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            return result;
         }
     }
 
     /// <summary>
-    /// Evaluate one line. <paramref name="now"/> stamps <see cref="PrinterState.LastStatusUpdate"/>
-    /// on any promote/demote so the newest change is preferred next time. Serialized per line in-process.
+    /// Pure evaluation of one line over caller-owned <paramref name="states"/> (mutated in place). Does not
+    /// touch the shared store or take a lease — callers that need persistence use <see cref="EvaluateAsync"/>.
+    /// <paramref name="now"/> stamps <see cref="PrinterState.LastStatusUpdate"/> on any promote/demote so the
+    /// newest change is preferred next time.
     /// </summary>
     /// <param name="twoPrinterRule">Effective "2 Printer Rule"; null uses <see cref="LineConfig.TwoPrinterRule"/>
     /// (unset → off, the source default).</param>
@@ -84,10 +150,7 @@ public sealed class LaneEvalService
         ArgumentNullException.ThrowIfNull(states);
         ArgumentNullException.ThrowIfNull(zone);
 
-        lock (LineMonitors.GetOrAdd(line.LineId, static _ => new object()))
-        {
-            return EvaluateCore(line, states, zone, now, twoPrinterRule ?? line.TwoPrinterRule ?? false);
-        }
+        return EvaluateCore(line, states, zone, now, twoPrinterRule ?? line.TwoPrinterRule ?? false);
     }
 
     private LaneEvalResult EvaluateCore(

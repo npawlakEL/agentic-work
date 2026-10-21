@@ -177,8 +177,14 @@ confirms a demoted (spare) printer is skipped and a promoted one re-enters rotat
 
 - BluePaw stop/slow/zone egress tags + codes (existing backlog).
 - Engine-status message ingestion + codes (F13).
-- The `sdisp_PA_Lock` distributed mutex — modeled as an in-process per-line guard; real
-  cross-process locking is an integration concern.
+- ~~The `sdisp_PA_Lock` distributed mutex — modeled as an in-process per-line guard.~~ **Superseded
+  (owner 2026-10-21, decision-010):** PandA is multi-host over one eController DB.
+  - Lane evaluation and printer-status ingestion run under the cross-host lease
+    `PrinterState_{LINEID}` (`ILockProvider`, required; no in-process fallback).
+  - Spare/online/`LastPrinted` state lives in the shared `IPrinterStateStore`. It is read as a fresh
+    snapshot per evaluation and written back with atomic `SetStatus`/`SetSpare`.
+  - On lease timeout the evaluation logs a Warning and is skipped (`LaneEvalResult.Skipped`); the
+    next status event re-evaluates.
 - `ActiveTrainId` train tracking (carried on `ZoneState` for parity; unused here).
 
 ## Amendment — owner ruling 2026-10-21

@@ -29,15 +29,15 @@ public sealed class ThresholdMatrixTests
 
     [Theory]
     [MemberData(nameof(SequenceCases))]
-    public void Sequence_ProducesExpectedCountAndPause(
+    public async Task Sequence_ProducesExpectedCountAndPause(
         string because, bool[] passes, int threshold, int expectedCount, bool expectedPause)
     {
-        var tracker = new VerifyThresholdTracker();
+        var tracker = TestServices.Threshold();
         VerifyThresholdResult last = new(0, false);
 
         foreach (var pass in passes)
         {
-            last = tracker.Register("L1", pass, threshold);
+            last = (await tracker.RegisterAsync("L1", pass, threshold));
         }
 
         Assert.True(expectedCount == last.ConsecutiveFailures,
@@ -47,43 +47,43 @@ public sealed class ThresholdMatrixTests
     }
 
     [Fact]
-    public void ThresholdChange_MidStream_ReusesExistingCount()
+    public async Task ThresholdChange_MidStream_ReusesExistingCount()
     {
-        var tracker = new VerifyThresholdTracker();
-        tracker.Register("L1", pass: false, failThreshold: 5); // count 1
-        tracker.Register("L1", pass: false, failThreshold: 5); // count 2
+        var tracker = TestServices.Threshold();
+        await tracker.RegisterAsync("L1", pass: false, failThreshold: 5); // count 1
+        await tracker.RegisterAsync("L1", pass: false, failThreshold: 5); // count 2
 
         // Lowering the threshold to 2 on the next fail should pause using the accumulated count (3 >= 2).
-        var result = tracker.Register("L1", pass: false, failThreshold: 2);
+        var result = (await tracker.RegisterAsync("L1", pass: false, failThreshold: 2));
 
         Assert.Equal(3, result.ConsecutiveFailures);
         Assert.True(result.PausePrinter);
     }
 
     [Fact]
-    public void Reset_ClearsCount_ButIsSeparateFromRegister()
+    public async Task Reset_ClearsCount_ButIsSeparateFromRegister()
     {
-        var tracker = new VerifyThresholdTracker();
-        tracker.Register("L1", pass: false, failThreshold: 3);
-        tracker.Register("L1", pass: false, failThreshold: 3);
-        Assert.Equal(2, tracker.CurrentCount("L1"));
+        var tracker = TestServices.Threshold();
+        await tracker.RegisterAsync("L1", pass: false, failThreshold: 3);
+        await tracker.RegisterAsync("L1", pass: false, failThreshold: 3);
+        Assert.Equal(2, (await tracker.CurrentCountAsync("L1")));
 
-        tracker.Reset("L1");
+        await tracker.ResetAsync("L1");
 
-        Assert.Equal(0, tracker.CurrentCount("L1"));
+        Assert.Equal(0, (await tracker.CurrentCountAsync("L1")));
     }
 
     [Fact]
-    public void Lines_AreIsolated()
+    public async Task Lines_AreIsolated()
     {
-        var tracker = new VerifyThresholdTracker();
-        tracker.Register("L1", pass: false, failThreshold: 2);
-        tracker.Register("L1", pass: false, failThreshold: 2); // L1 paused
+        var tracker = TestServices.Threshold();
+        await tracker.RegisterAsync("L1", pass: false, failThreshold: 2);
+        await tracker.RegisterAsync("L1", pass: false, failThreshold: 2); // L1 paused
 
-        var l2 = tracker.Register("L2", pass: false, failThreshold: 2); // L2 fresh
+        var l2 = (await tracker.RegisterAsync("L2", pass: false, failThreshold: 2)); // L2 fresh
 
         Assert.Equal(1, l2.ConsecutiveFailures);
         Assert.False(l2.PausePrinter);
-        Assert.Equal(0, tracker.CurrentCount("L1")); // L1 tripped → reset-on-trip (owner ruling 2026-10-21)
+        Assert.Equal(0, (await tracker.CurrentCountAsync("L1"))); // L1 tripped → reset-on-trip (owner ruling 2026-10-21)
     }
 }

@@ -50,6 +50,12 @@ public enum InductStatus
     /// Nothing is printed and no exception label is emitted (owner ruling 2026-10-21).
     /// </summary>
     Bypass = 9,
+
+    /// <summary>
+    /// The shared carton lease (decision-010) could not be acquired within the timeout — another host is
+    /// processing the same carton. Fail safe: nothing was printed and nothing was persisted.
+    /// </summary>
+    LockTimeout = 10,
 }
 
 /// <summary>Outcome of an induct scan: overall status plus the per-label selection assignments.</summary>
@@ -97,6 +103,9 @@ public sealed class InductResult
 
     public static InductResult NoActiveOrder() => new(InductStatus.NoActiveOrder, []);
 
+    /// <summary>The carton lease could not be acquired (another host holds it); nothing printed.</summary>
+    public static InductResult LockTimeout() => new(InductStatus.LockTimeout, []);
+
     /// <summary>The scan was not print-ready (<paramref name="classification"/>); nothing printed.</summary>
     public static InductResult NotPrintReady(CartonStatus classification) =>
         new(InductStatus.NotPrintReady, [], classification: classification);
@@ -123,7 +132,6 @@ public sealed class InductResult
 
     public static InductResult FromAssignments(IReadOnlyList<LabelAssignment> assignments)
     {
-        // A label skipped for a missing/neglect fire point (SQL ErrorCode 2) counts as not printed.
         // A label skipped for a missing/neglect fire point (SQL ErrorCode 2) counts as not printed.
         var printed = assignments.Count(a => a.Status == LabelSelectionStatus.Assigned);
         var status = printed == assignments.Count ? InductStatus.Printed

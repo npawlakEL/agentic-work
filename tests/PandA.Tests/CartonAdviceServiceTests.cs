@@ -11,7 +11,7 @@ public sealed class CartonAdviceServiceTests
     private readonly TestClock _clock = new(T0);
     private readonly CartonAdviceService _sut;
 
-    public CartonAdviceServiceTests() => _sut = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
+    public CartonAdviceServiceTests() => _sut = TestServices.Advice(_store, _clock, new InMemorySettingsProvider());
 
     private static PandaLabelSet Labels(params string[] types) =>
         new(types.Select(t => new Label(t, $"LPN-{t}", $"^XA{t}^XZ")));
@@ -28,7 +28,11 @@ public sealed class CartonAdviceServiceTests
         Assert.Equal(["Shipping", "Content"], order.Labels.Labels.Select(l => l.LabelType));
 
         var stored = await _store.FindActiveByTuIdAsync("BLIND1");
-        Assert.Same(order, stored);
+        // Reads are detached copies of the stored row (decision-010), carrying its version.
+        Assert.NotNull(stored);
+        Assert.NotSame(order, stored);
+        Assert.Equal(1, stored.Version);
+        Assert.Equal(order.Version, stored.Version);
     }
 
     [Fact]
@@ -37,7 +41,7 @@ public sealed class CartonAdviceServiceTests
         // OverwriteLabelData=1 deactivates the old row first (source Job.sql L219-231; owner ruling 2026-10-21).
         var settings = new InMemorySettingsProvider();
         await settings.SetAsync(PandA.Core.Settings.KnownSettings.OverwriteLabelData, true);
-        var sut = new CartonAdviceService(_store, _clock, settings);
+        var sut = TestServices.Advice(_store, _clock, settings);
         await sut.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
         _clock.Advance(TimeSpan.FromMinutes(5));
         var second = await sut.AdviseAsync("L1", "BLIND1", Labels("Content", "Return"));

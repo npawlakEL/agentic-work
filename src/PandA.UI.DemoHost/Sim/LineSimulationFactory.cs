@@ -19,8 +19,15 @@ internal static class LineSimulationFactory
 
     public static LineSimulation Create(DemoDataStore store) => Create(store, null);
 
-    public static LineSimulation Create(DemoDataStore store, string? lineId)
+    /// <summary>
+    /// Build a line simulation composed over <paramref name="database"/> — the simulated shared eController
+    /// database (decision-010). Every line (and every simulated host) built over the same instance shares one
+    /// order table, run-id sequence, slot sequence, lease table, printer-state table and verify-fail counters.
+    /// Omitting it gives the simulation a private database.
+    /// </summary>
+    public static LineSimulation Create(DemoDataStore store, string? lineId, SimSharedDatabase? database = null)
     {
+        var db = database ?? new SimSharedDatabase();
         var line = (lineId is null
             ? store.Lines.Values.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault()
             : store.Lines.Values.FirstOrDefault(l => string.Equals(l.LineId, lineId, StringComparison.OrdinalIgnoreCase)))
@@ -40,7 +47,7 @@ internal static class LineSimulationFactory
             encoderResolution: (decimal)line.EncoderResolutionInchesPerPulse,
             twoPrinterRule: line.TwoPrinterRuleEnabled);
 
-        var lineProvider = new InMemoryLineProvider().Add(config, printers.Select(p =>
+        var lineProvider = new InMemoryLineProvider(db.PrinterStates).Add(config, printers.Select(p =>
         {
             store.PrinterRuntime.TryGetValue(p.PrinterId!, out var runtime);
             return new PrinterState(
@@ -52,7 +59,7 @@ internal static class LineSimulationFactory
                 verifyFailCount: runtime?.VerifyFailCount ?? 0);
         }));
 
-        var orders = new InMemoryTransportOrderStore();
+        var orders = db.Orders;
         var gateway = new CapturingPrinterGateway();
         // Reflect real sim prints on the dashboard: stamp the printer that actually printed.
         gateway.JobSent += job =>
@@ -73,12 +80,17 @@ internal static class LineSimulationFactory
             gateway,
             clock,
             settings,
+            db.PrinterStates,
+            db.Locks,
+            db.Slots,
+            db.Runs,
             logger: NullLogger<InductService>.Instance);
         var verify = new VerifyStationService(
             orders,
             new VerificationService(),
-            new VerifyThresholdTracker(),
+            db.CreateThresholdTracker(),
             clock,
+            db.Locks,
             NullLogger<VerifyStationService>.Instance,
             new DemoRejectHistoryRepository(store, line.LineId!, profile?.Name ?? string.Empty));
 

@@ -12,7 +12,7 @@ namespace PandA.Tests;
 public sealed class LaneEvalServiceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
-    private readonly LaneEvalService _sut = new();
+    private readonly LaneEvalService _sut = TestServices.LaneEval(new PandA.Sim.InMemoryPrinterStateStore());
 
     private static PrinterConfig P(string id, ApplyOrientation type = ApplyOrientation.Side) =>
         new(id, "10.0.0.1", 9100, ["Shipping"], type);
