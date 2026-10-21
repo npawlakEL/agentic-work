@@ -76,3 +76,7 @@ PLC msg **286** (Phase 2). Real telegram codes abstracted behind message points 
 - `ILaneRouter.Resolve(lanes, cartonStatus, finalDestination)` ⇒ lane number; least-diverted; REJECT default.
 - Scanned-input parsing (buffer-order) modeled as a small mapper; Phase-2 tests may pass pre-typed scanned
   labels to keep focus on the code matrix. Threshold-pause egress + real lane divert deferred to connectors.
+
+## Amendment — owner ruling 2026-10-21
+
+Section D is now **per printer** (not per line): the C# tracker is keyed by every printer that printed the carton, matching source proc `sdisp_PA_VerifyThreshold_Update` L63-71, L129-186; `VerifyStationResult.PrintersToPause` lists printers to pause. Reason codes, reject history, blind-label requirement and pass/fail destinations now match source — see decision-004 and decision-008 amendments.

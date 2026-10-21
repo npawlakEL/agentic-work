@@ -5,6 +5,7 @@ using PandA.Core.Induct;
 using PandA.Core.Labels;
 using PandA.Core.Ports;
 using PandA.Core.Settings;
+using PandA.Core.Slots;
 using PandA.Core.Verification;
 using PandA.Core.Zpl;
 
@@ -49,6 +50,7 @@ public sealed class InductService : IInductService
     private readonly IXRefStore? _xref;
     private readonly IExceptionLabelSource? _exceptionLabels;
     private readonly ILockProvider _locks;
+    private readonly ISlotIndexProvider _slots;
     private readonly ILogger<InductService> _logger;
     private readonly FirePointResolver _firePoints = new();
     private readonly ApplyPointResolver _applyPoints = new();
@@ -65,7 +67,8 @@ public sealed class InductService : IInductService
         IXRefStore? xref = null,
         IExceptionLabelSource? exceptionLabels = null,
         ILogger<InductService>? logger = null,
-        ILockProvider? locks = null)
+        ILockProvider? locks = null,
+        ISlotIndexProvider? slots = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _lines = lines ?? throw new ArgumentNullException(nameof(lines));
@@ -78,6 +81,7 @@ public sealed class InductService : IInductService
         _xref = xref;
         _exceptionLabels = exceptionLabels;
         _locks = locks ?? InProcessLockProvider.Shared;
+        _slots = slots ?? new CyclicSlotIndexProvider();
         _logger = logger ?? NullLogger<InductService>.Instance;
     }
 
@@ -112,7 +116,9 @@ public sealed class InductService : IInductService
     {
         var blindLabel = scan.BlindLabel;
 
-        _ = _settings;
+        // Source sdisp_PA_PickPrinter L97-101: every induct (including no-print outcomes) draws the next
+        // PLC carton-assign slot from CartonAssignSeq (1..300 CYCLE) — owner ruling 2026-10-21.
+        var slot = await _slots.NextSlotAsync(cancellationToken).ConfigureAwait(false);
 
         var order = await _store.FindActiveByTuIdAsync(blindLabel, cancellationToken).ConfigureAwait(false);
         IAsyncDisposable? resolvedLock = null;
@@ -134,7 +140,8 @@ public sealed class InductService : IInductService
 
         try
         {
-            return await InductOrderAsync(scan, order, cancellationToken).ConfigureAwait(false);
+            var result = await InductOrderAsync(scan, order, slot, cancellationToken).ConfigureAwait(false);
+            return result.WithSlot(slot);
         }
         finally
         {
@@ -148,16 +155,50 @@ public sealed class InductService : IInductService
     private async ValueTask<InductResult> InductOrderAsync(
         InductScan scan,
         TransportOrder? order,
+        int slot,
         CancellationToken cancellationToken)
     {
         var lineId = scan.LineId;
         var blindLabel = scan.BlindLabel;
 
+        // F20: classify read-quality from the blind-label markers + front gap BEFORE any data lookup, as
+        // sdisp_PA_LookupCarton L208-235 does. MinGap defaults to the global "MinGap" setting (seed 20).
+        var minGap = _minGap is { } provider
+            ? provider.GetMinGap()
+            : await _settings.GetAsync(KnownSettings.MinGap, cancellationToken).ConfigureAwait(false);
+        var inductStatus = InductQualityClassifier.Classify(blindLabel, scan.FrontGap, minGap);
+
+        if (order is not null)
+        {
+            // Wave-0 inbound foundation: stamp the carton with its physical induct measurements so downstream
+            // features (F-LOG1/F20/DYNAP) can read them (decision-020).
+            order.StampInductScan(scan.ToMeasurements());
+            order.StampInductStatus(inductStatus);
+        }
+
+        if (inductStatus != CartonStatus.PrintReady)
+        {
+            // Owner ruling 2026-10-21 (source sdisp_PA_Scan_Induct L107 NoPrintFlag): a read that is not
+            // PrintReady (no read / no data / label conflict / gap error) never prints the carton's real
+            // labels, even when an order resolves. Only the F10 exception label may print.
+            _logger.LogInformation(
+                "Induct scan {TuId} on line {LineId} classified {Status} (front gap {FrontGap}); real labels not printed.",
+                blindLabel, lineId, inductStatus, scan.FrontGap);
+            var exception = await TryEmitExceptionLabelAsync(scan, inductStatus, slot, cancellationToken).ConfigureAwait(false);
+            if (exception is not null)
+            {
+                return exception; // the exception path records its own run
+            }
+
+            await CreateRunAsync(scan, order?.TuId ?? blindLabel, inductStatus, cancellationToken).ConfigureAwait(false);
+            return InductResult.NotPrintReady(inductStatus);
+        }
+
         if (order is null)
         {
             // F10 (decision-021): an unmatched carton with exceptions enabled gets a locally-generated
             // exception label against a synthesized identity, then routes to reject at verify.
-            var exception = await TryEmitExceptionLabelAsync(scan, cancellationToken).ConfigureAwait(false);
+            var exception = await TryEmitExceptionLabelAsync(scan, inductStatus, slot, cancellationToken).ConfigureAwait(false);
             if (exception is not null)
             {
                 return exception;
@@ -167,47 +208,9 @@ public sealed class InductService : IInductService
             return InductResult.NoActiveOrder();
         }
 
-        // Wave-0 inbound foundation: stamp the carton with its physical induct measurements so downstream
-        // features (F-LOG1/F20/DYNAP) can read them. Pure capture; no gating behavior yet (decision-020).
-        order.StampInductScan(scan.ToMeasurements());
-
-        // F20: classify read-quality from the blind-label markers + front gap. Stamped for run-history
-        // (F-LOG1) and the exception trigger (F10); does not gate the print decision on its own here.
-        var inductStatus = InductQualityClassifier.Classify(blindLabel, scan.FrontGap, _minGap?.GetMinGap() ?? 0);
-        order.StampInductStatus(inductStatus);
-        if (inductStatus != CartonStatus.PrintReady)
-        {
-            _logger.LogInformation(
-                "Induct scan {TuId} on line {LineId} classified {Status} (front gap {FrontGap}).",
-                blindLabel, lineId, inductStatus, scan.FrontGap);
-        }
-
         // F-LOG1: record this carton pass through the induct scanner for run-history auditing. The assigned
         // printer is filled in later (UpdatePrinterAsync) once a printer is matched in the print loop.
-        long? runId = null;
-        if (_runs is { } runs)
-        {
-            var record = CartonRunRecord.Create(
-                tuId: order.TuId,
-                pandaDataId: StableOrderId(order.TuId),
-                lineId: lineId,
-                sorterNumber: scan.SorterNumber,
-                sorterMode: scan.SorterMode,
-                deviceId: scan.DeviceId,
-                seqNum: scan.SeqNum,
-                labelStatus: 0,
-                scannedLabels: [.. scan.ScannedLabels],
-                length: scan.Length,
-                width: scan.Width,
-                height: scan.Height,
-                weight: scan.Weight,
-                frontGap: scan.FrontGap,
-                statusAtInduct: inductStatus,
-                assignedPrinter: null,
-                destinationLane: null,
-                createdAt: _clock.UtcNow);
-            runId = await runs.CreateRunAsync(record, cancellationToken).ConfigureAwait(false);
-        }
+        var runId = await CreateRunAsync(scan, order.TuId, inductStatus, cancellationToken).ConfigureAwait(false);
 
         if (order.Labels.Labels.Count == 0)
         {
@@ -215,9 +218,11 @@ public sealed class InductService : IInductService
             return InductResult.NoData();
         }
 
-        // Reprint policy (decision-003): an already-printed carton may only reprint when an operator has
-        // authorized it. Otherwise nothing is printed.
-        if (!order.CanPrint)
+        // Reprint policy: "Reprint Labels" on (source fallback 1, decision-013 D2) lets an already-printed
+        // carton print again exactly as sdisp_PA_LookupCarton L308-347; off requires an operator
+        // authorization (decision-003). Owner ruling 2026-10-21.
+        var reprintLabels = await _settings.GetAsync(KnownSettings.ReprintLabels, cancellationToken).ConfigureAwait(false);
+        if (!order.CanPrintWith(reprintLabels))
         {
             _logger.LogInformation(
                 "Transport order {TuId} on line {LineId} is not eligible for reprint. Status {Status}, print count {PrintCount}.",
@@ -225,6 +230,55 @@ public sealed class InductService : IInductService
             return InductResult.NoReprint();
         }
 
+        if (!order.CanPrint)
+        {
+            order.ResetPrintStatesForReprint();
+        }
+
+        return await PrintOrderAsync(scan, order, slot, runId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask<long?> CreateRunAsync(
+        InductScan scan,
+        string tuId,
+        CartonStatus inductStatus,
+        CancellationToken cancellationToken)
+    {
+        if (_runs is not { } runs)
+        {
+            return null;
+        }
+
+        var record = CartonRunRecord.Create(
+            tuId: tuId,
+            pandaDataId: StableOrderId(tuId),
+            lineId: scan.LineId,
+            sorterNumber: scan.SorterNumber,
+            sorterMode: scan.SorterMode,
+            deviceId: scan.DeviceId,
+            seqNum: scan.SeqNum,
+            labelStatus: 0,
+            scannedLabels: [.. scan.ScannedLabels],
+            length: scan.Length,
+            width: scan.Width,
+            height: scan.Height,
+            weight: scan.Weight,
+            frontGap: scan.FrontGap,
+            statusAtInduct: inductStatus,
+            assignedPrinter: null,
+            destinationLane: null,
+            createdAt: _clock.UtcNow);
+        return await runs.CreateRunAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask<InductResult> PrintOrderAsync(
+        InductScan scan,
+        TransportOrder order,
+        int slot,
+        long? runId,
+        CancellationToken cancellationToken)
+    {
+        var lineId = scan.LineId;
         var context = await _lines.GetLineAsync(lineId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"No line configuration for line '{lineId}'.");
 
@@ -237,6 +291,16 @@ public sealed class InductService : IInductService
                 "Transport order {TuId} on line {LineId} requests unknown profile {ProfileName}; nothing printed.",
                 order.TuId, lineId, order.ProfileName);
             return InductResult.NoProfile();
+        }
+
+        // Owner ruling 2026-10-21 (source sdisp_PA_LookupCarton L392-395 → status Bypass → NoPrintFlag):
+        // a Bypass carton prints nothing and gets no exception label.
+        if (order.Bypass)
+        {
+            _logger.LogInformation(
+                "Transport order {TuId} on line {LineId} is flagged Bypass; nothing printed.",
+                order.TuId, lineId);
+            return InductResult.Bypass();
         }
 
         // Selection is orientation-agnostic: each label routes to whatever printer maps to its type,
@@ -274,6 +338,19 @@ public sealed class InductService : IInductService
                 var resolution = _firePoints.Resolve(profile, printer.PrinterId, label.LabelType);
                 firePoint = resolution.FirePoint;
 
+                // Owner ruling 2026-10-21 (source sdisp_PA2BP_SendPrinterFirePoints L152-155/L178-181): no
+                // fire-point row, a tracking device of 0, or a NeglectPrint "0…" print point is ErrorCode 2 —
+                // the label is skipped and NOT printed. LastPrinted is still stamped (PickPrinter L469-473).
+                if (firePoint is not { NeglectPrint: false })
+                {
+                    outcomes[i] = LabelAssignment.NoFirePoint(label, printer.PrinterId);
+                    StampLastPrinted(context, printer.PrinterId, now);
+                    _logger.LogWarning(
+                        "No usable fire point for label {LabelType} of transport order {TuId} on printer {PrinterId} (line {LineId}); label skipped.",
+                        label.LabelType, order.TuId, printer.PrinterId, lineId);
+                    continue;
+                }
+
                 // DYNAP (decision-016): convert the human APPLY point (inch/edge) into a carton-aware PLC
                 // pulse when the carton's physical dimensions are known. PRINT point stays static. Top-apply
                 // additionally needs tamp kinematics (not yet commissioned) so it is left null for now.
@@ -298,22 +375,20 @@ public sealed class InductService : IInductService
 
             var zpl = PrepareZpl(context.Config, label.Zpl);
 
-            // NOTE (deferred): FirePoint.NeglectPrint (source PrintFirePoint LIKE '0%' → "apply but do
-            // not print") is not yet honored here — apply-only dispatch requires the gateway/PrintJob to
-            // carry an "apply without ZPL" mode, which lands with Top-apply tamp commissioning. No seeded
-            // profile currently sets a neglect-print fire point, so this path is unreachable today.
-
             try
             {
                 await _gateway.SendAsync(
-                    new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, zpl, firePoint, applyPulse),
+                    new PrintJob(printer.PrinterId, printer.Ip, printer.Port, label.LabelType, label.Lpn, zpl, firePoint, applyPulse, slot),
                     cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // One label's dispatch failure must not strand the carton: record it as not printed and keep
-                // dispatching the rest so the per-label state and overall outcome stay consistent.
+                // dispatching the rest so the per-label state and overall outcome stay consistent. LastPrinted
+                // is stamped on every attempt (source PickPrinter L469-473) so load balancing rotates away
+                // from a broken printer (owner ruling 2026-10-21).
                 outcomes[i] = LabelAssignment.DispatchFailed(label, printer.PrinterId);
+                StampLastPrinted(context, printer.PrinterId, now);
                 _logger.LogError(
                     ex,
                     "Failed to dispatch label {LabelType} for transport order {TuId} to printer {PrinterId} on line {LineId}.",
@@ -326,10 +401,7 @@ public sealed class InductService : IInductService
                 label.LabelType, order.TuId, printer.PrinterId, lineId);
 
             // Stamp LastPrinted so the next carton rotates (round-robin state).
-            if (context.States.TryGetValue(printer.PrinterId, out var state))
-            {
-                state.LastPrinted = now;
-            }
+            StampLastPrinted(context, printer.PrinterId, now);
 
             // Record which label type printed, to which printer (per-label outcome; decision-003).
             order.MarkLabelPrinted(label.LabelType, printer.PrinterId, now);
@@ -348,7 +420,7 @@ public sealed class InductService : IInductService
                 order.TuId, lineId, order.PrintCount);
         }
         else if (result.Status == InductStatus.PartiallyPrinted
-            || outcomes.Any(a => a.Status == LabelSelectionStatus.DispatchFailed))
+            || outcomes.Any(a => a.Status is LabelSelectionStatus.DispatchFailed or LabelSelectionStatus.NoFirePoint))
         {
             // A dispatch was attempted: persist per-label print state, but do not count the run or advance
             // status. (A pure no-eligible-printer outcome dispatched nothing and is not persisted.)
@@ -359,6 +431,14 @@ public sealed class InductService : IInductService
         }
 
         return result;
+    }
+
+    private static void StampLastPrinted(LineContext context, string printerId, DateTimeOffset now)
+    {
+        if (context.States.TryGetValue(printerId, out var state))
+        {
+            state.LastPrinted = now;
+        }
     }
 
     /// <summary>
@@ -435,7 +515,11 @@ public sealed class InductService : IInductService
     /// carton as printed (F-LOG1), and returns a verify-then-reject routing criterion (F08). Returns
     /// <c>null</c> when exceptions are disabled, no source is wired, or the read yields no exception reason.
     /// </summary>
-    private async ValueTask<InductResult?> TryEmitExceptionLabelAsync(InductScan scan, CancellationToken ct)
+    private async ValueTask<InductResult?> TryEmitExceptionLabelAsync(
+        InductScan scan,
+        CartonStatus status,
+        int slot,
+        CancellationToken ct)
     {
         if (_exceptionLabels is not { } source)
         {
@@ -457,7 +541,6 @@ public sealed class InductService : IInductService
             return null;
         }
 
-        var status = InductQualityClassifier.Classify(scan.BlindLabel, scan.FrontGap, _minGap?.GetMinGap() ?? 0);
         if (status == CartonStatus.Bypass || ExceptionLabelPolicy.Classify(status) is not { } exceptionType)
         {
             return null;
@@ -504,11 +587,12 @@ public sealed class InductService : IInductService
         try
         {
             await _gateway.SendAsync(
-                new PrintJob(printer.PrinterId, printer.Ip, printer.Port, build.LabelType, build.Lpn, zpl, null, null),
+                new PrintJob(printer.PrinterId, printer.Ip, printer.Port, build.LabelType, build.Lpn, zpl, null, null, slot),
                 ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            StampLastPrinted(context, printer.PrinterId, _clock.UtcNow);
             _logger.LogError(
                 ex,
                 "Failed to dispatch {Reason} exception label {CartonId} to printer {PrinterId} on line {LineId}.",
@@ -516,10 +600,21 @@ public sealed class InductService : IInductService
             return InductResult.NoPrinter();
         }
 
-        if (context.States.TryGetValue(printer.PrinterId, out var printerState))
-        {
-            printerState.LastPrinted = _clock.UtcNow;
-        }
+        StampLastPrinted(context, printer.PrinterId, _clock.UtcNow);
+
+        // Owner ruling 2026-10-21 — persist the synthetic exception carton like the SQL's exception PandaData
+        // row (LookupCarton L509-536: LabelType1='Exception', LabelBarcode1='ExceptionLabel', VerifyEnabled=1),
+        // marked printed by this printer, so the verify station finds it and fails it (reason 0) — counting
+        // toward the printer's verify-fail threshold and writing reject history.
+        var exceptionOrder = TransportOrder.CreateExceptionCarton(
+            cartonId,
+            scan.LineId,
+            new Label(build.LabelType, build.Lpn, zpl),
+            printer.PrinterId,
+            _clock.UtcNow);
+        exceptionOrder.StampInductScan(scan.ToMeasurements());
+        exceptionOrder.StampInductStatus(status);
+        await _store.UpsertAsync(exceptionOrder, ct).ConfigureAwait(false);
 
         // F-LOG1: record the synthetic exception carton as an audited run, marked with its induct status.
         if (_runs is { } runs)
@@ -548,7 +643,7 @@ public sealed class InductService : IInductService
 
         // Verify-then-reject (decision-021): the exception carton is treated as a verify Fail and routed to
         // reject via the F08 routing criterion the adapter projects onto the carton.
-        var routing = new RoutingCriterion(RoutingCriterion.PandaVerifyType, "Fail");
+        var routing = RoutingCriterion.ForCode(VerifyReasonCode.PandaLogicError);
         _logger.LogWarning(
             "Emitted {Reason} exception label {CartonId} to printer {PrinterId} on line {LineId}; carton routed to reject.",
             exceptionType, cartonId, printer.PrinterId, scan.LineId);
@@ -613,7 +708,7 @@ public sealed class InductService : IInductService
     /// run-history groups by the numeric PandaData RecID. Derive a stable non-negative long from the TuId so
     /// repeat runs of the same carton group together in <c>GetRunsForOrderAsync</c>.
     /// </summary>
-    private static long StableOrderId(string tuId)
+    internal static long StableOrderId(string tuId)
     {
         // FNV-1a 64-bit; masked to non-negative.
         ulong hash = 1469598103934665603UL;

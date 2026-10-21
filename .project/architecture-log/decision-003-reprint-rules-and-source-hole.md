@@ -41,3 +41,7 @@
 ## Backlog
 - Operator web action to authorize a carton reprint (GUI, source `sdisp_GUI_SetPrintedFlag`).
 - Reprint-only-the-missing-labels (enabled by per-label print state) — future optimization.
+
+## Amendment — owner ruling 2026-10-21 ("Reprint Labels" governs re-arm)
+
+The induct reprint gate now reads the `Reprint Labels` setting, matching source proc `sdisp_PA_LookupCarton` (L173-178, L308-347): **on** (also the default when unset, source fallback `'1'`) → an already-printed carton prints again without operator authorization (`TransportOrder.CanPrintWith(true)`, print states reset); **off** → the operator-authorization gate above still applies (`InductStatus.NoReprint`). The verify-fail auto re-arm hole remains unported.

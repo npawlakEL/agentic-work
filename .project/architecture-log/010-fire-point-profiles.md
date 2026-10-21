@@ -68,7 +68,7 @@ Inputs `(PandaID, PrinterRecID, LabelDefRecID, Index, CartonSize, PrinterOrienta
 ### Guards (ported)
 
 - `PrintTrackingDevice = 0` **or** `ApplyTrackingDevice = 0` → error "no tracking devices".
-- `PrintFirePoint LIKE '0%'` → "neglect print" (apply-only; do not print).
+- `PrintFirePoint LIKE '0%'` → "neglect print": the label is **skipped** (not printed, not applied), matching source proc `sdisp_PA2BP_SendPrinterFirePoints` behavior (ErrorCode 2). A missing fire-point row for the (printer, label type) is skipped the same way; `LastPrinted` is still stamped (`sdisp_PA_PickPrinter` L469-473). *(Owner ruling 2026-10-21; C# `LabelSelectionStatus.NoFirePoint`.)*
 - Insert-time (`sdisp_GUI_LabelProfile_Insert`): edge `<> 'M'` **and** value `< 0` →
   "Improper value for Leading/Trailing Edge". i.e. **negative inches are only legal for Middle.**
 

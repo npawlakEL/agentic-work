@@ -52,17 +52,19 @@ public sealed class ExceptionLabelPathTests
     }
 
     [Fact]
-    public async Task GapError_MapsToNotReceived_AndIsRecordedWithGapStatus()
+    public async Task GapError_PrintsNoExceptionLabel_AndIsRecordedWithGapStatus()
     {
+        // Source LookupCarton L229-235/L470-479: 'Gap Error' does no data lookup and its exception template
+        // is '-' (none) → nothing prints (owner ruling 2026-10-21; previously mapped to Not Received).
         var runs = new InMemoryCartonRunRepository();
         _lines.Add(new LineConfig("L1", [Printer("Side1", ApplyOrientation.Side, 0)], printExceptionLabels: true));
 
         var result = await Induct(minGap: new FixedMinGap(10), runs: runs)
             .InductAsync(new InductScan("L1", "BL-GAP-1", FrontGap: 2, SeqNum: 3));
 
-        Assert.Equal(InductStatus.ExceptionLabel, result.Status);
-        Assert.StartsWith("NotReceived-000003-", result.ExceptionCartonId, StringComparison.Ordinal);
-        Assert.Contains("BL-GAP-1", Assert.Single(_gateway.Jobs).Zpl, StringComparison.Ordinal);
+        Assert.Equal(InductStatus.NotPrintReady, result.Status);
+        Assert.Equal(CartonStatus.GapError, result.Classification);
+        Assert.Empty(_gateway.Jobs);
         Assert.Equal(CartonStatus.GapError, Assert.Single(runs.Records).StatusAtInduct);
     }
 

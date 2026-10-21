@@ -101,14 +101,15 @@ public sealed class VerificationServiceTests
     }
 
     [Fact]
-    public void ScannedLabelNotInData_YieldsNoRead()
+    public void ScannedLabelNotInData_IsIgnored_AndRecordedAsExtra()
     {
+        // Source TOOL_PA_VerifyLabel: a read with no expected value of that name is ignored (owner ruling 2026-10-21).
         var result = _sut.Verify(
             Expected(("Shipping", "SHIP1")),
             Scanned(("Shipping", "SHIP1"), ("Parcel", "PAR1")),
             Default);
 
-        Assert.Equal(VerifyOutcome.NoRead, result.Outcome);
+        Assert.Equal(VerifyOutcome.Pass, result.Outcome);
         Assert.Contains(result.Details, d => d.Reason == VerifyLabelReason.Extra && d.LabelType == "Parcel");
     }
 

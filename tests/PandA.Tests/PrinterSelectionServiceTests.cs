@@ -26,6 +26,11 @@ public sealed class PrinterSelectionServiceTests
     private static Dictionary<string, PrinterState> States(params PrinterState[] states) =>
         states.ToDictionary(s => s.PrinterId, StringComparer.OrdinalIgnoreCase);
 
+    // A printer with no state row counts offline (source sdivw_PrinterStatus INNER JOIN; owner ruling 2026-10-21),
+    // so tests that mean "every printer online" seed a default state for each configured printer.
+    private static Dictionary<string, PrinterState> Online(LineConfig line) =>
+        line.Printers.ToDictionary(p => p.PrinterId, p => new PrinterState(p.PrinterId), StringComparer.OrdinalIgnoreCase);
+
     private string? Assigned(PrinterSelectionResult r, string labelType) =>
         r.Assignments.Single(a => a.Label.LabelType == labelType).PrinterId;
 
@@ -35,7 +40,7 @@ public sealed class PrinterSelectionServiceTests
     public void SingleLabel_SingleEligiblePrinter_IsAssigned()
     {
         var line = new LineConfig("L1", [Printer("P1", ["Shipping"], 0)]);
-        var result = _sut.Select(line, States(), Labels("Shipping"));
+        var result = _sut.Select(line, Online(line), Labels("Shipping"));
 
         Assert.True(result.AllAssigned);
         Assert.Equal("P1", Assigned(result, "Shipping"));
@@ -45,7 +50,7 @@ public sealed class PrinterSelectionServiceTests
     public void NoPrinterServesType_YieldsNoPrinter()
     {
         var line = new LineConfig("L1", [Printer("P1", ["Content"], 0)]);
-        var result = _sut.Select(line, States(), Labels("Shipping"));
+        var result = _sut.Select(line, Online(line), Labels("Shipping"));
 
         Assert.False(result.AllAssigned);
         Assert.Equal(LabelSelectionStatus.NoPrinter, result.Assignments.Single().Status);
@@ -98,7 +103,7 @@ public sealed class PrinterSelectionServiceTests
             Printer("P1", ["Shipping"], 2), // lower ConfigOrder wins the tie
         ]);
         // both never printed (null == null tie / cold start)
-        var result = _sut.Select(line, States(), Labels("Shipping"));
+        var result = _sut.Select(line, Online(line), Labels("Shipping"));
 
         Assert.Equal("P1", Assigned(result, "Shipping"));
     }
@@ -149,7 +154,7 @@ public sealed class PrinterSelectionServiceTests
     {
         // Only P1 serves both types; no backup exists (PID2 null) → both stay on P1 (ELSE PID1).
         var line = new LineConfig("L1", [Printer("P1", ["A", "B"], 0)]);
-        var result = _sut.Select(line, States(), Labels("A", "B"));
+        var result = _sut.Select(line, Online(line), Labels("A", "B"));
 
         Assert.Equal("P1", Assigned(result, "A"));
         Assert.Equal("P1", Assigned(result, "B"));
@@ -163,7 +168,7 @@ public sealed class PrinterSelectionServiceTests
             Printer("P1", ["A"], 0),
             Printer("P2", ["B"], 1),
         ]);
-        var result = _sut.Select(line, States(), Labels("A", "B"));
+        var result = _sut.Select(line, Online(line), Labels("A", "B"));
 
         Assert.Equal("P1", Assigned(result, "A"));
         Assert.Equal("P2", Assigned(result, "B"));
@@ -179,7 +184,7 @@ public sealed class PrinterSelectionServiceTests
             new Label("Shipping", "LPN-2", "^XA2^XZ"),
         ]);
 
-        var result = _sut.Select(line, States(), labels);
+        var result = _sut.Select(line, Online(line), labels);
 
         Assert.All(result.Assignments, a => Assert.Equal("P1", a.PrinterId));
         Assert.Equal(2, result.Assignments.Count);
@@ -198,7 +203,7 @@ public sealed class PrinterSelectionServiceTests
             Printer("Side1", ["Shipping"], 1, ApplyOrientation.Side),
         ]);
 
-        var result = _sut.Select(line, States(), Labels("Shipping"));
+        var result = _sut.Select(line, Online(line), Labels("Shipping"));
 
         Assert.Equal("Top1", Assigned(result, "Shipping")); // ConfigOrder 0, orientation irrelevant
     }
@@ -208,7 +213,7 @@ public sealed class PrinterSelectionServiceTests
     {
         // Only a Top printer covers Shipping — it is still selected (orientation never excludes it).
         var line = new LineConfig("L1", [Printer("Top1", ["Shipping"], 0, ApplyOrientation.Top)]);
-        var result = _sut.Select(line, States(), Labels("Shipping"));
+        var result = _sut.Select(line, Online(line), Labels("Shipping"));
 
         Assert.Equal("Top1", Assigned(result, "Shipping"));
     }

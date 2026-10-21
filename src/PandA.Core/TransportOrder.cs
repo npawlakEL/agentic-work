@@ -52,6 +52,32 @@ public sealed class TransportOrder
         _printStates = BuildPrintStates(labels);
     }
 
+    /// <summary>
+    /// F10 / owner ruling 2026-10-21 — create the synthetic exception carton the SQL inserts in
+    /// <c>sdisp_PA_LookupCarton</c> L509-536 (LabelType1='Exception', LabelBarcode1='ExceptionLabel',
+    /// VerifyEnabled=1). It is recorded as printed (by <paramref name="printerId"/>) so the verify station
+    /// finds it and fails it (reason 0, PandaDataID=0 path of <c>sdisp_PA_VerifyCarton</c>).
+    /// </summary>
+    public static TransportOrder CreateExceptionCarton(
+        string cartonId,
+        string lineId,
+        Label exceptionLabel,
+        string printerId,
+        DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(exceptionLabel);
+        var order = new TransportOrder(cartonId, lineId, new PandaLabelSet([exceptionLabel]), at)
+        {
+            IsExceptionCarton = true,
+        };
+        order.MarkLabelPrinted(exceptionLabel.LabelType, printerId, at);
+        order.CompletePrintRun(at);
+        return order;
+    }
+
+    /// <summary>True for a synthetic F10 exception carton (always fails verify with reason 0).</summary>
+    public bool IsExceptionCarton { get; private init; }
+
     /// <summary>The blind label / transport-unit id used to match advice with the induct scan.</summary>
     public string TuId { get; }
 
@@ -129,6 +155,22 @@ public sealed class TransportOrder
         || Status == TransportOrderStatus.ReprintAuthorized
         || (TrackingRearmed && Status == TransportOrderStatus.Advised);
 
+    /// <summary>
+    /// Induct print gate honoring the global <c>Reprint Labels</c> setting (source
+    /// <c>sdisp_PA_LookupCarton</c> L308-347): when the setting is on, an already-printed / inactive carton
+    /// prints again exactly as the SQL does; when off, the decision-003 rules of <see cref="CanPrint"/>
+    /// apply (operator authorization required). Owner ruling 2026-10-21.
+    /// </summary>
+    public bool CanPrintWith(bool reprintLabels) => reprintLabels || CanPrint;
+
+    /// <summary>
+    /// True when the carton has produced output in its current advice generation: a completed run, a
+    /// post-advice lifecycle state, or any label already dispatched. Used by re-advice to decide whether to
+    /// re-arm (decision-013 D4).
+    /// </summary>
+    public bool HasPrinted =>
+        PrintCount > 0 || Status != TransportOrderStatus.Advised || _printStates.Values.Any(s => s.Printed);
+
     /// <summary>Replace the advised label set (Phase-1 duplicate-advice = overwrite / last-wins; spec §6a).</summary>
     public void OverwriteAdvice(
         string lineId,
@@ -139,13 +181,34 @@ public sealed class TransportOrder
         bool bypass = false,
         bool verifyEnabled = true,
         string? verifyPassDest = null,
-        string? verifyFailDest = null)
+        string? verifyFailDest = null,
+        bool rearm = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentNullException.ThrowIfNull(labels);
 
         LineId = lineId;
         Labels = labels;
+        if (!rearm)
+        {
+            // decision-013 D4 / owner ruling 2026-10-21: with "Reprint Labels" off, re-advice of a carton that
+            // already printed updates its label data + metadata but does NOT re-arm it. The lifecycle
+            // (status, monotonic count, timestamps) is untouched; print states are kept per label type that
+            // still exists (with their printer ids) and new label types start unprinted.
+            SetAdviceMetadata(waveId, profileName, bypass, verifyEnabled, verifyPassDest, verifyFailDest);
+            var rebuilt = BuildPrintStates(labels);
+            foreach (var type in rebuilt.Keys.ToList())
+            {
+                if (_printStates.TryGetValue(type, out var kept))
+                {
+                    rebuilt[type] = kept;
+                }
+            }
+
+            _printStates = rebuilt;
+            return;
+        }
+
         CreatedAt = advisedAt;
         Status = TransportOrderStatus.Advised;
         PrintCount = 0;
@@ -293,6 +356,18 @@ public sealed class TransportOrder
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
         Status = TransportOrderStatus.ReprintAuthorized;
         ReprintAuthorizationReason = reason;
+        foreach (var state in _printStates.Values)
+        {
+            state.Reset();
+        }
+    }
+
+    /// <summary>
+    /// Clear per-label print outcomes before a setting-driven reprint (<c>Reprint Labels</c> on) of an
+    /// already-printed carton, so the new run's per-label state is not polluted by the previous run.
+    /// </summary>
+    public void ResetPrintStatesForReprint()
+    {
         foreach (var state in _printStates.Values)
         {
             state.Reset();

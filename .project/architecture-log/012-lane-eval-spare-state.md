@@ -180,3 +180,7 @@ confirms a demoted (spare) printer is skipped and a promoted one re-enters rotat
 - The `sdisp_PA_Lock` distributed mutex — modeled as an in-process per-line guard; real
   cross-process locking is an integration concern.
 - `ActiveTrainId` train tracking (carried on `ZoneState` for parity; unused here).
+
+## Amendment — owner ruling 2026-10-21
+
+The source `2 Printer Rule` is restored as a check **before** spare promotion, matching source proc `sdisp_PA_LaneEval` L71-77: TotalCount = 2, OnlineCount = 1 and rule on → `SlowLine` (no promotion). The per-line value (`LineConfig.TwoPrinterRule`, UI `LineDto.TwoPrinterRuleEnabled`) wins; the global `2 Printer Rule` setting is the default when the line has none. Printers without a state row count offline (`sdivw_PrinterStatus` inner join).

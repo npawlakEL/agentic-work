@@ -1,6 +1,6 @@
 namespace PandA.Core.Slots;
 
-// Source: sdisp_TOOL_GetSlotNumber.sql creates dbo.CartonAssignSeq with MINVALUE 1 MAXVALUE 300 CYCLE.
+// Matches source proc sdisp_TOOL_GetSlotNumber behavior: slot numbers 1..300, wrapping.
 public sealed class SlotIndexService
 {
     private readonly ISlotIndexProvider _provider;
@@ -10,7 +10,6 @@ public sealed class SlotIndexService
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
     }
 
-    public int NextSlot() => _provider.NextSlot();
+    public ValueTask<int> NextSlotAsync(CancellationToken cancellationToken = default) =>
+        _provider.NextSlotAsync(cancellationToken);
 }
-
-

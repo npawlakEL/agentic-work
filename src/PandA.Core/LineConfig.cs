@@ -24,7 +24,8 @@ public sealed class LineConfig
         IReadOnlyDictionary<string, FirePointProfile>? profileRegistry = null,
         string? defaultProfile = null,
         bool filterLabels = true,
-        bool? printExceptionLabels = null)
+        bool? printExceptionLabels = null,
+        bool? twoPrinterRule = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
         ArgumentNullException.ThrowIfNull(printers);
@@ -47,6 +48,7 @@ public sealed class LineConfig
         DefaultProfile = defaultProfile;
         FilterLabels = filterLabels;
         PrintExceptionLabels = printExceptionLabels;
+        TwoPrinterRule = twoPrinterRule;
     }
 
     public string LineId { get; }
@@ -99,4 +101,11 @@ public sealed class LineConfig
     /// <c>PrintExceptionLabels</c> or, if that is also unset, off). A defined global always wins over this.
     /// </summary>
     public bool? PrintExceptionLabels { get; }
+
+    /// <summary>
+    /// Per-line "2 Printer Rule" (owner: per-line UI setting). <c>null</c> = unset → the global
+    /// <c>2 Printer Rule</c> setting (source default 0). When on, lane evaluation runs a 2-printer group with
+    /// exactly one online printer slow instead of promoting a spare (source <c>sdisp_PA_LaneEval</c>).
+    /// </summary>
+    public bool? TwoPrinterRule { get; }
 }

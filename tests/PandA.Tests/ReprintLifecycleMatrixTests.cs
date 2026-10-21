@@ -98,12 +98,12 @@ public sealed class ReprintLifecycleMatrixTests
     // ---- Induct gate + persistence (B2, senior spy-store rows) ----------------------------------
 
     private static (InductService Svc, CountingTransportOrderStore Store, CapturingPrinterGateway Gw)
-        BuildInduct(LineConfig line, IEnumerable<PrinterState>? states = null)
+        BuildInduct(LineConfig line, IEnumerable<PrinterState>? states = null, InMemorySettingsProvider? settings = null)
     {
         var store = new CountingTransportOrderStore();
         var lines = new InMemoryLineProvider().Add(line, states);
         var gw = new CapturingPrinterGateway();
-        var svc = new InductService(store, lines, new PrinterSelectionService(), gw, new TestClock(T0), new InMemorySettingsProvider());
+        var svc = new InductService(store, lines, new PrinterSelectionService(), gw, new TestClock(T0), settings ?? new InMemorySettingsProvider());
         return (svc, store, gw);
     }
 
@@ -182,9 +182,9 @@ public sealed class ReprintLifecycleMatrixTests
     }
 
     [Fact]
-    public async Task Induct_AlreadyPrinted_NotAuthorized_NoReprint_NoUpsert()
+    public async Task Induct_AlreadyPrinted_ReprintLabelsOff_NotAuthorized_NoReprint_NoUpsert()
     {
-        var (svc, store, gw) = BuildInduct(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]));
+        var (svc, store, gw) = BuildInduct(new LineConfig("L1", [P("Ship1", ["Shipping"], 0)]), settings: TestSettings.ReprintOff());
         var order = new TransportOrder("BLIND1", "L1", Labels(("Shipping", "S1")), T0);
         order.CompletePrintRun(T0); // already printed once
         store.Seed(order);

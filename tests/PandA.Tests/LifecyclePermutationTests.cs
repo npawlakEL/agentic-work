@@ -37,6 +37,10 @@ public sealed class LifecyclePermutationTests
     private static PandaLabelSet Labels(params (string Type, string Lpn)[] labels) =>
         new(labels.Select(l => new Label(l.Type, l.Lpn, $"^XA{l.Type}^XZ")));
 
+    // The carton's own blind label is a required verify slot (source TOOL_PA_VerifyLabel; owner ruling 2026-10-21).
+    private static ScannedLabel[] WithBlind(string blind, params (string Type, string Value)[] labels) =>
+        [new ScannedLabel("BlindLabel", blind), .. Scan(labels)];
+
     private static ScannedLabel[] Scan(params (string Type, string Value)[] labels) =>
         [.. labels.Select(l => new ScannedLabel(l.Type, l.Value))];
 
@@ -63,7 +67,7 @@ public sealed class LifecyclePermutationTests
         Assert.Equal(InductStatus.Printed, induct.Status);
 
         var verify = await _verify.VerifyAsync(
-            "BLIND1", Scan(("Shipping", scanned)), new VerifyOptions(), failThreshold: 5);
+            "BLIND1", WithBlind("BLIND1", ("Shipping", scanned)), new VerifyOptions(), failThreshold: 5);
 
         Assert.True(expected == verify.Status, $"{because}: expected {expected} but was {verify.Status}");
 
@@ -84,7 +88,7 @@ public sealed class LifecyclePermutationTests
 
         // Fail → held.
         var failed = await _verify.VerifyAsync(
-            "BLIND1", Scan(("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 5);
+            "BLIND1", WithBlind("BLIND1", ("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 5);
         Assert.Equal(VerifyStationStatus.HeldForIntervention, failed.Status);
 
         // Operator authorizes → reprint (count 1→2).
@@ -96,7 +100,7 @@ public sealed class LifecyclePermutationTests
 
         // Re-verify correctly → verified, streak cleared.
         var passed = await _verify.VerifyAsync(
-            "BLIND1", Scan(("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 5);
+            "BLIND1", WithBlind("BLIND1", ("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 5);
         Assert.Equal(VerifyStationStatus.Verified, passed.Status);
         Assert.Equal(0, passed.ConsecutiveFailures);
 
@@ -122,7 +126,7 @@ public sealed class LifecyclePermutationTests
         Assert.Equal(InductStatus.Printed, reinduct.Status);
 
         var verify = await _verify.VerifyAsync(
-            "BLIND1", Scan(("Shipping", "NEW")), new VerifyOptions(), failThreshold: 5);
+            "BLIND1", WithBlind("BLIND1", ("Shipping", "NEW")), new VerifyOptions(), failThreshold: 5);
         Assert.Equal(VerifyStationStatus.Verified, verify.Status);
     }
 
@@ -138,7 +142,7 @@ public sealed class LifecyclePermutationTests
             await _advice.AdviseAsync("L1", blind, Labels(("Shipping", "SHIP")));
             await _induct.InductAsync("L1", blind);
             return await _verify.VerifyAsync(
-                blind, Scan(("Shipping", scan)), new VerifyOptions(), failThreshold: 2);
+                blind, WithBlind(blind, ("Shipping", scan)), new VerifyOptions(), failThreshold: 2);
         }
 
         var first = await RunCarton("B1", "WRONG");
@@ -160,16 +164,16 @@ public sealed class LifecyclePermutationTests
         await _advice.AdviseAsync("L1", "B1", Labels(("Shipping", "SHIP")));
         await _induct.InductAsync("L1", "B1");
         var failed = await _verify.VerifyAsync(
-            "B1", Scan(("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 5);
+            "B1", WithBlind("B1", ("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 5);
         Assert.Equal(1, failed.ConsecutiveFailures);
 
         // A scan for an unknown blind returns early without touching the tracker.
         var unknown = await _verify.VerifyAsync(
-            "NOPE", Scan(("Shipping", "SHIP")), new VerifyOptions(), failThreshold: 5);
+            "NOPE", WithBlind("NOPE", ("Shipping", "SHIP")), new VerifyOptions(), failThreshold: 5);
         Assert.Equal(VerifyStationStatus.NoActiveOrder, unknown.Status);
         Assert.Equal(0, unknown.ConsecutiveFailures); // result reports 0, but...
 
-        Assert.Equal(1, _threshold.CurrentCount("L1")); // ...the real streak is untouched
+        Assert.Equal(1, _threshold.CurrentCount("Ship1")); // ...the real (per-printer) streak is untouched
     }
 
     [Fact]
@@ -180,7 +184,7 @@ public sealed class LifecyclePermutationTests
         await _induct.InductAsync("L1", "B1");
 
         var verify = await _verify.VerifyAsync(
-            "B1", Scan(("Shipping", "ANYTHING")),
+            "B1", WithBlind("B1", ("Shipping", "ANYTHING")),
             new VerifyOptions(VerifyEnabled: false, Bypass: true), failThreshold: 2);
 
         Assert.Equal(VerifyStationStatus.Verified, verify.Status);
@@ -196,7 +200,7 @@ public sealed class LifecyclePermutationTests
         await _induct.InductAsync("L1", "B1");
 
         var verify = await _verify.VerifyAsync(
-            "B1", Scan(("Shipping", "?")),
+            "B1", WithBlind("B1", ("Shipping", "?")),
             new VerifyOptions(VerifyEnabled: false, Bypass: true), failThreshold: 2);
 
         Assert.Equal(VerifyStationStatus.HeldForIntervention, verify.Status);

@@ -136,13 +136,17 @@ public sealed class InductServiceTests
     }
 
     [Fact]
-    public async Task Induct_AlreadyPrinted_WithoutAuthorization_IsBlockedAsNoReprint()
+    public async Task Induct_AlreadyPrinted_ReprintLabelsOff_WithoutAuthorization_IsBlockedAsNoReprint()
     {
+        // 'Reprint Labels' = 0 → an already-printed carton needs operator authorization (owner ruling 2026-10-21).
+        var settings = new InMemorySettingsProvider();
+        await settings.SetAsync(KnownSettings.ReprintLabels, false);
+        var induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, settings);
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
-        await _induct.InductAsync("L1", "BLIND1"); // PrintCount → 1
+        await induct.InductAsync("L1", "BLIND1"); // PrintCount → 1
 
-        var second = await _induct.InductAsync("L1", "BLIND1");
+        var second = await induct.InductAsync("L1", "BLIND1");
 
         Assert.Equal(InductStatus.NoReprint, second.Status);
         Assert.Single(_gateway.Jobs); // nothing re-sent
@@ -279,7 +283,7 @@ public sealed class InductServiceTests
     }
 
     [Fact]
-    public async Task Induct_FrontGapBelowMinimum_ClassifiesGapError_ButStillPrints()
+    public async Task Induct_FrontGapBelowMinimum_ClassifiesGapError_AndDoesNotPrint()
     {
         var induct = new InductService(
             _store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider(),
@@ -289,9 +293,10 @@ public sealed class InductServiceTests
 
         var result = await induct.InductAsync(new InductScan("L1", "BLIND1", FrontGap: 50, Length: 400));
 
-        Assert.Equal(InductStatus.Printed, result.Status); // F20 stamps; it does not gate the print on its own
-        var stored = await _store.FindActiveByTuIdAsync("BLIND1");
-        Assert.Equal(CartonStatus.GapError, stored!.StatusAtInduct);
+        // Source LookupCarton L229-235 + Scan_Induct L107: Gap Error sets NoPrintFlag (owner ruling 2026-10-21).
+        Assert.Equal(InductStatus.NotPrintReady, result.Status);
+        Assert.Equal(CartonStatus.GapError, result.Classification);
+        Assert.Empty(_gateway.Jobs);
     }
 
     [Fact]
@@ -408,7 +413,7 @@ public sealed class InductServiceTests
     }
 
     [Fact]
-    public async Task Induct_ExceptionsDisabled_ReturnsNoActiveOrder_AndPrintsNothing()
+    public async Task Induct_ExceptionsDisabled_NoRead_ReturnsNotPrintReady_AndPrintsNothing()
     {
         // Global unset and per-line unset => off.
         var induct = ExceptionInduct(new InMemorySettingsProvider(seedKnownSettings: false));
@@ -416,7 +421,7 @@ public sealed class InductServiceTests
 
         var result = await induct.InductAsync(new InductScan("L1", "???", SeqNum: 5));
 
-        Assert.Equal(InductStatus.NoActiveOrder, result.Status);
+        Assert.Equal(InductStatus.NotPrintReady, result.Status);
         Assert.Empty(_gateway.Jobs);
     }
 
@@ -429,7 +434,7 @@ public sealed class InductServiceTests
 
         var result = await induct.InductAsync(new InductScan("L1", "???", SeqNum: 9));
 
-        Assert.Equal(InductStatus.NoActiveOrder, result.Status);
+        Assert.Equal(InductStatus.NotPrintReady, result.Status);
         Assert.Empty(_gateway.Jobs);
     }
 

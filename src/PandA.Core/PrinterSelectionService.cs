@@ -70,7 +70,8 @@ public sealed class PrinterSelectionService : IPrinterSelectionService
     // a missing entry means "no health signal known", not "offline". Lane-eval/health drivers keep the
     // state map populated (architecture-log 012).
     private static bool IsAvailable(IReadOnlyDictionary<string, PrinterState> states, string printerId) =>
-        !states.TryGetValue(printerId, out var state) || state.IsAvailable;
+        // Source sdivw_PrinterStatus INNER JOIN: a printer with no state row is offline (owner ruling 2026-10-21).
+        states.TryGetValue(printerId, out var state) && state.IsAvailable;
 
     /// <summary>
     /// Load-balance ranking key: least-recently-printed first (null = never printed = oldest).

@@ -17,8 +17,9 @@ public static class ExceptionLabelPolicy
 
     /// <summary>
     /// Map the induct read-quality classification to the exception reason. An unmatched carton with a clean
-    /// read (or a gap-only fault) is <see cref="ExceptionType.NotReceived"/> — we read it but have no advice.
-    /// Returns <c>null</c> for statuses that never produce an exception label (e.g. Bypass).
+    /// read is <see cref="ExceptionType.NotReceived"/> — we read it but have no advice. Returns <c>null</c>
+    /// for statuses that never produce an exception label: Bypass, and GapError (source
+    /// <c>sdisp_PA_LookupCarton</c> L470-479 maps Gap Error to <c>'-'</c>; owner ruling 2026-10-21).
     /// </summary>
     public static ExceptionType? Classify(CartonStatus status) => status switch
     {
@@ -28,7 +29,7 @@ public static class ExceptionLabelPolicy
         CartonStatus.NoInformation => ExceptionType.NoInformation,
         CartonStatus.Duplicate => ExceptionType.Duplicate,
         CartonStatus.PrintHold => ExceptionType.NotReceived,
-        CartonStatus.GapError => ExceptionType.NotReceived,
+
         CartonStatus.PrintReady => ExceptionType.NotReceived,
         _ => null,
     };

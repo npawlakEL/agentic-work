@@ -65,3 +65,12 @@ changes carton PASS/FAIL or reprint semantics; the source SQL is not treated as 
 - Implemented: VF-3 (bypass glitch fails+counts), VF-4 (configurable post-trip reset).
 - No change: VF-1, VF-2 (current behavior confirmed correct-as-intended), AD-1 (backlogged pending
   reprint-rules setting).
+
+## Amendment — owner ruling 2026-10-21 (match source verify)
+
+VF-1, VF-2 and VF-3 are superseded; C# now matches source proc `sdisp_TOOL_PA_VerifyLabel` behavior:
+- An unexpected scanned label whose type has no expected slot is ignored (pass, recorded as an `Extra` detail); duplicate same-type expected barcodes match by name slot in any order.
+- The blind label is **required** when `VerifyContentLabel` = 1 (seed): expected set = carton TuId + every xref barcode recorded for the carton (`IXRefStore.FindByTuIdAsync`); a leftover blind label fails with reason 14.
+- Every non-pass maps to a source `VerifyReasonCode` (no-read family 20/22/27/14, incorrect 21/23/29, conflict 15/28, scan error 12, PandA logic/no data 0, bypass 3) and writes reject history (`sdisp_PA_Scan_Verify` L117-132).
+- The fail streak is counted **per printer that printed the carton** (`sdisp_PA_VerifyThreshold_Update` L129-186); on trip the printers are returned for pause and their counters reset (`_Refresh`), a pass resets them.
+AD-1 is refined by decision-013 amendment (re-arm governed by `Reprint Labels`).

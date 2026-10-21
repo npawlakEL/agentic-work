@@ -124,7 +124,7 @@ public sealed class SimHost
         var parsedVerify = VerifyScanMessage.FromFrame(PaFrame.Parse(verifyFrame.ToWire()));
         var typed = bufferOrder.Type(parsedVerify.LabelBuffer);
         var verify = await _verify.VerifyAsync(blindLabel, typed, new VerifyOptions(), failThreshold: 3);
-        log.Add($"     verify → {verify.Verify!.Outcome} ⇒ station {verify.Status}");
+        log.Add($"     verify → {verify.Verify?.Outcome.ToString() ?? "no data"} ⇒ station {verify.Status}");
 
         var final = await _store.FindActiveByTuIdAsync(blindLabel);
         log.Add($"  == carton {blindLabel}: {final!.Status}, printCount={final.PrintCount} ==");
@@ -151,6 +151,11 @@ public sealed class SimHost
             if (label is not null)
             {
                 buffer[pos.Position - 1] = label.Lpn;
+            }
+            else if (string.Equals(pos.LabelType, "BlindLabel", StringComparison.OrdinalIgnoreCase))
+            {
+                // The carton's own blind label is a required verify slot (owner ruling 2026-10-21).
+                buffer[pos.Position - 1] = order.TuId;
             }
         }
 

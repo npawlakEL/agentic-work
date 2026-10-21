@@ -624,7 +624,7 @@ Additionally, all **existing services** need retrofitting once F16 lands:
 |---------|-----------|-----------------|
 | **F15** PLC Event / Recovery | 🔴 Complete gap | No `PlcEventCode` enum, no `ResetForTrackingEvent`, no PLC event handler |
 | **F16** Structured Event Logging | 🔴 Complete gap | No `IPandaEventSink`, no `PandaEvent`, no `PandaEventLevel`; zero event emission from any service |
-| **F22** Reject History | 🔴 Complete gap | No `VerifyReasonCode`, no `IRejectHistoryRepository`, no emission from `VerifyStationService` |
+| **F22** Reject History | ✅ Wired (owner ruling 2026-10-21) | `VerifyStationService` maps every non-pass to `VerifyReasonCode` and writes a `RejectRecord` via `IRejectHistoryRepository`, matching source proc `sdisp_PA_Scan_Verify` L117-132; Gap Error writes none (OQ-F22-1: no, as source) |
 | **F-LOG1** Carton Run History | 🔴 Complete gap | `PrintCount` is monotonic ✓; no `CartonRunRecord`, no `ICartonRunRepository`, no per-run physical data |
 | **F20** Scanner Read Quality | 🔴 Complete gap | No sentinel detection, no `MinGap` check, no `CartonStatus` enum, no pre-lookup classification |
 | **SpaceScan** | ➡️ Out of scope | DBA disk-space utility; no port required |

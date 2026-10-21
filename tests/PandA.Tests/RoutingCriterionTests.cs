@@ -34,6 +34,10 @@ public sealed class RoutingCriterionTests
     private static PandaLabelSet Labels(params (string Type, string Lpn)[] labels) =>
         new(labels.Select(l => new Label(l.Type, l.Lpn, $"^XA{l.Type}^XZ")));
 
+    // The carton's own blind label is a required verify slot (source TOOL_PA_VerifyLabel; owner ruling 2026-10-21).
+    private static ScannedLabel[] WithBlind(string blind, params (string Type, string Value)[] labels) =>
+        [new ScannedLabel("BlindLabel", blind), .. Scan(labels)];
+
     private static IReadOnlyList<ScannedLabel> Scan(params (string Type, string Value)[] reads) =>
         [.. reads.Select(r => new ScannedLabel(r.Type, r.Value))];
 
@@ -47,22 +51,31 @@ public sealed class RoutingCriterionTests
     }
 
     [Fact]
-    public void ForVerify_Ignore_AlsoMapsToPass()
+    public void ForVerify_Ignore_RoutesToFailDestination_WithPassThroughCode()
     {
-        Assert.Equal("Pass", RoutingCriterion.ForVerify(new VerifyResult(VerifyOutcome.Ignore, [])).Value);
+        // Source TOOL_PA_VerifyLabel L470: FinalDestination = pass(1) ? PassDest : FailDest, so a bypass (3)
+        // goes to the fail destination (owner ruling 2026-10-21).
+        var criterion = RoutingCriterion.ForVerify(new VerifyResult(VerifyOutcome.Ignore, []));
+
+        Assert.Equal("Fail", criterion.Value);
+        Assert.Equal(VerifyReasonCode.PassThroughCarton, criterion.ReasonCode);
+        Assert.Equal("Verify - FAIL", criterion.Destination);
     }
 
     [Theory]
-    [InlineData(VerifyOutcome.Fail, "Fail")]
-    [InlineData(VerifyOutcome.NoRead, "NoRead")]
-    [InlineData(VerifyOutcome.NoData, "NoData")]
-    [InlineData(VerifyOutcome.Conflict, "Conflict")]
-    public void ForVerify_FailingOutcomes_MapToOutcomeValue(VerifyOutcome outcome, string expected)
+    [InlineData(VerifyOutcome.Fail)]
+    [InlineData(VerifyOutcome.NoRead)]
+    [InlineData(VerifyOutcome.NoData)]
+    [InlineData(VerifyOutcome.Conflict)]
+    public void ForVerify_FailingOutcomes_MapToFail_WithReasonCode(VerifyOutcome outcome)
     {
-        var criterion = RoutingCriterion.ForVerify(new VerifyResult(outcome, []));
+        // decision-008 "Pass|Fail|<RejectReasonCode>": value is Pass/Fail; the reason code rides alongside.
+        var criterion = RoutingCriterion.ForVerify(new VerifyResult(outcome, []), "Ship Lane", "Reject Lane");
 
         Assert.Equal("PandaVerify", criterion.Type);
-        Assert.Equal(expected, criterion.Value);
+        Assert.Equal("Fail", criterion.Value);
+        Assert.Equal(VerifyReasonCode.PandaLogicError, criterion.ReasonCode); // no details → code 0
+        Assert.Equal("Reject Lane", criterion.Destination);
     }
 
     [Fact]
@@ -72,7 +85,7 @@ public sealed class RoutingCriterionTests
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         await _induct.InductAsync("L1", "BLIND1");
 
-        var result = await _verify.VerifyAsync("BLIND1", Scan(("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 3);
+        var result = await _verify.VerifyAsync("BLIND1", WithBlind("BLIND1", ("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 3);
 
         Assert.Equal(VerifyStationStatus.Verified, result.Status);
         Assert.NotNull(result.Routing);
@@ -87,7 +100,7 @@ public sealed class RoutingCriterionTests
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         await _induct.InductAsync("L1", "BLIND1");
 
-        var result = await _verify.VerifyAsync("BLIND1", Scan(("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 3);
+        var result = await _verify.VerifyAsync("BLIND1", WithBlind("BLIND1", ("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 3);
 
         Assert.Equal(VerifyStationStatus.HeldForIntervention, result.Status);
         Assert.NotNull(result.Routing);
@@ -95,11 +108,14 @@ public sealed class RoutingCriterionTests
     }
 
     [Fact]
-    public async Task VerifyStation_NoActiveOrder_LeavesRoutingNull()
+    public async Task VerifyStation_NoActiveOrder_RoutesFail_WithPandaLogicErrorCode()
     {
-        var result = await _verify.VerifyAsync("NOPE", Scan(("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 3);
+        // Source VerifyLabel L134: PandaDataID=0 → VerifyPass 0 → fail destination (owner ruling 2026-10-21).
+        var result = await _verify.VerifyAsync("NOPE", WithBlind("NOPE", ("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 3);
 
         Assert.Equal(VerifyStationStatus.NoActiveOrder, result.Status);
-        Assert.Null(result.Routing);
+        Assert.NotNull(result.Routing);
+        Assert.Equal("Fail", result.Routing!.Value);
+        Assert.Equal(VerifyReasonCode.PandaLogicError, result.Routing.ReasonCode);
     }
 }

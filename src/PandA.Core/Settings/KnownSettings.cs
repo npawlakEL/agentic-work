@@ -3,10 +3,10 @@ namespace PandA.Core.Settings;
 public static class KnownSettings
 {
     public static readonly SettingsDescriptor<bool> ReprintLabels =
-        new("Reprint Labels", false, "Allow labels to be reprinted globally.");
+        new("Reprint Labels", true, "Allow labels to be reprinted globally (source fallback 1 when unset; decision-013 D2).");
 
     public static readonly SettingsDescriptor<bool> OverwriteLabelData =
-        new("OverwriteLabelData", false, "Overwrite existing host label advice.");
+        new("OverwriteLabelData", false, "Duplicate advice: 1 replaces the existing advice; 0 appends and the oldest unprinted advice wins.");
 
     public static readonly SettingsDescriptor<bool> PrintExceptionLabels =
         new("PrintExceptionLabels", false, "Print local exception labels.");
@@ -28,6 +28,9 @@ public static class KnownSettings
 
     public static readonly SettingsDescriptor<bool> LoadBalanceEnabled =
         new("LoadBalanceEnabled", false, "Enable printer load balancing.");
+
+    public static readonly SettingsDescriptor<bool> VerifyContentLabel =
+        new("VerifyContentLabel", true, "Verify every label type incl. the blind label (0 = Shipping/Exception only).", Display: false);
 
     public static readonly SettingsDescriptor<bool> TwoPrinterRule =
         new("2 Printer Rule", false, "Enable two-printer spare rule.");
@@ -73,6 +76,7 @@ public static class KnownSettings
         HeightCheckLabelField,
         HeightCheckEnabled,
         LoadBalanceEnabled,
+        VerifyContentLabel,
         TwoPrinterRule,
         FilterLabels,
         PrinterStatusSuffix,

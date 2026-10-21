@@ -109,3 +109,10 @@ removes it from rotation; activating a spare returns it. A just-activated spare 
 Phase 1 (advice → induct → pick printer → send ZPL) **must** implement 1a–1c including the collision→PID2
 routing (it is *the* printer-routing behavior). Spare **activation/parking dynamics** (Part 2) can be
 deferred, but the eligibility filter must already honor `IsSpare=0` and online status.
+
+## Amendment — owner ruling 2026-10-21
+
+- A printer with **no state row** is offline (selection and lane eval), matching source view `sdivw_PrinterStatus` (inner join).
+- `LastPrinted` is stamped on **every** attempt — success, dispatch failure, and fire-point skip — matching source proc `sdisp_PA_PickPrinter` L469-473, so rotation moves off a broken printer.
+- A slot (1..300, cycling) is drawn on every induct incl. no-print via async `ISlotIndexProvider.NextSlotAsync`, carried on `InductResult.Slot` and `PrintJob.Slot`, matching `sdisp_TOOL_GetSlotNumber` / `PickPrinter` L97-101.
+- `MinGap` defaults to the `MinGap` setting (seed 20) when no `IMinGapProvider` is supplied (`LookupCarton` L166).

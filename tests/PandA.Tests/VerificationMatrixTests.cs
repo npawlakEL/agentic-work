@@ -60,15 +60,18 @@ public sealed class VerificationMatrixTests
     }
 
     [Fact]
-    public void Extra_ScannedTypeNotExpected_NoRead()
+    public void Extra_ScannedTypeNotExpected_IsIgnored_ButLeftoverExpectedFails()
     {
+        // Source TOOL_PA_VerifyLabel: a read with no expected value of that name is ignored (owner ruling 2026-10-21).
         var result = _sut.Verify(
             Expected(("Shipping", "SHIP1")),
             Scan(("Parcel", "P1")),
             new VerifyOptions());
 
-        Assert.Equal(VerifyOutcome.NoRead, result.Outcome);
+        Assert.Equal(VerifyOutcome.Fail, result.Outcome);
         Assert.Contains(result.Details, d => d.Reason == VerifyLabelReason.Extra);
+        Assert.Contains(result.Details, d => d.Reason == VerifyLabelReason.Missing && d.LabelType == "Shipping");
+        Assert.Equal(VerifyReasonCode.ShippingLabelNoRead, VerifyReasonCodes.For(result));
     }
 
     // ---- Xref backup barcodes -------------------------------------------------------------------
@@ -162,15 +165,16 @@ public sealed class VerificationMatrixTests
     }
 
     [Fact]
-    public void ToggleOff_ShippingExpected_ExtraExceptionScan_NoRead_BecauseExceptionIsRetained()
+    public void ToggleOff_ShippingExpected_UnexpectedExceptionScan_IsFilteredOut_Passes()
     {
-        // Exception is a retained (content-only) type, so an unexpected Exception scan IS an Extra.
+        // Source TOOL_PA_VerifyLabel L236: with VerifyContentLabel=0 only reads whose value is in the expected
+        // set are kept, so an unexpected Exception value is dropped (owner ruling 2026-10-21).
         var result = _sut.Verify(
             Expected(("Shipping", "SHIP1")),
             Scan(("Shipping", "SHIP1"), ("Exception", "EX1")),
             new VerifyOptions(VerifyContentLabel: false));
 
-        Assert.Equal(VerifyOutcome.NoRead, result.Outcome);
+        Assert.Equal(VerifyOutcome.Pass, result.Outcome);
     }
 
     // ---- Empty expected-set semantics (senior: intended Pass) -----------------------------------
@@ -200,14 +204,15 @@ public sealed class VerificationMatrixTests
     }
 
     [Fact]
-    public void EmptyExpected_ButAScanArrives_NoRead()
+    public void EmptyExpected_ButAScanArrives_IsIgnored_Passes()
     {
+        // Source TOOL_PA_VerifyLabel: a read with no expected value of that name is ignored (owner ruling 2026-10-21).
         var result = _sut.Verify(
             Expected(("Orientation", "SIDE")),
             Scan(("Shipping", "SHIP1")),
             new VerifyOptions());
 
-        Assert.Equal(VerifyOutcome.NoRead, result.Outcome);
+        Assert.Equal(VerifyOutcome.Pass, result.Outcome);
     }
 
     // ---- Order sensitivity / duplicate expected (senior) ----------------------------------------
@@ -224,15 +229,16 @@ public sealed class VerificationMatrixTests
     }
 
     [Fact]
-    public void DuplicateExpected_ReversedOrder_Fails_EvenThoughMultisetMatches()
+    public void DuplicateExpected_ReversedOrder_Passes_LikeSourceNameSlot()
     {
-        // First unconsumed slot for "Shipping" is "A"; scanning "B" first mismatches it.
+        // Source TOOL_PA_VerifyLabel: expected values are grouped by label name; a read matching any value
+        // of the name passes it and clears that name (owner ruling 2026-10-21), so order no longer matters.
         var result = _sut.Verify(
             Expected(("Shipping", "A"), ("Shipping", "B")),
             Scan(("Shipping", "B"), ("Shipping", "A")),
             new VerifyOptions());
 
-        Assert.Equal(VerifyOutcome.Fail, result.Outcome);
+        Assert.Equal(VerifyOutcome.Pass, result.Outcome);
     }
 
     [Fact]

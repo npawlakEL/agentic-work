@@ -26,7 +26,8 @@ public sealed class LifecycleEndToEndTests
     public LifecycleEndToEndTests()
     {
         _advice = new CartonAdviceService(_store, _clock, new InMemorySettingsProvider());
-        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, new InMemorySettingsProvider());
+        // These lifecycles exercise the operator-authorization reprint gate, so 'Reprint Labels' is off.
+        _induct = new InductService(_store, _lines, new PrinterSelectionService(), _gateway, _clock, TestSettings.ReprintOff());
         _verify = new VerifyStationService(_store, new VerificationService(), _threshold, _clock);
     }
 
@@ -35,6 +36,10 @@ public sealed class LifecycleEndToEndTests
 
     private static PandaLabelSet Labels(params (string Type, string Lpn)[] labels) =>
         new(labels.Select(l => new Label(l.Type, l.Lpn, $"^XA{l.Type}^XZ")));
+
+    // The carton's own blind label is a required verify slot (source TOOL_PA_VerifyLabel; owner ruling 2026-10-21).
+    private static ScannedLabel[] WithBlind(string blind, params (string Type, string Value)[] labels) =>
+        [new ScannedLabel("BlindLabel", blind), .. Scan(labels)];
 
     private static ScannedLabel[] Scan(params (string Type, string Value)[] labels) =>
         [.. labels.Select(l => new ScannedLabel(l.Type, l.Value))];
@@ -56,7 +61,7 @@ public sealed class LifecycleEndToEndTests
 
         var verify = await _verify.VerifyAsync(
             "BLIND1",
-            Scan(("Shipping", "SHIP1"), ("Content", "CON1")),
+            WithBlind("BLIND1", ("Shipping", "SHIP1"), ("Content", "CON1")),
             new VerifyOptions(),
             failThreshold: 3);
 
@@ -77,7 +82,7 @@ public sealed class LifecycleEndToEndTests
 
         // Operator applied the wrong label → verify fails → carton is HELD (no auto re-arm).
         var firstVerify = await _verify.VerifyAsync(
-            "BLIND1", Scan(("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 3);
+            "BLIND1", WithBlind("BLIND1", ("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 3);
 
         Assert.Equal(VerifyStationStatus.HeldForIntervention, firstVerify.Status);
         var held = await _store.FindActiveByTuIdAsync("BLIND1");
@@ -96,7 +101,7 @@ public sealed class LifecycleEndToEndTests
         _lines.Add(new LineConfig("L1", [Printer("Ship1", ["Shipping"], 0)]));
         await _advice.AdviseAsync("L1", "BLIND1", Labels(("Shipping", "SHIP1")));
         await _induct.InductAsync("L1", "BLIND1");
-        await _verify.VerifyAsync("BLIND1", Scan(("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 3);
+        await _verify.VerifyAsync("BLIND1", WithBlind("BLIND1", ("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 3);
 
         // Operator intervenes on the web screen: authorize a reprint for this carton.
         var held = await _store.FindActiveByTuIdAsync("BLIND1");
@@ -115,7 +120,7 @@ public sealed class LifecycleEndToEndTests
 
         // Re-verify correctly → carton passes.
         var secondVerify = await _verify.VerifyAsync(
-            "BLIND1", Scan(("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 3);
+            "BLIND1", WithBlind("BLIND1", ("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 3);
         Assert.Equal(VerifyStationStatus.Verified, secondVerify.Status);
         Assert.Equal(0, secondVerify.ConsecutiveFailures); // pass cleared the streak
     }
@@ -133,7 +138,7 @@ public sealed class LifecycleEndToEndTests
             await _induct.InductAsync("L1", blind);
 
             var verify = await _verify.VerifyAsync(
-                blind, Scan(("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 2);
+                blind, WithBlind(blind, ("Shipping", "WRONG")), new VerifyOptions(), failThreshold: 2);
             paused = verify.PrinterPaused;
         }
 
@@ -149,7 +154,7 @@ public sealed class LifecycleEndToEndTests
 
         var verify = await _verify.VerifyAsync(
             "BLIND1",
-            Scan(("Shipping", "ANYTHING")),
+            WithBlind("BLIND1", ("Shipping", "ANYTHING")),
             new VerifyOptions(VerifyEnabled: false, Bypass: true),
             failThreshold: 2);
 
@@ -162,7 +167,7 @@ public sealed class LifecycleEndToEndTests
     public async Task Verify_UnknownBlindLabel_ReturnsNoActiveOrder()
     {
         var verify = await _verify.VerifyAsync(
-            "NOPE", Scan(("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 3);
+            "NOPE", WithBlind("NOPE", ("Shipping", "SHIP1")), new VerifyOptions(), failThreshold: 3);
 
         Assert.Equal(VerifyStationStatus.NoActiveOrder, verify.Status);
         Assert.Null(verify.Verify);
@@ -187,7 +192,7 @@ public sealed class LifecycleEndToEndTests
 
         var verify = await _verify.VerifyAsync(
             "BLIND1",
-            Scan(("Shipping", "S1"), ("Content", "C1"), ("Parcel", "P1")),
+            WithBlind("BLIND1", ("Shipping", "S1"), ("Content", "C1"), ("Parcel", "P1")),
             new VerifyOptions(),
             failThreshold: 3);
 

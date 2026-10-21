@@ -13,7 +13,8 @@ public sealed class SettingsProviderTests
         var reprint = await provider.GetAsync(KnownSettings.ReprintLabels);
         var minGap = await provider.GetAsync(KnownSettings.MinGap);
 
-        Assert.False(reprint);
+        // Source LookupCarton falls back to '1' when 'Reprint Labels' is unset (owner ruling 2026-10-21).
+        Assert.True(reprint);
         Assert.Equal(20, minGap);
     }
 

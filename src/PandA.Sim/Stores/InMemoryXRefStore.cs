@@ -56,6 +56,20 @@ public sealed class InMemoryXRefStore : IXRefStore
         }
     }
 
+    public ValueTask<IReadOnlyList<XRef>> FindByTuIdAsync(string tuId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tuId);
+        ct.ThrowIfCancellationRequested();
+
+        lock (_gate)
+        {
+            IReadOnlyList<XRef> xrefs = [.. _entries
+                .Where(entry => string.Equals(entry.TuId, tuId, StringComparison.Ordinal))
+                .Select(entry => entry.XRef)];
+            return ValueTask.FromResult(xrefs);
+        }
+    }
+
     public ValueTask<int> RemoveByBarcodeAsync(
         string barcode,
         BarcodeType type,

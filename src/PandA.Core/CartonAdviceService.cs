@@ -63,8 +63,6 @@ public sealed class CartonAdviceService : ICartonAdviceService
         ArgumentException.ThrowIfNullOrWhiteSpace(advice.BlindLabel);
         ArgumentNullException.ThrowIfNull(advice.Labels);
 
-        _ = _settings;
-
         var now = _clock.UtcNow;
         var existing = await _store.FindActiveByTuIdAsync(advice.BlindLabel, cancellationToken).ConfigureAwait(false);
 
@@ -85,20 +83,24 @@ public sealed class CartonAdviceService : ICartonAdviceService
         }
         else
         {
-            existing.OverwriteAdvice(
-                advice.LineId,
-                advice.Labels,
-                now,
-                advice.WaveId,
-                advice.ProfileName,
-                advice.Bypass,
-                advice.VerifyEnabled,
-                advice.VerifyPassDest,
-                advice.VerifyFailDest); // last-wins
             order = existing;
-            _logger.LogInformation(
-                "Overwrote advice for transport order {TuId} on line {LineId} with {LabelCount} labels for wave {WaveId} and profile {ProfileName}.",
-                advice.BlindLabel, advice.LineId, advice.Labels.Labels.Count, advice.WaveId, advice.ProfileName);
+            var overwriteLabelData = await _settings.GetAsync(KnownSettings.OverwriteLabelData, cancellationToken).ConfigureAwait(false);
+            var reprintLabels = await _settings.GetAsync(KnownSettings.ReprintLabels, cancellationToken).ConfigureAwait(false);
+
+            if (!overwriteLabelData && !existing.HasPrinted)
+            {
+                // Source Job.sql L219-231 with OverwriteLabelData=0 appends a second active PandaData row and
+                // keeps the old one; LookupCarton (CreationTime ASC when 0) then prints the OLDEST unprinted
+                // row first. Single-TO approximation: the existing, still-unprinted advice wins and the
+                // duplicate is not applied (owner ruling 2026-10-21).
+                _logger.LogInformation(
+                    "Duplicate advice for unprinted transport order {TuId} on line {LineId} not applied (OverwriteLabelData off: oldest advice wins).",
+                    advice.BlindLabel, advice.LineId);
+            }
+            else
+            {
+                Overwrite(existing, advice, now, reprintLabels);
+            }
         }
 
         // F18: populate the barcode cross-reference so a later non-BL induct scan (oLPN/UPC/…) resolves
@@ -114,5 +116,37 @@ public sealed class CartonAdviceService : ICartonAdviceService
         // F23: wave create/update here.
         await _store.UpsertAsync(order, cancellationToken).ConfigureAwait(false);
         return order;
+    }
+
+    private void Overwrite(TransportOrder existing, AdviceMessage advice, DateTimeOffset now, bool reprintLabels)
+    {
+        // OverwriteLabelData=1 replaces the advice (last wins). With 0 and an already-printed carton the
+        // appended row is the only unprinted one, so the new data is what the SQL would print next.
+        // Re-arming is governed by "Reprint Labels" (decision-013 D4 / owner ruling 2026-10-21): off →
+        // update the label data but keep a printed carton locked; on → re-arm a new generation.
+        var rearm = reprintLabels || !existing.HasPrinted;
+        existing.OverwriteAdvice(
+            advice.LineId,
+            advice.Labels,
+            now,
+            advice.WaveId,
+            advice.ProfileName,
+            advice.Bypass,
+            advice.VerifyEnabled,
+            advice.VerifyPassDest,
+            advice.VerifyFailDest,
+            rearm);
+        if (rearm)
+        {
+            _logger.LogInformation(
+                "Overwrote advice for transport order {TuId} on line {LineId} with {LabelCount} labels for wave {WaveId} and profile {ProfileName}.",
+                advice.BlindLabel, advice.LineId, advice.Labels.Labels.Count, advice.WaveId, advice.ProfileName);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Overwrote label data for locked transport order {TuId} on line {LineId} (Reprint Labels off); carton not re-armed, status {Status}.",
+                advice.BlindLabel, advice.LineId, existing.Status);
+        }
     }
 }

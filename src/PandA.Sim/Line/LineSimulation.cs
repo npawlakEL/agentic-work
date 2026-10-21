@@ -292,10 +292,13 @@ public sealed class LineSimulation
 
         if (eyeIndex == eyes.Count - 1 && carton.State is (SimCartonState.Printed or SimCartonState.Applied))
         {
-            // The verify scanner can only read labels physically applied to the carton.
+            // The verify scanner reads the carton's own blind label (always on the carton, buffer position 1
+            // in the source layout) plus the labels physically applied to it. The blind label is a required
+            // verify slot (source TOOL_PA_VerifyLabel; owner ruling 2026-10-21).
             var scanned = carton.Labels
                 .Where(l => l.Applied)
                 .Select(l => new ScannedLabel(l.LabelType, l.Lpn))
+                .Prepend(new ScannedLabel("BlindLabel", carton.BlindLabel))
                 .ToList();
             var result = await _verify.VerifyAsync(
                 carton.BlindLabel,

@@ -21,7 +21,9 @@ public sealed class ThresholdMatrixTests
         yield return ["fail,fail,ignore-as-pass resets", new[] { false, false, true }, 3, 0, false];
         yield return ["pass never pauses", new[] { true, true }, 1, 0, false];
         yield return ["threshold<=0 accumulates but never pauses", new[] { false, false, false }, 0, 3, false];
-        yield return ["pause stays true past threshold", new[] { false, false, false, false }, 2, 4, true];
+        // Source VerifyThreshold_Update refreshes (resets) the count when it trips (owner ruling 2026-10-21),
+        // so a continuing fail streak re-trips every <threshold> fails.
+        yield return ["re-trips after reset-on-trip", new[] { false, false, false, false }, 2, 2, true];
         yield return ["recover after pause", new[] { false, false, true, false }, 2, 1, false];
     }
 
@@ -82,6 +84,6 @@ public sealed class ThresholdMatrixTests
 
         Assert.Equal(1, l2.ConsecutiveFailures);
         Assert.False(l2.PausePrinter);
-        Assert.Equal(2, tracker.CurrentCount("L1"));
+        Assert.Equal(0, tracker.CurrentCount("L1")); // L1 tripped → reset-on-trip (owner ruling 2026-10-21)
     }
 }

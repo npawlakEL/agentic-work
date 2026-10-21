@@ -152,6 +152,7 @@ public sealed class MessageConsoleService
         var gateway = new CapturingPrinterGateway();
         var clock = new SimClock(DateTimeOffset.UtcNow);
         ISettingsProvider settings = new InMemorySettingsProvider();
+        await settings.SetAsync(KnownSettings.ReprintLabels, _store.Settings.ReprintLabelsEnabled);
 
         var advice = new CartonAdviceService(orders, clock, settings, logger: loggerFactory.CreateLogger<CartonAdviceService>());
         var induct = new InductService(
@@ -223,12 +224,19 @@ public sealed class MessageConsoleService
         entries.Add(new ConsoleEntry(ConsoleEntryKind.InboundFrame, $"IN  286 PANDA_SCAN_VERIFY   {verifyWire}"));
 
         var parsedVerify = VerifyScanMessage.FromFrame(PaFrame.Parse(verifyWire));
-        var typed = config.BufferOrder.Type(parsedVerify.LabelBuffer);
+        var typed = config.BufferOrder.Type(parsedVerify.LabelBuffer).ToList();
+        if (!typed.Exists(l => string.Equals(l.LabelType, "BlindLabel", StringComparison.OrdinalIgnoreCase)))
+        {
+            // The carton's blind label is always readable at verify (source buffer position 1) and is a
+            // required verify slot (source TOOL_PA_VerifyLabel; owner ruling 2026-10-21).
+            typed.Insert(0, new ScannedLabel("BlindLabel", blindLabel));
+        }
+
         var verifyResult = await verify.VerifyAsync(blindLabel, typed, new VerifyOptions(), failThreshold: _store.Settings.VerifyFailThreshold);
         entries.Add(new ConsoleEntry(ConsoleEntryKind.StepResult,
-            $"Verify → {verifyResult.Verify!.Outcome} ⇒ station {verifyResult.Status}"));
+            $"Verify → {verifyResult.Verify?.Outcome.ToString() ?? "no data"} ⇒ station {verifyResult.Status}"));
 
-        foreach (var detail in verifyResult.Verify!.Details)
+        foreach (var detail in verifyResult.Verify?.Details ?? [])
         {
             var scanned = string.IsNullOrEmpty(detail.Scanned) ? "(no read)" : detail.Scanned;
             entries.Add(new ConsoleEntry(ConsoleEntryKind.Info,

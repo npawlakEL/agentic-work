@@ -24,11 +24,16 @@ public sealed class LaneEvalService
 
     private readonly ILogger<LaneEvalService> _logger;
     private readonly ILockProvider? _locks;
+    private readonly Settings.ISettingsProvider? _settings;
 
-    public LaneEvalService(ILogger<LaneEvalService>? logger = null, ILockProvider? locks = null)
+    public LaneEvalService(
+        ILogger<LaneEvalService>? logger = null,
+        ILockProvider? locks = null,
+        Settings.ISettingsProvider? settings = null)
     {
         _logger = logger ?? NullLogger<LaneEvalService>.Instance;
         _locks = locks;
+        _settings = settings;
     }
 
     /// <summary>
@@ -50,7 +55,11 @@ public sealed class LaneEvalService
             .ConfigureAwait(false);
         try
         {
-            return Evaluate(line, states, zone, now);
+            // "2 Printer Rule": the line's own value wins; otherwise the global setting (source default 0).
+            var twoPrinterRule = line.TwoPrinterRule
+                ?? (_settings is { } settings
+                    && await settings.GetAsync(Settings.KnownSettings.TwoPrinterRule, cancellationToken).ConfigureAwait(false));
+            return Evaluate(line, states, zone, now, twoPrinterRule);
         }
         finally
         {
@@ -62,11 +71,14 @@ public sealed class LaneEvalService
     /// Evaluate one line. <paramref name="now"/> stamps <see cref="PrinterState.LastStatusUpdate"/>
     /// on any promote/demote so the newest change is preferred next time. Serialized per line in-process.
     /// </summary>
+    /// <param name="twoPrinterRule">Effective "2 Printer Rule"; null uses <see cref="LineConfig.TwoPrinterRule"/>
+    /// (unset → off, the source default).</param>
     public LaneEvalResult Evaluate(
         LineConfig line,
         IReadOnlyDictionary<string, PrinterState> states,
         ZoneState zone,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool? twoPrinterRule = null)
     {
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(states);
@@ -74,7 +86,7 @@ public sealed class LaneEvalService
 
         lock (LineMonitors.GetOrAdd(line.LineId, static _ => new object()))
         {
-            return EvaluateCore(line, states, zone, now);
+            return EvaluateCore(line, states, zone, now, twoPrinterRule ?? line.TwoPrinterRule ?? false);
         }
     }
 
@@ -82,7 +94,8 @@ public sealed class LaneEvalService
         LineConfig line,
         IReadOnlyDictionary<string, PrinterState> states,
         ZoneState zone,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool twoPrinterRule)
     {
         // Zone down => the whole line is shut regardless of printer health (source sdisp_PA_Status_Zone).
         if (!zone.ZoneOnline)
@@ -133,17 +146,30 @@ public sealed class LaneEvalService
                     continue;
                 }
 
+                // Source sdivw_PrinterStatus INNER JOIN: a printer with no state row is not part of the
+                // evaluated set at all — never online, not counted in the total (owner ruling 2026-10-21).
                 var group = line.Printers
                     .Where(p => p.PrinterType == orientation)
                     .Select(p => states.GetValueOrDefault(p.PrinterId))
+                    .OfType<PrinterState>()
                     .ToList();
 
-                var online = group.Count(s => s is null || s.IsOnline);
-                var spare = group.Count(s => s is { IsSpare: true });
+                var total = group.Count;
+                var online = group.Count(s => s.IsOnline);
+                var spare = group.Count(s => s.IsSpare);
                 var usable = online - spare;
 
                 if (usable < policy.OnlineMin)
                 {
+                    // Source LaneEval L71-77/L170-175: the "2 Printer Rule" is checked BEFORE spare promotion
+                    // — a 2-printer group with exactly one online runs slow (owner ruling 2026-10-21).
+                    if (twoPrinterRule && total == 2 && online == 1)
+                    {
+                        control = Max(control, LineControl.SlowLine);
+                        reasons.Add($"{orientation}: running slow (2 Printer Rule: 1 of 2 online).");
+                        continue;
+                    }
+
                     var promotedState = TryPromoteSpare(group, now);
                     if (promotedState is not null)
                     {
@@ -197,7 +223,7 @@ public sealed class LaneEvalService
     }
 
     /// <summary>Promote the newest online spare in the group back into rotation; null if none.</summary>
-    private static PrinterState? TryPromoteSpare(IEnumerable<PrinterState?> group, DateTimeOffset now)
+    private static PrinterState? TryPromoteSpare(IEnumerable<PrinterState> group, DateTimeOffset now)
     {
         var spare = group
             .Where(s => s is { IsSpare: true, IsOnline: true })
@@ -219,7 +245,7 @@ public sealed class LaneEvalService
     /// query — which orders all online printers and can no-op on an already-spare pick — this selects a
     /// non-spare, matching the intent (see architecture-log 012 §4).
     /// </summary>
-    private static PrinterState? DemoteActive(IEnumerable<PrinterState?> group, DateTimeOffset now)
+    private static PrinterState? DemoteActive(IEnumerable<PrinterState> group, DateTimeOffset now)
     {
         var active = group
             .Where(s => s is { IsSpare: false, IsOnline: true })

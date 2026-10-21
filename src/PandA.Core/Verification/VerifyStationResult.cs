@@ -9,7 +9,11 @@ public enum VerifyStationStatus
     /// <summary>Verify failed; the carton is held for manual intervention (decision-003; no auto re-arm).</summary>
     HeldForIntervention = 1,
 
-    /// <summary>No active transport order matched the scanned blind label.</summary>
+    /// <summary>
+    /// No active transport order matched the scanned blind label. Matches source behavior for
+    /// PandaDataID = 0: the carton is failed (code 0), written to reject history and routed to the fail
+    /// destination (owner ruling 2026-10-21).
+    /// </summary>
     NoActiveOrder = 2,
 }
 
@@ -27,4 +31,5 @@ public sealed record VerifyStationResult(
     VerifyResult? Verify,
     bool PrinterPaused,
     int ConsecutiveFailures,
-    RoutingCriterion? Routing = null);
+    RoutingCriterion? Routing = null,
+    IReadOnlyList<string>? PrintersToPause = null);

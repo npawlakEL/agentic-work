@@ -95,3 +95,9 @@ apply. (Global-override-with-per-line-fallback.) Source seed default = `0` (off)
   (`{Reason}-{seq}`), F08 routing on the exception carton, orientation resolution.
 - Seed the 7 exception templates into `InMemoryLabelTemplateRepository` (Sim) for tests.
 - DCMS/eHub exception source: **backlog** (adapter-owned, wave-coupled with eHub connector).
+
+## Amendment — owner ruling 2026-10-21
+
+- Exception labels print only for no-read / no-data / label-conflict classifications; **Gap Error prints nothing** (`ExceptionLabelPolicy` → null), matching source proc `sdisp_PA_LookupCarton` L229-235, L470-479.
+- Any classification other than PrintReady suppresses the real labels even if an order resolves (`InductStatus.NotPrintReady`); bypass orders print nothing (`InductStatus.Bypass`).
+- The exception carton is persisted as a synthetic `TransportOrder` (`IsExceptionCarton`, VerifyEnabled, marked Printed) keyed by the minted carton id, so verify fails it with reason 0, writes reject history and counts the streak — matching `LookupCarton` L509-536 → `sdisp_PA_VerifyCarton` → `sdisp_TOOL_PA_VerifyLabel` (PandaDataID=0).

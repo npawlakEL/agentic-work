@@ -54,10 +54,12 @@ public sealed class VerificationService : IVerificationService
 
         var acceptable = BuildXrefLookup(xref);
         var expectedLabels = BuildExpected(expected, options, acceptable, blindLabel);
-        var scannedLabels = FilterScanned(scanned, options);
+        var scannedLabels = FilterScanned(scanned, options, expectedLabels);
 
         var details = new List<VerifyLabelDetail>();
 
+        // Source cursor (sdisp_TOOL_PA_VerifyLabel L246-395, owner ruling 2026-10-21): each scanned label is
+        // compared against the still-unconsumed expected values of its name.
         foreach (var scan in scannedLabels)
         {
             var slot = expectedLabels.FirstOrDefault(
@@ -65,13 +67,15 @@ public sealed class VerificationService : IVerificationService
 
             if (slot is null)
             {
-                // Read a label the carton data never expected → treat as a no-read (source code 14).
+                // @CurrentVerifyLabel = '-': no (remaining) expected value of that name → the read is ignored
+                // (L275-278), including a second read of a name already matched.
                 details.Add(new VerifyLabelDetail(scan.LabelType, null, scan.ScannedValue, VerifyLabelReason.Extra));
-                return Fail(details, VerifyOutcome.NoRead);
+                continue;
             }
 
             if (Matches(slot, scan.ScannedValue))
             {
+                // PassVerify: every expected value of that name is removed (L389-393).
                 slot.Consumed = true;
                 details.Add(new VerifyLabelDetail(slot.LabelType, slot.Primary, scan.ScannedValue, VerifyLabelReason.Matched));
                 continue;
@@ -83,9 +87,9 @@ public sealed class VerificationService : IVerificationService
             return Fail(details, ToOutcome(reason));
         }
 
-        // Any expected label never presented to the scanner is missing from the box → fail. The synthesized
-        // blind-label slot is optional: a scanner slot with no blind-label read is not a failure.
-        var missing = expectedLabels.FirstOrDefault(e => !e.Consumed && !e.Optional);
+        // Any expected label left over was never read → missing from the box (L397-410). This includes the
+        // BlindLabel slot (blind label + every carton xref barcode) whenever the content label is verified.
+        var missing = expectedLabels.FirstOrDefault(e => !e.Consumed);
         if (missing is not null)
         {
             details.Add(new VerifyLabelDetail(missing.LabelType, missing.Primary, null, VerifyLabelReason.Missing));
@@ -94,7 +98,6 @@ public sealed class VerificationService : IVerificationService
 
         return new VerifyResult(VerifyOutcome.Pass, details);
     }
-
     private static VerifyResult Fail(List<VerifyLabelDetail> details, VerifyOutcome outcome) =>
         new(outcome, details);
 
@@ -165,10 +168,25 @@ public sealed class VerificationService : IVerificationService
         Dictionary<string, HashSet<string>> xref,
         string? blindLabel)
     {
+        // One expected slot per label NAME holding every acceptable value of that name (source @VerifyLabels
+        // rows grouped by LabelName; a read matching any of them passes the whole name, L363-371).
         var result = new List<ExpectedLabel>();
+
+        ExpectedLabel GetOrAdd(string type, string primary)
+        {
+            var slot = result.Find(e => string.Equals(e.LabelType, type, StringComparison.OrdinalIgnoreCase));
+            if (slot is null)
+            {
+                slot = new ExpectedLabel(type, primary, new HashSet<string>(StringComparer.Ordinal));
+                result.Add(slot);
+            }
+
+            return slot;
+        }
+
         foreach (var label in expected.Labels)
         {
-            // Drop orientation markers and "not in data" placeholders; honour the content-label toggle.
+            // Drop orientation markers and "not in data" placeholders (L227-231).
             if (string.Equals(label.LabelType, "Orientation", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
@@ -179,49 +197,53 @@ public sealed class VerificationService : IVerificationService
                 continue;
             }
 
-            if (!options.VerifyContentLabel && !AlwaysVerifiedTypes.Contains(label.LabelType))
-            {
-                continue;
-            }
-
-            var acceptable = new HashSet<string>(StringComparer.Ordinal) { label.Lpn };
+            var slot = GetOrAdd(label.LabelType, label.Lpn);
+            slot.Acceptable.Add(label.Lpn);
             if (xref.TryGetValue(label.LabelType, out var alts))
             {
-                acceptable.UnionWith(alts);
+                slot.Acceptable.UnionWith(alts);
             }
-
-            result.Add(new ExpectedLabel(label.LabelType, label.Lpn, acceptable));
         }
 
-        // Source @VerifyLabels UNIONs the blind label (and its BlindLabel-tagged xref barcodes) into the
-        // expected set, so a buffer slot carrying the blind-label read verifies against the carton's TuId.
-        // Subject to the content toggle like any non-Shipping/Exception type.
-        if (!string.IsNullOrWhiteSpace(blindLabel)
-            && options.VerifyContentLabel
-            && !result.Exists(e => string.Equals(e.LabelType, BlindLabelType, StringComparison.OrdinalIgnoreCase)))
+        // Source L191-195 UNIONs every PandaDataXRef barcode of the carton — the blind label itself ('BL')
+        // plus its UPC/oLPN aliases — into the expected set under the name 'BlindLabel'. It is a REQUIRED
+        // slot: a buffer with no matching blind-label read leaves it over → reason 14 (owner ruling 2026-10-21).
+        if (!string.IsNullOrWhiteSpace(blindLabel))
         {
-            var acceptable = new HashSet<string>(StringComparer.Ordinal) { blindLabel };
-            if (xref.TryGetValue(BlindLabelType, out var alts))
-            {
-                acceptable.UnionWith(alts);
-            }
+            var slot = GetOrAdd(BlindLabelType, blindLabel);
+            slot.Acceptable.Add(blindLabel);
+        }
 
-            result.Add(new ExpectedLabel(BlindLabelType, blindLabel, acceptable) { Optional = true });
+        if (xref.TryGetValue(BlindLabelType, out var blindAlts) && blindAlts.Count > 0)
+        {
+            var slot = GetOrAdd(BlindLabelType, blindLabel ?? blindAlts.First());
+            slot.Acceptable.UnionWith(blindAlts);
+        }
+
+        // VerifyContentLabel=0 keeps only the Shipping/Exception names (L233-238).
+        if (!options.VerifyContentLabel)
+        {
+            result.RemoveAll(e => !AlwaysVerifiedTypes.Contains(e.LabelType));
         }
 
         return result;
     }
 
-    private static List<ScannedLabel> FilterScanned(IReadOnlyList<ScannedLabel> scanned, VerifyOptions options)
+    private static List<ScannedLabel> FilterScanned(
+        IReadOnlyList<ScannedLabel> scanned,
+        VerifyOptions options,
+        List<ExpectedLabel> expectedLabels)
     {
         if (options.VerifyContentLabel)
         {
             return [.. scanned];
         }
 
-        return [.. scanned.Where(s => AlwaysVerifiedTypes.Contains(s.LabelType))];
+        // Source L236: with the content label off, only reads whose VALUE is an expected Shipping/Exception
+        // barcode survive; anything else (a wrong or no-read shipping value) is dropped, so the Shipping slot
+        // is left over and fails as missing (code 20).
+        return [.. scanned.Where(s => expectedLabels.Exists(e => e.Acceptable.Contains(s.ScannedValue)))];
     }
-
     private sealed class ExpectedLabel(string labelType, string primary, HashSet<string> acceptable)
     {
         public string LabelType { get; } = labelType;
@@ -231,8 +253,5 @@ public sealed class VerificationService : IVerificationService
         public HashSet<string> Acceptable { get; } = acceptable;
 
         public bool Consumed { get; set; }
-
-        /// <summary>When true, a never-read slot is not reported as missing.</summary>
-        public bool Optional { get; init; }
     }
 }

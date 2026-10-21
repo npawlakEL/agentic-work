@@ -37,7 +37,8 @@ internal static class LineSimulationFactory
             loadBalance: line.LoadBalanceEnabled,
             bufferOrder: new LabelBufferOrder(line.BufferOrder.Select((labelType, index) => new LabelBufferPosition(index + 1, labelType))),
             activeProfile: profile,
-            encoderResolution: (decimal)line.EncoderResolutionInchesPerPulse);
+            encoderResolution: (decimal)line.EncoderResolutionInchesPerPulse,
+            twoPrinterRule: line.TwoPrinterRuleEnabled);
 
         var lineProvider = new InMemoryLineProvider().Add(config, printers.Select(p =>
         {
@@ -63,6 +64,8 @@ internal static class LineSimulationFactory
         };
         var clock = new SimClock(DateTimeOffset.UtcNow);
         ISettingsProvider settings = new InMemorySettingsProvider();
+        // Synchronous seed of an in-memory provider (completes inline).
+        settings.SetAsync(KnownSettings.ReprintLabels, store.Settings.ReprintLabelsEnabled).AsTask().GetAwaiter().GetResult();
         var induct = new InductService(
             orders,
             lineProvider,
@@ -76,7 +79,8 @@ internal static class LineSimulationFactory
             new VerificationService(),
             new VerifyThresholdTracker(),
             clock,
-            NullLogger<VerifyStationService>.Instance);
+            NullLogger<VerifyStationService>.Instance,
+            new DemoRejectHistoryRepository(store, line.LineId!, profile?.Name ?? string.Empty));
 
         var stationDevices = printers.ToDictionary(
             p => p.PrinterId!,

@@ -55,3 +55,7 @@ The real econtroller platform already owns destination selection through
   `Config/CriteriaConfig.cs`, `Steps/CriteriaSteps.cs`, `Actions/CriteriaActions.cs`.
 - decision-006 (standalone is authority — behaviors repos are integration reference only).
 - decision-004 (verify semantics), F22 reject-code taxonomy.
+
+## Amendment — owner ruling 2026-10-21
+
+The verify routing criterion now carries `Pass|Fail`, the source reject reason code and the destination (`TransportOrder.VerifyPassDest` / `VerifyFailDest`, defaults `Verify - PASS` / `Verify - FAIL`), matching source procs `sdisp_TOOL_PA_VerifyLabel` L470 and `sdisp_TOOL_PA_GetFinalLaneFromStatus` L83-90. An unknown carton at verify routes `Fail` with code 0.

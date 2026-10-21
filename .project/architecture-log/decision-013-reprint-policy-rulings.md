@@ -46,3 +46,7 @@ Consequences:
 - decision-003 (reprint rules + monotonic count), decision-009 (F15 recovery gating),
   decision-004 (AD-1 re-advice), decision-012 (purge descoped → purge settings moot).
 - Source: `sdisp_GUI_SetPrintedFlag`, `OverwriteLabelData`, `sdisp_TOOL_GetSetting` seed vs default.
+
+## Amendment — owner ruling 2026-10-21
+
+`KnownSettings.ReprintLabels` default is now **true** (D2; matches source proc `sdisp_PA_LookupCarton` fallback `'1'`). Re-advice (`CartonAdviceService`): label data/metadata is always updated; a carton that has printed is re-armed only when `Reprint Labels` is on, otherwise it stays locked (D4). `OverwriteLabelData` (source `Job.sql` L219-231) is read: 0 (seed) → while unprinted the **oldest** advice wins (source appends and `LookupCarton` picks the oldest row); 1 → the newest advice replaces it. Single-TO model approximation: there is no multi-row history.

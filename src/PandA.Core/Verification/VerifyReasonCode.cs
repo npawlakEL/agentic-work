@@ -96,4 +96,86 @@ public static class VerifyReasonCodeExtensions
     };
 }
 
+/// <summary>
+/// Maps a verify result to the source <c>@VerifyPass</c> code exactly as <c>sdisp_TOOL_PA_VerifyLabel</c>
+/// sets it (L134-155, L279-410) — the code written to reject history and carried on the routing criterion
+/// (owner ruling 2026-10-21).
+/// </summary>
+public static class VerifyReasonCodes
+{
+    /// <summary>The source code for a verify result: 1 pass, 3 bypass/ignore, otherwise the failure code.</summary>
+    public static VerifyReasonCode For(VerifyResult verify)
+    {
+        ArgumentNullException.ThrowIfNull(verify);
 
+        if (verify.Outcome == VerifyOutcome.Pass)
+        {
+            return VerifyReasonCode.VerificationPassed;
+        }
+
+        if (verify.Outcome == VerifyOutcome.Ignore)
+        {
+            return VerifyReasonCode.PassThroughCarton;
+        }
+
+        // The failing row is the last detail (the source short-circuits on the first failure). No detail
+        // means verify was disabled without bypass ('Verify Disabled' → 0).
+        if (verify.Details.Count == 0)
+        {
+            return VerifyReasonCode.PandaLogicError;
+        }
+
+        var failing = verify.Details[^1];
+        var type = failing.LabelType;
+        return failing.Reason switch
+        {
+            VerifyLabelReason.NoData => VerifyReasonCode.VerifyScanError,
+            VerifyLabelReason.NoRead or VerifyLabelReason.Missing or VerifyLabelReason.Extra => ByType(
+                type,
+                shipping: VerifyReasonCode.ShippingLabelNoRead,
+                blind: VerifyReasonCode.BlindLabelNotDetected,
+                content: VerifyReasonCode.ContentLabelNoRead,
+                parcel: VerifyReasonCode.ParcelLabelNoRead),
+            VerifyLabelReason.Conflict => ByType(
+                type,
+                shipping: VerifyReasonCode.ShippingLabelConflict,
+                blind: VerifyReasonCode.BlindLabelConflict,
+                content: VerifyReasonCode.ContentLabelConflict,
+                parcel: VerifyReasonCode.ParcelLabelConflict),
+            VerifyLabelReason.Mismatch => ByType(
+                type,
+                shipping: VerifyReasonCode.IncorrectShippingLabelApplied,
+                blind: VerifyReasonCode.BlindLabelNotDetected,
+                content: VerifyReasonCode.IncorrectContentLabelApplied,
+                parcel: VerifyReasonCode.IncorrectParcelLabelApplied),
+            _ => VerifyReasonCode.PandaLogicError,
+        };
+    }
+
+    private static VerifyReasonCode ByType(
+        string labelType,
+        VerifyReasonCode shipping,
+        VerifyReasonCode blind,
+        VerifyReasonCode content,
+        VerifyReasonCode parcel)
+    {
+        if (string.Equals(labelType, "Shipping", StringComparison.OrdinalIgnoreCase))
+        {
+            return shipping;
+        }
+
+        if (string.Equals(labelType, "BlindLabel", StringComparison.OrdinalIgnoreCase))
+        {
+            return blind;
+        }
+
+        if (string.Equals(labelType, "Content", StringComparison.OrdinalIgnoreCase))
+        {
+            return content;
+        }
+
+        return string.Equals(labelType, "Parcel", StringComparison.OrdinalIgnoreCase)
+            ? parcel
+            : VerifyReasonCode.PandaLogicError;
+    }
+}

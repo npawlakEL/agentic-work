@@ -1,3 +1,4 @@
+using PandA.Core.Induct;
 using PandA.Core.Verification;
 
 namespace PandA.Core;
@@ -36,6 +37,19 @@ public enum InductStatus
     /// against a synthesized carton id. The carton is marked printed and routed to reject at verify.
     /// </summary>
     ExceptionLabel = 7,
+
+    /// <summary>
+    /// The induct read was not print-ready (no read, no data, label conflict, gap error) and no exception
+    /// label was emitted. Source <c>sdisp_PA_Scan_Induct</c> NoPrintFlag: the carton's real labels never
+    /// print on a non-PrintReady read, even when an order resolves (owner ruling 2026-10-21).
+    /// </summary>
+    NotPrintReady = 8,
+
+    /// <summary>
+    /// The resolved order is flagged <c>Bypass</c> (source LookupCarton L392 → status Bypass, NoPrintFlag).
+    /// Nothing is printed and no exception label is emitted (owner ruling 2026-10-21).
+    /// </summary>
+    Bypass = 9,
 }
 
 /// <summary>Outcome of an induct scan: overall status plus the per-label selection assignments.</summary>
@@ -45,12 +59,14 @@ public sealed class InductResult
         InductStatus status,
         IReadOnlyList<LabelAssignment> assignments,
         string? exceptionCartonId = null,
-        RoutingCriterion? routing = null)
+        RoutingCriterion? routing = null,
+        CartonStatus? classification = null)
     {
         Status = status;
         Assignments = assignments;
         ExceptionCartonId = exceptionCartonId;
         Routing = routing;
+        Classification = classification;
     }
 
     public InductStatus Status { get; }
@@ -66,7 +82,27 @@ public sealed class InductResult
     /// </summary>
     public RoutingCriterion? Routing { get; }
 
+    /// <summary>The F20 read-quality classification of the induct scan, when it was not print-ready.</summary>
+    public CartonStatus? Classification { get; }
+
+    /// <summary>
+    /// The PLC carton-assign slot (source <c>sdisp_TOOL_GetSlotNumber</c>, 1..300 cycle) drawn for this
+    /// induct; assigned on every induct, including no-print outcomes (owner ruling 2026-10-21).
+    /// </summary>
+    public int? Slot { get; private init; }
+
+    /// <summary>Copy of this result carrying the assigned PLC <paramref name="slot"/>.</summary>
+    public InductResult WithSlot(int? slot) =>
+        new(Status, Assignments, ExceptionCartonId, Routing, Classification) { Slot = slot };
+
     public static InductResult NoActiveOrder() => new(InductStatus.NoActiveOrder, []);
+
+    /// <summary>The scan was not print-ready (<paramref name="classification"/>); nothing printed.</summary>
+    public static InductResult NotPrintReady(CartonStatus classification) =>
+        new(InductStatus.NotPrintReady, [], classification: classification);
+
+    /// <summary>The order is flagged Bypass; nothing printed.</summary>
+    public static InductResult Bypass() => new(InductStatus.Bypass, []);
 
     public static InductResult NoData() => new(InductStatus.NoData, []);
 
@@ -87,6 +123,8 @@ public sealed class InductResult
 
     public static InductResult FromAssignments(IReadOnlyList<LabelAssignment> assignments)
     {
+        // A label skipped for a missing/neglect fire point (SQL ErrorCode 2) counts as not printed.
+        // A label skipped for a missing/neglect fire point (SQL ErrorCode 2) counts as not printed.
         var printed = assignments.Count(a => a.Status == LabelSelectionStatus.Assigned);
         var status = printed == assignments.Count ? InductStatus.Printed
             : printed == 0 ? InductStatus.NoPrinter

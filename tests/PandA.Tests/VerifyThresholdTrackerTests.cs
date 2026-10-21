@@ -69,11 +69,22 @@ public sealed class VerifyThresholdTrackerTests
     }
 
     [Fact]
-    public void StaysPaused_WhileFailsContinue()
+    public void ResetsOnTrip_ThenReTripsAfterThresholdMoreFails()
     {
+        // Source VerifyThreshold_Update: ~PP then Refresh resets the count (owner ruling 2026-10-21).
         _sut.Register(Line, pass: false, failThreshold: 2);
         Assert.True(_sut.Register(Line, pass: false, failThreshold: 2).PausePrinter);
+        Assert.False(_sut.Register(Line, pass: false, failThreshold: 2).PausePrinter);
         Assert.True(_sut.Register(Line, pass: false, failThreshold: 2).PausePrinter);
+    }
+
+    [Fact]
+    public void WithoutResetOnTrip_StaysPaused_WhileFailsContinue()
+    {
+        var sut = new VerifyThresholdTracker(resetOnTrip: false);
+        sut.Register(Line, pass: false, failThreshold: 2);
+        Assert.True(sut.Register(Line, pass: false, failThreshold: 2).PausePrinter);
+        Assert.True(sut.Register(Line, pass: false, failThreshold: 2).PausePrinter);
     }
 
     [Fact]

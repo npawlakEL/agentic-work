@@ -32,11 +32,15 @@ public sealed class CartonAdviceServiceTests
     }
 
     [Fact]
-    public async Task DuplicateAdvice_OverwritesLabelSet_LastWins()
+    public async Task DuplicateAdvice_OverwriteLabelDataOn_OverwritesLabelSet_LastWins()
     {
-        await _sut.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
+        // OverwriteLabelData=1 deactivates the old row first (source Job.sql L219-231; owner ruling 2026-10-21).
+        var settings = new InMemorySettingsProvider();
+        await settings.SetAsync(PandA.Core.Settings.KnownSettings.OverwriteLabelData, true);
+        var sut = new CartonAdviceService(_store, _clock, settings);
+        await sut.AdviseAsync("L1", "BLIND1", Labels("Shipping"));
         _clock.Advance(TimeSpan.FromMinutes(5));
-        var second = await _sut.AdviseAsync("L1", "BLIND1", Labels("Content", "Return"));
+        var second = await sut.AdviseAsync("L1", "BLIND1", Labels("Content", "Return"));
 
         Assert.Single(_store.All); // still one TO for the blind label
         Assert.Equal(["Content", "Return"], second.Labels.Labels.Select(l => l.LabelType));

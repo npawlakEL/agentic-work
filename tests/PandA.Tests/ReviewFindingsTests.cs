@@ -35,7 +35,7 @@ public sealed class ReviewFindingsTests
         new(types.Select(t => new Label(t, $"LPN-{t}", $"^XA^FD{t}^FS^XZ")));
 
     private InductService Induct(IPrinterGateway? gateway = null, ILockProvider? locks = null) =>
-        new(_store, _lines, new PrinterSelectionService(), gateway ?? _gateway, _clock, new InMemorySettingsProvider(),
+        new(_store, _lines, new PrinterSelectionService(), gateway ?? _gateway, _clock, TestSettings.ReprintOff(),
             locks: locks);
 
     private InductService ExceptionInduct() =>
@@ -146,13 +146,16 @@ public sealed class ReviewFindingsTests
     }
 
     [Fact]
-    public void Finding3_MissingBlindLabelRead_IsNotAFailure()
+    public void Finding3_MissingBlindLabelRead_Fails_WithBlindLabelReasonCode()
     {
+        // Source TOOL_PA_VerifyLabel L415-427: a leftover expected blind label fails with code 14
+        // (owner ruling 2026-10-21; previously treated as optional).
         var scanned = LabelBufferOrder.Default.Type(["", "SHIP1"]);
 
         var result = new VerificationService().Verify(ShipOnly, scanned, new VerifyOptions(), blindLabel: "BL123");
 
-        Assert.Equal(VerifyOutcome.Pass, result.Outcome);
+        Assert.NotEqual(VerifyOutcome.Pass, result.Outcome);
+        Assert.Equal(VerifyReasonCode.BlindLabelNotDetected, VerifyReasonCodes.For(result));
     }
 
     [Fact]
