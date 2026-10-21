@@ -108,8 +108,13 @@ own schema (`CV.MfcTransportOrder`, `CV2.…`) — PandA tables must be addresse
 ## 6. Open owner questions (block phase A start)
 
 1. ~~Package id~~ **Ruled 2026-10-21:** supersede — publish our implementation as `eController.Behaviors.PandA`.
-2. ~~Source location~~ **Ruled 2026-10-21:** source lives in this repo (`src/PandA.EController`); the
-   `econtroller-behaviors-panda` repo is reference only.
+2. ~~Source location~~ **Ruled 2026-10-21 (revised same day):** all PandA work moves to
+   `Element-Logic/econtroller-behaviors-panda`, branch `develop` (branched from `main`, full
+   `agentic-work@npawlakel-print-and-apply` history merged in). The old route-to-printer prototype project is
+   removed (kept in `main` history); `playground/` is kept as the MFC host and aligned to Exol versions.
+   **Package versions:** all eController/eHub/ePlugin/MudBlazor pins match Exol `Directory.Packages.props`
+   (`eController.Mfc.Library` 4.5.1, DataLib/CrudTable 4.5.1, IntegrationHub.PlugIn 1.13.0, ePlugin.MsBuild
+   2.4.22, MudBlazor 6.1.2 / Screens 6.19.0, .NET 9) via central package management.
 3. ~~UI host MudBlazor~~ **Ruled 2026-10-21:** match Exol — screens ship as a separate `PandA.Screens` ePlugin
    targeting the host's MudBlazor 6.x (6.19.0, `FrameworkComponent`, interactive server). The standalone
    Axon/8.13 UI stays as the dev/demo surface only.
