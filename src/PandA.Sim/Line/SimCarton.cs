@@ -58,7 +58,12 @@ public sealed class SimCarton
     {
         for (var i = 0; i < _labels.Count; i++)
         {
-            _labels[i] = transform(_labels[i]);
+            var current = _labels[i];
+            var next = transform(current);
+            if (!ReferenceEquals(next, current))
+            {
+                _labels[i] = next;
+            }
         }
     }
 }

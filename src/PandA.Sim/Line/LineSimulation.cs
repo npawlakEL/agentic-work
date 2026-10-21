@@ -17,7 +17,6 @@ public sealed class LineSimulation
     private readonly SimClock _clock;
     private readonly List<SimCarton> _cartons = [];
     private readonly IReadOnlyList<SimPrinterStation> _printers;
-    private readonly Dictionary<string, int> _seenPrintJobsByCarton = new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset _lastStepUtc = DateTimeOffset.UtcNow;
     private LineSimulationSettings _settings;
     private int _cartonSequence;
@@ -183,8 +182,12 @@ public sealed class LineSimulation
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
+            foreach (var carton in _cartons)
+            {
+                ForgetOrder(carton);
+            }
+
             _cartons.Clear();
-            _seenPrintJobsByCarton.Clear();
             _lastEvent = "Line cleared";
             return BuildSnapshot();
         }
@@ -244,7 +247,24 @@ public sealed class LineSimulation
             ApplyLabelsAtFullExtension(carton, stationX);
         }
 
-        _cartons.RemoveAll(c => c.PositionInches > ConveyorLengthInches + 40);
+        _cartons.RemoveAll(c =>
+        {
+            if (c.PositionInches <= ConveyorLengthInches + 40)
+            {
+                return false;
+            }
+
+            ForgetOrder(c);
+            return true;
+        });
+    }
+
+    private void ForgetOrder(SimCarton carton)
+    {
+        if (_orders is InMemoryTransportOrderStore store)
+        {
+            store.Remove(carton.BlindLabel);
+        }
     }
 
     private static bool Crossed(SimCarton carton, TrackingEye eye) =>
@@ -258,11 +278,12 @@ public sealed class LineSimulation
         {
             carton.State = SimCartonState.Scanned;
             _lastEvent = $"{carton.BlindLabel} crossed {eye.Id}; induct scan sent to Core";
+            var jobsBefore = _printerGateway.Count;
             var result = await _induct.InductAsync(LineId, carton.BlindLabel).ConfigureAwait(false);
             if (result.Status is InductStatus.Printed or InductStatus.PartiallyPrinted)
             {
                 carton.State = SimCartonState.Printed;
-                AttachNewPrintJobs(carton);
+                AttachNewPrintJobs(carton, jobsBefore);
                 _lastEvent = $"{carton.BlindLabel} print decision: {result.Status}";
             }
 
@@ -271,7 +292,9 @@ public sealed class LineSimulation
 
         if (eyeIndex == eyes.Count - 1 && carton.State is (SimCartonState.Printed or SimCartonState.Applied))
         {
-            var scanned = carton.Order.Labels.Labels
+            // The verify scanner can only read labels physically applied to the carton.
+            var scanned = carton.Labels
+                .Where(l => l.Applied)
                 .Select(l => new ScannedLabel(l.LabelType, l.Lpn))
                 .ToList();
             var result = await _verify.VerifyAsync(
@@ -327,7 +350,6 @@ public sealed class LineSimulation
     /// </summary>
     private void ApplyLabelsAtFullExtension(SimCarton carton, IReadOnlyDictionary<string, double> stationX)
     {
-        var prevCentre = carton.PreviousPositionInches + carton.LengthInches / 2;
         var centre = carton.PositionInches + carton.LengthInches / 2;
         var appliedHere = false;
 
@@ -342,7 +364,9 @@ public sealed class LineSimulation
                 ? sx
                 : EyePosition(PrinterApplyDevice(label.PrinterId));
 
-            if (prevCentre < x && centre >= x)
+            // Level-triggered (like printing): a label that only reached the tamp head after the carton's
+            // centre already passed the station is applied on the next tick rather than stranded on the tamp.
+            if (centre >= x)
             {
                 appliedHere = true;
                 return label with { Applied = true, OnTamp = false };
@@ -361,12 +385,19 @@ public sealed class LineSimulation
     private int PrinterApplyDevice(string printerId) =>
         Math.Max(1, _printers.FirstOrDefault(p => string.Equals(p.PrinterId, printerId, StringComparison.OrdinalIgnoreCase))?.ApplyTrackingDevice ?? 2);
 
-    private void AttachNewPrintJobs(SimCarton carton)
+    /// <summary>
+    /// Attaches only the jobs dispatched by this carton's induct (those after <paramref name="jobsBefore"/>),
+    /// further narrowed to the carton's own LPNs when any match.
+    /// </summary>
+    private void AttachNewPrintJobs(SimCarton carton, int jobsBefore)
     {
-        var jobs = _printerGateway.Jobs;
-        var start = _seenPrintJobsByCarton.GetValueOrDefault(carton.BlindLabel);
-        _seenPrintJobsByCarton[carton.BlindLabel] = jobs.Count;
-        carton.ReplaceLabels(jobs.Skip(start).Select(job => ToPlacement(carton, job)));
+        var jobs = _printerGateway.JobsSince(jobsBefore);
+        var lpns = carton.Order.Labels.Labels
+            .Select(l => l.Lpn)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var own = jobs.Where(j => lpns.Contains(j.Lpn)).ToList();
+        var attach = own.Count > 0 ? own : jobs;
+        carton.ReplaceLabels(attach.Select(job => ToPlacement(carton, job)));
     }
 
     private LabelPlacementSnapshot ToPlacement(SimCarton carton, PrintJob job)
@@ -529,7 +560,7 @@ public sealed class LineSimulation
                 c.WidthInches,
                 c.HeightInches,
                 c.State.ToString(),
-                c.Labels))
+                [.. c.Labels]))
             .ToList();
 
         return new LineSimulationSnapshot(Running, BeltSpeedInchesPerSecond, ConveyorLengthInches, LineId, LineName, _settings, eyes, PrinterStations(), cartons, _lastEvent);

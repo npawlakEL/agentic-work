@@ -22,4 +22,11 @@ public sealed class InMemoryTransportOrderStore : ITransportOrderStore
         _byTuId[transportOrder.TuId] = transportOrder;
         return ValueTask.CompletedTask;
     }
+
+    /// <summary>Drop the order for <paramref name="tuId"/> (e.g. once its carton has left the simulated line).</summary>
+    public bool Remove(string tuId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tuId);
+        return _byTuId.Remove(tuId);
+    }
 }

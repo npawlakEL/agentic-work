@@ -28,7 +28,14 @@ public sealed record InductScanMessage(
     public bool IsInduct => DeviceId == 1;
 
     /// <summary>Build the full 15-field 281 frame, zero-filling the unused label/measurement slots.</summary>
-    public PaFrame ToFrame() => new(Code,
+    /// <exception cref="ArgumentException"><see cref="BlindLabel"/> contains a reserved delimiter.</exception>
+    public PaFrame ToFrame()
+    {
+        PaFrame.EnsureNoDelimiters(BlindLabel, PaFrame.LabelDelimiters, nameof(BlindLabel));
+        return BuildFrame();
+    }
+
+    private PaFrame BuildFrame() => new(Code,
     [
         SourceMode.ToString(),
         SorterNumber.ToString(),
@@ -85,7 +92,19 @@ public sealed record VerifyScanMessage(
 {
     public const int Code = 286;
 
-    public PaFrame ToFrame() => new(Code,
+    /// <exception cref="ArgumentException">A <see cref="LabelBuffer"/> value contains a reserved delimiter.</exception>
+    public PaFrame ToFrame()
+    {
+        ArgumentNullException.ThrowIfNull(LabelBuffer);
+        foreach (var label in LabelBuffer)
+        {
+            PaFrame.EnsureNoDelimiters(label, PaFrame.LabelDelimiters, nameof(LabelBuffer));
+        }
+
+        return BuildFrame();
+    }
+
+    private PaFrame BuildFrame() => new(Code,
     [
         SourceMode.ToString(),
         SorterNumber.ToString(),

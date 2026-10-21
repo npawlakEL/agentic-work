@@ -92,11 +92,11 @@ public sealed class SimHost
 
         // Re-parse the wire to prove the framing round-trips, then act on the parsed message.
         var parsedScan = InductScanMessage.FromFrame(PaFrame.Parse(scanFrame.ToWire()));
-        var before = _gateway.Jobs.Count;
+        var before = _gateway.Count;
         var induct = await _induct.InductAsync(SourceLine, parsedScan.BlindLabel);
         log.Add($"     induct → {induct.Status}");
 
-        foreach (var job in _gateway.Jobs.Skip(before))
+        foreach (var job in _gateway.JobsSince(before))
         {
             var fp = job.FirePoint is { } f
                 ? $"  fire[print dev{f.PrintTrackingDevice}@{f.PrintFirePoint}, apply dev{f.ApplyTrackingDevice}@{f.ApplyFirePoint}]"

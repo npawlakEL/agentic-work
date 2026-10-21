@@ -209,12 +209,14 @@ public sealed class LineSimulationPrintFlowTests
         await sim.SpawnCartonAsync();
 
         var printerByCarton = new Dictionary<string, string>();
+        var labelsByCarton = new Dictionary<string, IReadOnlyList<LabelPlacementSnapshot>>();
         for (var i = 0; i < 400 && printerByCarton.Count < 3; i++)
         {
             await Task.Delay(10);
             var snap = await sim.GetSnapshotAsync();
-            foreach (var carton in snap.Cartons)
+            foreach (var carton in snap.Cartons.Where(c => c.Labels.Count > 0))
             {
+                labelsByCarton[carton.BlindLabel] = carton.Labels;
                 foreach (var label in carton.Labels)
                 {
                     printerByCarton[carton.BlindLabel] = label.PrinterId;
@@ -223,6 +225,13 @@ public sealed class LineSimulationPrintFlowTests
         }
 
         Assert.Equal(3, printerByCarton.Count);
+        // Each carton carries exactly its own single Shipping label (no labels leaked from other cartons).
+        foreach (var (blind, labels) in labelsByCarton)
+        {
+            var label = Assert.Single(labels);
+            Assert.Equal($"SHIP-SIM-{blind[3..]}", label.Lpn);
+        }
+
         // Round-robin must spread the three cartons across both printers, not collapse onto one.
         var distinct = printerByCarton.Values.Distinct().Count();
         Assert.True(distinct == 2, $"expected cartons spread across both side printers, got: {string.Join(", ", printerByCarton.Select(kv => $"{kv.Key}->{kv.Value}"))}");
